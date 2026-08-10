@@ -1,0 +1,23 @@
+{
+  "id": "exam-prep",
+  "title": "Exam Prep (SAT / IGCSE / WAEC starter)",
+  "vertical": "exam-prep",
+  "description": "Timed-practice oriented pack. Skills map to exam sections; problems carry timing metadata for mock-exam mode.",
+  "skills": [
+    { "id": "exam.sat-math.heart-of-algebra", "title": "SAT Math: Heart of Algebra", "prerequisites": [] },
+    { "id": "exam.sat-math.problem-solving", "title": "SAT Math: Problem Solving & Data", "prerequisites": [] },
+    { "id": "exam.waec-math.algebraic-processes", "title": "WAEC Math: Algebraic processes", "prerequisites": [] }
+  ],
+  "problems": [
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x - 2) = 15, what is the value of x?",
+      "answer": "7",
+      "check": { "type": "solve", "equation": "3*(x - 2) = 15", "variable": "x" },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        { "answer": "5", "diagnosis": "Divided by 3 but forgot to add back the 2." }
+      ]
+    }
+  ]
+}

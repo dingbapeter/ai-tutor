@@ -1,0 +1,34 @@
+{
+  "id": "math-ms",
+  "title": "Middle School Math",
+  "vertical": "k12-math",
+  "description": "Grades 6-8 core: fractions through linear equations. Every numeric answer is verifiable by the mathcheck service.",
+  "skills": [
+    { "id": "math-ms.fractions.equivalent", "title": "Equivalent fractions", "prerequisites": [] },
+    { "id": "math-ms.fractions.add-sub", "title": "Adding & subtracting fractions", "prerequisites": ["math-ms.fractions.equivalent"] },
+    { "id": "math-ms.decimals.compare", "title": "Comparing decimals", "prerequisites": [] },
+    { "id": "math-ms.negatives.operations", "title": "Operations with negative numbers", "prerequisites": [] },
+    { "id": "math-ms.linear-eq.one-step", "title": "One-step equations", "prerequisites": ["math-ms.negatives.operations"] },
+    { "id": "math-ms.linear-eq.two-step", "title": "Two-step equations", "prerequisites": ["math-ms.linear-eq.one-step"] }
+  ],
+  "problems": [
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 2x + 3 = 11",
+      "answer": "4",
+      "check": { "type": "solve", "equation": "2*x + 3 = 11", "variable": "x" },
+      "misconceptions": [
+        { "answer": "7", "diagnosis": "Subtracted 3 from the left side only — remind: whatever you do to one side, do to the other." }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.25 or 0.5?",
+      "answer": "0.5",
+      "check": { "type": "compare", "left": "0.25", "right": "0.5", "expected": "<" },
+      "misconceptions": [
+        { "answer": "0.25", "diagnosis": "Comparing decimals like whole numbers (25 > 5). Line up place values instead." }
+      ]
+    }
+  ]
+}

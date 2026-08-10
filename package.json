@@ -1,0 +1,11 @@
+{
+  "name": "ai-tutor",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @tutor/api dev",
+    "dev:web": "pnpm --filter @tutor/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

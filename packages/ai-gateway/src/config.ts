@@ -1,0 +1,78 @@
+import type { AiGateway } from "./types.js";
+import {
+  MockChatProvider,
+  MockSttProvider,
+  MockTtsProvider,
+  MockVisionProvider,
+} from "./providers/mock.js";
+import { LlamaCppChatProvider, LlamaCppVisionProvider } from "./providers/llamacpp.js";
+import { WhisperSttProvider } from "./providers/whisper.js";
+import { KokoroTtsProvider } from "./providers/kokoro.js";
+
+/**
+ * Builds the gateway from environment config. This file is the ONLY place
+ * that knows which engine backs which capability.
+ *
+ *   AI_CHAT_PROVIDER=llamacpp  LLAMACPP_URL=http://contabo-box:8080
+ *
+ * Adding a paid provider later = one new adapter file + one case below.
+ */
+export function createGatewayFromEnv(env: Record<string, string | undefined> = process.env): AiGateway {
+  const llamaUrl = env.LLAMACPP_URL ?? "http://localhost:8080";
+  const whisperUrl = env.WHISPER_URL ?? "http://localhost:8081";
+  const ttsUrl = env.TTS_URL ?? "http://localhost:8082";
+
+  const chatFor = (name: string | undefined) => {
+    switch (name ?? "mock") {
+      case "llamacpp":
+        return new LlamaCppChatProvider(llamaUrl);
+      case "mock":
+        return new MockChatProvider();
+      default:
+        throw new Error(`Unknown chat provider: ${name}`);
+    }
+  };
+
+  const stt = () => {
+    switch (env.AI_STT_PROVIDER ?? "mock") {
+      case "whisper":
+        return new WhisperSttProvider(whisperUrl);
+      case "mock":
+        return new MockSttProvider();
+      default:
+        throw new Error(`Unknown STT provider: ${env.AI_STT_PROVIDER}`);
+    }
+  };
+
+  const tts = () => {
+    switch (env.AI_TTS_PROVIDER ?? "mock") {
+      case "kokoro":
+        return new KokoroTtsProvider(ttsUrl, "kokoro");
+      case "piper":
+        return new KokoroTtsProvider(ttsUrl, "piper", "piper");
+      case "mock":
+        return new MockTtsProvider();
+      default:
+        throw new Error(`Unknown TTS provider: ${env.AI_TTS_PROVIDER}`);
+    }
+  };
+
+  const vision = () => {
+    switch (env.AI_VISION_PROVIDER ?? "mock") {
+      case "llamacpp":
+        return new LlamaCppVisionProvider(llamaUrl);
+      case "mock":
+        return new MockVisionProvider();
+      default:
+        throw new Error(`Unknown vision provider: ${env.AI_VISION_PROVIDER}`);
+    }
+  };
+
+  return {
+    chat: chatFor(env.AI_CHAT_PROVIDER),
+    planner: chatFor(env.AI_CHAT_PLANNER_PROVIDER ?? env.AI_CHAT_PROVIDER),
+    stt: stt(),
+    tts: tts(),
+    vision: vision(),
+  };
+}

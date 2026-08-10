@@ -1,0 +1,18 @@
+{
+  "id": "language",
+  "title": "Conversational English (starter)",
+  "vertical": "language",
+  "description": "Speaking-partner pack. Skills are conversational competencies; 'problems' are speaking scenarios graded on rubric, not exact answers.",
+  "skills": [
+    { "id": "lang.en.introductions", "title": "Introducing yourself", "prerequisites": [] },
+    { "id": "lang.en.past-tense", "title": "Talking about the past", "prerequisites": ["lang.en.introductions"] },
+    { "id": "lang.en.opinions", "title": "Giving and defending opinions", "prerequisites": ["lang.en.past-tense"] }
+  ],
+  "problems": [
+    {
+      "skillId": "lang.en.introductions",
+      "prompt": "Scenario: You meet a new classmate. Introduce yourself — name, where you're from, one hobby.",
+      "check": { "type": "rubric", "criteria": ["states name", "states origin", "mentions a hobby", "grammatically coherent"] }
+    }
+  ]
+}
