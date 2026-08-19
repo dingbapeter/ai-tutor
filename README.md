@@ -82,7 +82,9 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Push-to-talk voice turn (audio→STT→reply→TTS, one round trip) | ✅ tested + live-verified vs real LLM |
 | Voice-note playback, avatar v0 (blink/talk states), practice UI, format chips | ✅ built; web build verified |
 | Learning formats (story/comic/song) endpoint | ✅ tested (model compliance depends on deploy model size) |
-| Auth/accounts (name+parent-email scoping is a stand-in) | ❌ Sprint 3 |
+| Auth: register/login (bcrypt + hashed tokens), family profiles, ownership | ✅ tested + live-verified on Postgres |
+| Guest→account upgrade (claiming a parent email adopts guest-era students) | ✅ live-verified |
+| Parent dashboard (mastery bars, session recaps) | ✅ built + live-verified |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 
 ## Roadmap
@@ -94,6 +96,11 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 - [x] Sprint 3: TTS voice notes in UI, turn-based voice (push-to-talk), avatar v0
       (SVG rig: idle blink, talking mouth, per-persona palette), practice mode UI,
       "explain as story/comic/song" formats (IDEAS.md #001 text slice)
+- [x] Sprint 4: accounts & auth (register/login, bearer tokens, bcrypt), family
+      student profiles with ownership enforcement, guest→account upgrade path,
+      parent dashboard (skill mastery bars + recent session recaps)
+- [ ] Sprint 5: payments (Stripe/Paystack), study plans & scheduling, WhatsApp
+      nudges, spaced-repetition warm-ups
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
 

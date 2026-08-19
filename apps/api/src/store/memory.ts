@@ -5,7 +5,16 @@ export class MemoryStore implements Store {
   private students = new Map<string, { id: string; parentEmail?: string }>();
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
   private mastery = new Map<string, Map<string, { level: number; attempts: number }>>();
-  private sessions = new Map<string, { studentId: string; recap?: SessionRecap }>();
+  private sessions = new Map<
+    string,
+    { studentId: string; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
+  >();
+  private accounts = new Map<
+    string,
+    { userId: string; passwordHash: string; role: "parent" | "student"; displayName: string }
+  >();
+  private tokens = new Map<string, string>(); // tokenHash -> userId
+  private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string }>();
 
   async ensureStudent(name: string, parentEmail?: string) {
     // Scope identity by parent email so two families' "Ada"s never collide.
@@ -21,7 +30,7 @@ export class MemoryStore implements Store {
 
   async createSession(studentId: string, _personaId: string, _packId: string) {
     const id = crypto.randomUUID();
-    this.sessions.set(id, { studentId });
+    this.sessions.set(id, { studentId, startedAt: new Date(), endedAt: null });
     return id;
   }
 
@@ -31,7 +40,10 @@ export class MemoryStore implements Store {
 
   async endSession(sessionId: string, recap: SessionRecap) {
     const s = this.sessions.get(sessionId);
-    if (s) s.recap = recap;
+    if (s) {
+      s.recap = recap;
+      s.endedAt = new Date();
+    }
   }
 
   async getMemories(studentId: string) {
@@ -58,5 +70,75 @@ export class MemoryStore implements Store {
   async getMasterySnapshot(studentId: string) {
     const bySkill = this.mastery.get(studentId) ?? new Map<string, { level: number }>();
     return [...bySkill.entries()].map(([skillId, v]) => ({ skillId, level: v.level }));
+  }
+
+  // ---- Accounts & auth ----
+
+  async createAccount(
+    email: string,
+    passwordHash: string,
+    role: "parent" | "student",
+    displayName: string,
+  ) {
+    const key = email.toLowerCase();
+    if (this.accounts.has(key)) return null;
+    const userId = crypto.randomUUID();
+    this.accounts.set(key, { userId, passwordHash, role, displayName });
+    let studentId: string | undefined;
+    if (role === "student") {
+      studentId = crypto.randomUUID();
+      this.profiles.set(studentId, { id: studentId, ownerUserId: userId, displayName });
+    }
+    return { userId, studentId };
+  }
+
+  async getAccountByEmail(email: string) {
+    const a = this.accounts.get(email.toLowerCase());
+    return a ? { userId: a.userId, passwordHash: a.passwordHash, role: a.role } : null;
+  }
+
+  async saveToken(tokenHash: string, userId: string) {
+    this.tokens.set(tokenHash, userId);
+  }
+
+  async resolveToken(tokenHash: string) {
+    const userId = this.tokens.get(tokenHash);
+    if (!userId) return null;
+    for (const [email, a] of this.accounts) {
+      if (a.userId === userId) return { userId, email, role: a.role };
+    }
+    return null;
+  }
+
+  async addStudentProfile(parentUserId: string, displayName: string) {
+    const id = crypto.randomUUID();
+    this.profiles.set(id, { id, ownerUserId: parentUserId, displayName });
+    return { id };
+  }
+
+  async listStudentProfiles(userId: string) {
+    return [...this.profiles.values()]
+      .filter((p) => p.ownerUserId === userId)
+      .map((p) => ({ id: p.id, displayName: p.displayName }));
+  }
+
+  async ownsStudent(userId: string, studentId: string) {
+    return this.profiles.get(studentId)?.ownerUserId === userId;
+  }
+
+  async getStudentName(studentId: string) {
+    return this.profiles.get(studentId)?.displayName ?? null;
+  }
+
+  async listSessionSummaries(studentId: string, limit: number) {
+    return [...this.sessions.values()]
+      .filter((s) => s.studentId === studentId)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+      .slice(0, limit)
+      .map((s) => ({
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        summary: s.recap?.summary ?? null,
+      }));
   }
 }

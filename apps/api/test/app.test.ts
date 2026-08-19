@@ -257,6 +257,100 @@ describe("session lifecycle", () => {
     expect(bad.statusCode).toBe(400);
   });
 
+  it("runs the full family account lifecycle: register → add child → session → dashboard", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "mum@example.com", password: "sunshine123", displayName: "Mum", role: "parent" },
+    });
+    expect(reg.statusCode).toBe(200);
+    const token = reg.json().token as string;
+    const auth = { authorization: `Bearer ${token}` };
+
+    const dup = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "mum@example.com", password: "different1", role: "parent" },
+    });
+    expect(dup.statusCode).toBe(409);
+
+    const child = await app.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Nia" } });
+    expect(child.statusCode).toBe(200);
+    const studentId = child.json().id as string;
+
+    const me = await app.inject({ method: "GET", url: "/me", headers: auth });
+    expect(me.json().students).toHaveLength(1);
+
+    const session = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "amara", packId: "math-ms" },
+    });
+    expect(session.statusCode).toBe(200);
+    const sid = session.json().sessionId;
+    await app.inject({ method: "POST", url: `/sessions/${sid}/practice`, payload: { problemIndex: 0, answer: "4" } });
+    await app.inject({ method: "POST", url: `/sessions/${sid}/end` });
+
+    const dash = await app.inject({ method: "GET", url: "/dashboard", headers: auth });
+    const nia = dash.json().students.find((s: { displayName: string }) => s.displayName === "Nia");
+    expect(nia.sessions.length).toBeGreaterThan(0);
+    expect(nia.sessions[0].summary).toBeTruthy();
+    expect(nia.mastery[0].level).toBeGreaterThan(0);
+  });
+
+  it("enforces auth boundaries: bad login, no token, someone else's child", async () => {
+    const wrong = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "mum@example.com", password: "not-the-password" },
+    });
+    expect(wrong.statusCode).toBe(401);
+
+    expect((await app.inject({ method: "GET", url: "/dashboard" })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ method: "GET", url: "/me", headers: { authorization: "Bearer deadbeef" } })).statusCode,
+    ).toBe(401);
+
+    const stranger = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "stranger@example.com", password: "password99", role: "parent" },
+    });
+    const strangerAuth = { authorization: `Bearer ${stranger.json().token}` };
+    const mum = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "mum@example.com", password: "sunshine123" },
+    });
+    const mumAuth = { authorization: `Bearer ${mum.json().token}` };
+    const nia = (await app.inject({ method: "GET", url: "/me", headers: mumAuth })).json().students[0];
+
+    const theft = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: strangerAuth,
+      payload: { studentId: nia.id, personaId: "amara", packId: "math-ms" },
+    });
+    expect(theft.statusCode).toBe(403);
+  });
+
+  it("gives adult self-learners their own student profile on registration", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "adult@example.com", password: "learning42", displayName: "Tunde", role: "student" },
+    });
+    expect(reg.json().studentId).toBeTruthy();
+    const session = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { authorization: `Bearer ${reg.json().token}` },
+      payload: { studentId: reg.json().studentId, personaId: "kofi", packId: "exam-prep" },
+    });
+    expect(session.statusCode).toBe(200);
+  });
+
   it("produces a playable WAV voice note via /tts", async () => {
     const res = await app.inject({
       method: "POST",

@@ -1,0 +1,215 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+const API = process.env.NEXT_PUBLIC_API_URL!;
+
+interface SessionSummary {
+  startedAt: string;
+  endedAt: string | null;
+  summary: string | null;
+}
+interface StudentRow {
+  id: string;
+  displayName: string;
+  sessions: SessionSummary[];
+  mastery: Array<{ skillId: string; level: number }>;
+}
+
+export default function Account() {
+  const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [role, setRole] = useState<"parent" | "student">("parent");
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [meEmail, setMeEmail] = useState("");
+  const [newChild, setNewChild] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = localStorage.getItem("tutor_token");
+    if (t) setToken(t);
+  }, []);
+
+  useEffect(() => {
+    if (token) refresh(token);
+  }, [token]);
+
+  async function refresh(t: string) {
+    try {
+      const res = await fetch(`${API}/dashboard`, { headers: { authorization: `Bearer ${t}` } });
+      if (res.status === 401) {
+        localStorage.removeItem("tutor_token");
+        setToken(null);
+        return;
+      }
+      const dash = await res.json();
+      setStudents(dash.students);
+      const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
+      if (me.ok) setMeEmail((await me.json()).email);
+    } catch {
+      setError("could not load dashboard");
+    }
+  }
+
+  async function submit() {
+    setError(null);
+    try {
+      const res = await fetch(`${API}/auth/${mode}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          mode === "register" ? { email, password, displayName, role } : { email, password },
+        ),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = await res.json();
+      localStorage.setItem("tutor_token", json.token);
+      setToken(json.token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "sign-in failed");
+    }
+  }
+
+  async function addChild() {
+    if (!newChild.trim() || !token) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ displayName: newChild.trim() }),
+      });
+      if (!res.ok) throw new Error("could not add student");
+      setNewChild("");
+      refresh(token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not add student");
+    }
+  }
+
+  function signOut() {
+    localStorage.removeItem("tutor_token");
+    setToken(null);
+    setStudents([]);
+  }
+
+  if (!token) {
+    return (
+      <main style={{ maxWidth: 460, margin: "48px auto", padding: 16 }}>
+        <h1 style={{ textAlign: "center" }}>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+        {error && <p style={errBox}>{error}</p>}
+        <div style={card}>
+          {mode === "register" && (
+            <>
+              <label style={lbl}>Your name</label>
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={inp} />
+              <label style={lbl}>I am a…</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setRole("parent")} style={{ ...pill, ...(role === "parent" ? pillOn : {}) }}>
+                  Parent — my kids will learn
+                </button>
+                <button onClick={() => setRole("student")} style={{ ...pill, ...(role === "student" ? pillOn : {}) }}>
+                  Learner — it&apos;s for me
+                </button>
+              </div>
+            </>
+          )}
+          <label style={lbl}>Email</label>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} style={inp} type="email" />
+          <label style={lbl}>Password {mode === "register" && <small>(8+ characters)</small>}</label>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} style={inp} type="password"
+            onKeyDown={(e) => e.key === "Enter" && submit()} />
+          <button onClick={submit} style={{ ...btn, marginTop: 16, width: "100%" }}>
+            {mode === "login" ? "Sign in" : "Create account"}
+          </button>
+          <p style={{ textAlign: "center", marginBottom: 0 }}>
+            <button onClick={() => setMode(mode === "login" ? "register" : "login")}
+              style={{ border: "none", background: "none", color: "#2b4c8c", cursor: "pointer" }}>
+              {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
+            </button>
+          </p>
+          <p style={{ textAlign: "center", marginBottom: 0 }}>
+            <a href="/" style={{ color: "#68718a" }}>← back to tutoring</a>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main style={{ maxWidth: 760, margin: "32px auto", padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1>Family dashboard</h1>
+        <div>
+          <small style={{ color: "#68718a", marginRight: 12 }}>{meEmail}</small>
+          <button onClick={signOut} style={{ ...btn, background: "#8a93a6" }}>Sign out</button>
+        </div>
+      </div>
+      {error && <p style={errBox}>{error}</p>}
+
+      <div style={{ ...card, marginBottom: 16 }}>
+        <b>Add a student</b>
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <input value={newChild} onChange={(e) => setNewChild(e.target.value)} style={{ ...inp, margin: 0 }}
+            placeholder="Child's name" onKeyDown={(e) => e.key === "Enter" && addChild()} />
+          <button onClick={addChild} style={btn}>Add</button>
+        </div>
+      </div>
+
+      {students.length === 0 && <p>No students yet — add one above, then start a session from the <a href="/">home page</a>.</p>}
+
+      {students.map((s) => (
+        <div key={s.id} style={{ ...card, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2 style={{ margin: 0 }}>{s.displayName}</h2>
+            <a href="/" style={{ color: "#2b4c8c" }}>Start a session →</a>
+          </div>
+
+          {s.mastery.length > 0 && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>Skill progress</h4>
+              {s.mastery.map((m) => (
+                <div key={m.skillId} style={{ marginBottom: 6 }}>
+                  <small>{m.skillId.split(".").slice(1).join(" · ").replace(/-/g, " ")}</small>
+                  <div style={{ background: "#e7ebf4", borderRadius: 6, height: 10 }}>
+                    <div style={{
+                      width: `${Math.round(m.level * 100)}%`, height: "100%", borderRadius: 6,
+                      background: m.level > 0.7 ? "#4a7d5f" : m.level > 0.35 ? "#d9a13f" : "#c0605a",
+                      transition: "width .4s",
+                    }} />
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {s.sessions.length > 0 && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>Recent sessions</h4>
+              {s.sessions.map((sess, i) => (
+                <div key={i} style={{ borderLeft: "3px solid #ccd3e0", paddingLeft: 10, marginBottom: 8 }}>
+                  <small style={{ color: "#68718a" }}>{new Date(sess.startedAt).toLocaleString()}</small>
+                  <p style={{ margin: "4px 0", whiteSpace: "pre-wrap" }}>
+                    {sess.summary ? sess.summary.slice(0, 300) : sess.endedAt ? "(no recap)" : "(in progress)"}
+                  </p>
+                </div>
+              ))}
+            </>
+          )}
+          {s.sessions.length === 0 && <small style={{ color: "#68718a" }}>No sessions yet.</small>}
+        </div>
+      ))}
+    </main>
+  );
+}
+
+const card: React.CSSProperties = { background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(20,30,60,.08)" };
+const lbl: React.CSSProperties = { display: "block", margin: "14px 0 6px", fontWeight: 600 };
+const inp: React.CSSProperties = { width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccd3e0", fontSize: 15, boxSizing: "border-box" };
+const btn: React.CSSProperties = { padding: "10px 18px", borderRadius: 8, border: "none", background: "#2b4c8c", color: "#fff", fontSize: 15, cursor: "pointer" };
+const pill: React.CSSProperties = { padding: "10px 14px", borderRadius: 10, border: "1px solid #ccd3e0", background: "#fff", cursor: "pointer", flex: 1 };
+const pillOn: React.CSSProperties = { border: "2px solid #2b4c8c", background: "#eef1f8" };
+const errBox: React.CSSProperties = { background: "#fdecec", color: "#9d2b2b", borderRadius: 8, padding: "10px 14px", margin: "8px 0" };

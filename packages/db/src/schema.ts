@@ -14,7 +14,18 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   role: text("role", { enum: ["student", "parent", "admin"] }).notNull().default("student"),
+  /** bcrypt hash; null for auto-created guest/placeholder users. */
+  passwordHash: text("password_hash"),
+  displayName: text("display_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Opaque API tokens, stored as sha256 so a DB leak doesn't leak sessions. */
+export const authTokens = pgTable("auth_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
 });
 
 export const students = pgTable("students", {

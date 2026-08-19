@@ -62,6 +62,9 @@ export default function Home() {
   const [packId, setPackId] = useState("");
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [family, setFamily] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [studentId, setStudentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -84,6 +87,14 @@ export default function Home() {
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
     fetch(`${API}/packs`).then((r) => r.json()).then(setPacks).catch(() => {});
+    const t = localStorage.getItem("tutor_token");
+    if (t) {
+      setToken(t);
+      fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((me) => me && setFamily(me.students))
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
@@ -119,13 +130,15 @@ export default function Home() {
     try {
       const res = await fetch(`${API}/sessions`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentName: name || "Student",
-          personaId,
-          packId,
-          ...(parentEmail ? { parentEmail } : {}),
-        }),
+        headers: {
+          "content-type": "application/json",
+          ...(token && studentId ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(
+          token && studentId
+            ? { studentId, personaId, packId }
+            : { studentName: name || "Student", personaId, packId, ...(parentEmail ? { parentEmail } : {}) },
+        ),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
@@ -325,11 +338,27 @@ export default function Home() {
         <h1 style={{ textAlign: "center" }}>Meet your tutor</h1>
         {error && <p style={errBox}>{error}</p>}
         <div style={card}>
-          <label style={lbl}>Your name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder="Ada" />
+          {family.length > 0 ? (
+            <>
+              <label style={lbl}>Who&apos;s learning today?</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {family.map((s) => (
+                  <button key={s.id} onClick={() => setStudentId(s.id)}
+                    style={{ ...pill, ...(studentId === s.id ? pillOn : {}) }}>
+                    <b>{s.displayName}</b>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <label style={lbl}>Your name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder="Ada" />
 
-          <label style={lbl}>Parent email (optional — for session recaps)</label>
-          <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} style={inp} placeholder="parent@example.com" type="email" />
+              <label style={lbl}>Parent email (optional — for session recaps)</label>
+              <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} style={inp} placeholder="parent@example.com" type="email" />
+            </>
+          )}
 
           <label style={lbl}>Pick your tutor</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -352,9 +381,17 @@ export default function Home() {
             ))}
           </div>
 
-          <button disabled={!personaId || !packId} onClick={startSession} style={{ ...btn, marginTop: 20 }}>
+          <button
+            disabled={!personaId || !packId || (family.length > 0 && !studentId)}
+            onClick={startSession}
+            style={{ ...btn, marginTop: 20 }}>
             Start session
           </button>
+          <p style={{ textAlign: "center", marginBottom: 0 }}>
+            <a href="/account" style={{ color: "#68718a" }}>
+              {token ? "Family dashboard →" : "Parents: create an account for progress reports →"}
+            </a>
+          </p>
         </div>
       </main>
     );

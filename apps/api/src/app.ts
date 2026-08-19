@@ -12,6 +12,7 @@ import {
 import type { Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap } from "./email.js";
+import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 
 /** Live conversational state; durable state goes through the Store. */
 interface LiveSession {
@@ -65,6 +66,97 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
     timeWindow: "1 minute",
   });
 
+  // ---- Accounts & auth ----
+
+  const credentialsSchema = {
+    type: "object",
+    required: ["email", "password"],
+    properties: {
+      email: { type: "string", format: "email", maxLength: 254 },
+      password: { type: "string", minLength: 8, maxLength: 128 },
+      displayName: { type: "string", minLength: 1, maxLength: 80 },
+      role: { type: "string", enum: ["parent", "student"] },
+    },
+  };
+
+  app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student" } }>(
+    "/auth/register",
+    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const { email, password, displayName, role } = req.body;
+      const account = await store.createAccount(
+        email,
+        await hashPassword(password),
+        role ?? "parent",
+        displayName?.trim() || email.split("@")[0],
+      );
+      if (!account) return reply.code(409).send({ error: "that email is already registered" });
+      const token = mintToken();
+      await store.saveToken(token.hash, account.userId);
+      return { token: token.raw, role: role ?? "parent", studentId: account.studentId ?? null };
+    },
+  );
+
+  app.post<{ Body: { email: string; password: string } }>(
+    "/auth/login",
+    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const account = await store.getAccountByEmail(req.body.email);
+      const ok = account && (await verifyPassword(req.body.password, account.passwordHash));
+      // Same response for unknown email and wrong password — no account probing.
+      if (!ok) return reply.code(401).send({ error: "invalid email or password" });
+      const token = mintToken();
+      await store.saveToken(token.hash, account.userId);
+      return { token: token.raw, role: account.role };
+    },
+  );
+
+  app.get("/me", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    return {
+      email: user.email,
+      role: user.role,
+      students: await store.listStudentProfiles(user.userId),
+    };
+  });
+
+  app.post<{ Body: { displayName: string } }>(
+    "/students",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["displayName"],
+          additionalProperties: false,
+          properties: { displayName: { type: "string", minLength: 1, maxLength: 80 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      const student = await store.addStudentProfile(user.userId, req.body.displayName.trim());
+      return { id: student.id, displayName: req.body.displayName.trim() };
+    },
+  );
+
+  /** Parent dashboard: per student — recent sessions with recaps + mastery. */
+  app.get("/dashboard", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const students = await store.listStudentProfiles(user.userId);
+    return {
+      students: await Promise.all(
+        students.map(async (s) => ({
+          ...s,
+          sessions: await store.listSessionSummaries(s.id, 5),
+          mastery: await store.getMasterySnapshot(s.id),
+        })),
+      ),
+    };
+  });
+
   app.get("/health", async () => ({
     ok: true,
     store: store.kind,
@@ -111,16 +203,27 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
     }
   });
 
-  app.post<{ Body: { studentName: string; personaId: string; packId: string; parentEmail?: string } }>(
+  app.post<{
+    Body: {
+      studentName?: string;
+      studentId?: string;
+      personaId: string;
+      packId: string;
+      parentEmail?: string;
+    };
+  }>(
     "/sessions",
     {
       schema: {
         body: {
           type: "object",
-          required: ["studentName", "personaId", "packId"],
+          required: ["personaId", "packId"],
           additionalProperties: false,
           properties: {
+            // Guest flow: a name (+ optional parent email). Account flow: a
+            // studentId owned by the signed-in account.
             studentName: { type: "string", minLength: 1, maxLength: 80 },
+            studentId: { type: "string", format: "uuid" },
             personaId: { type: "string", maxLength: 40 },
             packId: { type: "string", maxLength: 40 },
             parentEmail: { type: "string", format: "email", maxLength: 254 },
@@ -129,7 +232,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       },
     },
     async (req, reply) => {
-      const { studentName, personaId, packId, parentEmail } = req.body;
+      const { personaId, packId } = req.body;
       const persona = loadPersonas().find((p) => p.id === personaId);
       if (!persona) return reply.code(400).send({ error: `unknown persona: ${personaId}` });
 
@@ -141,19 +244,41 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         throw err;
       }
 
-      const student = await store.ensureStudent(studentName.trim(), parentEmail);
-      const memoryLines = await store.getMemories(student.id);
-      const sessionId = await store.createSession(student.id, personaId, packId);
+      let studentIdResolved: string;
+      let studentName: string;
+      let parentEmail: string | undefined;
+
+      if (req.body.studentId) {
+        const user = await userFromRequest(req, store);
+        if (!user) return reply.code(401).send({ error: "sign in required" });
+        if (!(await store.ownsStudent(user.userId, req.body.studentId))) {
+          return reply.code(403).send({ error: "that student is not in your family" });
+        }
+        studentIdResolved = req.body.studentId;
+        studentName = (await store.getStudentName(studentIdResolved)) ?? "Student";
+        // Recaps go to the parent account's inbox; adult learners get their own.
+        parentEmail = user.email.endsWith("@students.local") ? undefined : user.email;
+      } else if (req.body.studentName) {
+        const student = await store.ensureStudent(req.body.studentName.trim(), req.body.parentEmail);
+        studentIdResolved = student.id;
+        studentName = req.body.studentName.trim();
+        parentEmail = req.body.parentEmail;
+      } else {
+        return reply.code(400).send({ error: "provide studentName (guest) or studentId (account)" });
+      }
+
+      const memoryLines = await store.getMemories(studentIdResolved);
+      const sessionId = await store.createSession(studentIdResolved, personaId, packId);
 
       live.set(sessionId, {
         id: sessionId,
-        studentId: student.id,
-        studentName: studentName.trim(),
+        studentId: studentIdResolved,
+        studentName,
         parentEmail,
         personaId,
         packId,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName: studentName.trim(), memoryLines }) },
+          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines }) },
         ],
         busy: false,
         practiceTotal: 0,

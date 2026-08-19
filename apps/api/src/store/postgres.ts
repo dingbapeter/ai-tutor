@@ -1,5 +1,5 @@
 import { createDb, schema, type Db } from "@tutor/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import type { SessionRecap, Store } from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
 
@@ -142,5 +142,144 @@ export class PostgresStore implements Store {
       .from(schema.mastery)
       .where(eq(schema.mastery.studentId, studentId));
     return rows;
+  }
+
+  // ---- Accounts & auth ----
+
+  async createAccount(
+    email: string,
+    passwordHash: string,
+    role: "parent" | "student",
+    displayName: string,
+  ) {
+    let rows = await this.db
+      .insert(schema.users)
+      .values({ email: email.toLowerCase(), role, passwordHash, displayName })
+      .onConflictDoNothing({ target: schema.users.email })
+      .returning({ id: schema.users.id });
+
+    if (!rows.length) {
+      // The email may exist only as a passwordless placeholder (guest flow's
+      // parent-email upsert). Claiming it upgrades the guest family to a real
+      // account; an email with a password stays taken.
+      rows = await this.db
+        .update(schema.users)
+        .set({ passwordHash, role, displayName })
+        .where(and(eq(schema.users.email, email.toLowerCase()), isNull(schema.users.passwordHash)))
+        .returning({ id: schema.users.id });
+      if (!rows.length) return null; // genuinely taken
+    }
+
+    const userId = rows[0].id;
+    let studentId: string | undefined;
+    if (role === "student") {
+      const [student] = await this.db
+        .insert(schema.students)
+        .values({ userId, displayName })
+        .returning({ id: schema.students.id });
+      studentId = student.id;
+    }
+    return { userId, studentId };
+  }
+
+  async getAccountByEmail(email: string) {
+    const rows = await this.db
+      .select({
+        userId: schema.users.id,
+        passwordHash: schema.users.passwordHash,
+        role: schema.users.role,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.email, email.toLowerCase()))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async saveToken(tokenHash: string, userId: string) {
+    await this.db.insert(schema.authTokens).values({ tokenHash, userId });
+  }
+
+  async resolveToken(tokenHash: string) {
+    const rows = await this.db
+      .select({ userId: schema.users.id, email: schema.users.email, role: schema.users.role })
+      .from(schema.authTokens)
+      .innerJoin(schema.users, eq(schema.authTokens.userId, schema.users.id))
+      .where(eq(schema.authTokens.tokenHash, tokenHash))
+      .limit(1);
+    if (!rows.length) return null;
+    await this.db
+      .update(schema.authTokens)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(schema.authTokens.tokenHash, tokenHash));
+    return rows[0];
+  }
+
+  async addStudentProfile(parentUserId: string, displayName: string) {
+    // The child's placeholder user keeps the schema's user link intact
+    // until kids get their own logins.
+    const [child] = await this.db
+      .insert(schema.users)
+      .values({
+        email: `${displayName.toLowerCase().replace(/[^a-z0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}@students.local`,
+      })
+      .returning({ id: schema.users.id });
+    const [student] = await this.db
+      .insert(schema.students)
+      .values({ userId: child.id, parentUserId, displayName })
+      .returning({ id: schema.students.id });
+    return { id: student.id };
+  }
+
+  async listStudentProfiles(userId: string) {
+    const own = await this.db
+      .select({ id: schema.students.id, displayName: schema.students.displayName })
+      .from(schema.students)
+      .where(eq(schema.students.userId, userId));
+    const children = await this.db
+      .select({ id: schema.students.id, displayName: schema.students.displayName })
+      .from(schema.students)
+      .where(eq(schema.students.parentUserId, userId));
+    return [...own, ...children];
+  }
+
+  async ownsStudent(userId: string, studentId: string) {
+    const rows = await this.db
+      .select({ id: schema.students.id })
+      .from(schema.students)
+      .where(
+        and(
+          eq(schema.students.id, studentId),
+          or(eq(schema.students.userId, userId), eq(schema.students.parentUserId, userId)),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async getStudentName(studentId: string) {
+    const rows = await this.db
+      .select({ displayName: schema.students.displayName })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.displayName ?? null;
+  }
+
+  async listSessionSummaries(studentId: string, limit: number) {
+    const rows = await this.db
+      .select({
+        startedAt: schema.sessions.startedAt,
+        endedAt: schema.sessions.endedAt,
+        recap: schema.sessions.recap,
+      })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId))
+      .orderBy(desc(schema.sessions.startedAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      startedAt: r.startedAt,
+      endedAt: r.endedAt,
+      summary: r.recap?.summary ?? null,
+    }));
   }
 }
