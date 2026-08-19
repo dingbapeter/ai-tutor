@@ -1,5 +1,5 @@
 import { createDb, schema, type Db } from "@tutor/db";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { SessionRecap, Store } from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
 
@@ -28,10 +28,29 @@ export class PostgresStore implements Store {
   }
 
   async ensureStudent(name: string, parentEmail?: string) {
+    // Scope identity by parent so two families' "Ada"s never collide.
+    // Real accounts/auth replace this lookup in the auth sprint.
+    let parentUserId: string | undefined;
+    if (parentEmail) {
+      const [parent] = await this.db
+        .insert(schema.users)
+        .values({ email: parentEmail.toLowerCase(), role: "parent" })
+        .onConflictDoUpdate({ target: schema.users.email, set: { role: "parent" } })
+        .returning({ id: schema.users.id });
+      parentUserId = parent.id;
+    }
+
     const existing = await this.db
       .select({ id: schema.students.id })
       .from(schema.students)
-      .where(eq(schema.students.displayName, name))
+      .where(
+        and(
+          eq(schema.students.displayName, name),
+          parentUserId
+            ? eq(schema.students.parentUserId, parentUserId)
+            : isNull(schema.students.parentUserId),
+        ),
+      )
       .limit(1);
     if (existing.length) return { id: existing[0].id };
 
@@ -39,16 +58,6 @@ export class PostgresStore implements Store {
       .insert(schema.users)
       .values({ email: `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}@students.local` })
       .returning({ id: schema.users.id });
-
-    let parentUserId: string | undefined;
-    if (parentEmail) {
-      const [parent] = await this.db
-        .insert(schema.users)
-        .values({ email: parentEmail, role: "parent" })
-        .onConflictDoUpdate({ target: schema.users.email, set: { role: "parent" } })
-        .returning({ id: schema.users.id });
-      parentUserId = parent.id;
-    }
 
     const [student] = await this.db
       .insert(schema.students)
@@ -80,11 +89,14 @@ export class PostgresStore implements Store {
   }
 
   async getMemories(studentId: string) {
+    // Newest 12, oldest-first, so long-lived students don't bloat the prompt.
     const rows = await this.db
       .select({ content: schema.memories.content })
       .from(schema.memories)
-      .where(and(eq(schema.memories.studentId, studentId), eq(schema.memories.active, true)));
-    return rows.map((r) => r.content);
+      .where(and(eq(schema.memories.studentId, studentId), eq(schema.memories.active, true)))
+      .orderBy(desc(schema.memories.createdAt))
+      .limit(12);
+    return rows.map((r) => r.content).reverse();
   }
 
   async addMemory(studentId: string, kind: "academic" | "personal" | "goal", content: string) {

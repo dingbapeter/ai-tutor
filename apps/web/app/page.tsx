@@ -31,6 +31,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [recap, setRecap] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,64 +42,87 @@ export default function Home() {
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
 
   async function startSession() {
-    const res = await fetch(`${API}/sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ studentName: name || "Student", personaId, packId }),
-    });
-    const json = await res.json();
-    setSessionId(json.sessionId);
-    setTutorName(json.persona.name);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ studentName: name || "Student", personaId, packId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = await res.json();
+      setSessionId(json.sessionId);
+      setTutorName(json.persona.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not start session");
+    }
   }
 
   async function send() {
     if (!input.trim() || !sessionId || busy) return;
     const text = input.trim();
     setInput("");
+    setError(null);
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setBusy(true);
 
-    const res = await fetch(`${API}/sessions/${sessionId}/message`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() ?? "";
-      for (const line of lines) {
-        const data = line.replace(/^data: ?/, "").trim();
-        if (!data) continue;
-        try {
-          const evt = JSON.parse(data);
-          if (evt.delta) {
-            setMessages((m) => {
-              const copy = [...m];
-              copy[copy.length - 1] = {
-                role: "assistant",
-                content: copy[copy.length - 1].content + evt.delta,
-              };
-              return copy;
-            });
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const data = line.replace(/^data: ?/, "").trim();
+          if (!data) continue;
+          try {
+            const evt = JSON.parse(data);
+            if (evt.error) throw new Error("the tutor had trouble replying — try again");
+            if (evt.delta) {
+              setMessages((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = {
+                  role: "assistant",
+                  content: copy[copy.length - 1].content + evt.delta,
+                };
+                return copy;
+              });
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message.includes("tutor")) throw e;
           }
-        } catch {}
+        }
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "message failed");
+      setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function endSession() {
     if (!sessionId) return;
-    const res = await fetch(`${API}/sessions/${sessionId}/end`, { method: "POST" });
-    const json = await res.json();
-    setRecap(json.recap);
-    setSessionId(null);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/end`, { method: "POST" });
+      if (!res.ok) throw new Error(`could not end session (${res.status})`);
+      const json = await res.json();
+      setRecap(json.recap);
+      setSessionId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not end session");
+    }
   }
 
   const card: React.CSSProperties = {
@@ -126,6 +150,7 @@ export default function Home() {
     return (
       <main style={{ maxWidth: 640, margin: "48px auto", padding: 16 }}>
         <h1 style={{ textAlign: "center" }}>Meet your tutor</h1>
+        {error && <p style={errBox}>{error}</p>}
         <div style={card}>
           <label style={lbl}>Your name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder="Ada" />
@@ -164,6 +189,7 @@ export default function Home() {
         <h2 style={{ margin: 8 }}>Session with {tutorName}</h2>
         <button onClick={endSession} style={{ ...btn, background: "#8a93a6" }}>End session</button>
       </div>
+      {error && <p style={errBox}>{error}</p>}
       <div style={{ ...card, flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{
@@ -192,3 +218,4 @@ const inp: React.CSSProperties = { width: "100%", padding: 10, borderRadius: 8, 
 const btn: React.CSSProperties = { padding: "10px 18px", borderRadius: 8, border: "none", background: "#2b4c8c", color: "#fff", fontSize: 15, cursor: "pointer" };
 const pill: React.CSSProperties = { padding: "10px 14px", borderRadius: 10, border: "1px solid #ccd3e0", background: "#fff", cursor: "pointer", textAlign: "left" };
 const pillOn: React.CSSProperties = { border: "2px solid #2b4c8c", background: "#eef1f8" };
+const errBox: React.CSSProperties = { background: "#fdecec", color: "#9d2b2b", borderRadius: 8, padding: "10px 14px", margin: "8px 0" };

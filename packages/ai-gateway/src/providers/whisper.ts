@@ -18,7 +18,11 @@ export class WhisperSttProvider implements SttProvider {
     form.append("file", new Blob([audio as BlobPart], { type: mimeType }), `audio.${ext}`);
     form.append("model", this.model);
     if (language) form.append("language", language);
-    const res = await fetch(`${this.baseUrl}/v1/audio/transcriptions`, { method: "POST", body: form });
+    const res = await fetch(`${this.baseUrl}/v1/audio/transcriptions`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(60_000),
+    });
     if (!res.ok) throw new Error(`whisper transcribe failed: ${res.status}`);
     const json = (await res.json()) as { text?: string };
     return json.text ?? "";

@@ -5,7 +5,8 @@
     "dev:api": "pnpm --filter @tutor/api dev",
     "dev:web": "pnpm --filter @tutor/web dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
   },
   "packageManager": "pnpm@10.33.0"
 }

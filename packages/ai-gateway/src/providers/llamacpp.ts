@@ -78,6 +78,7 @@ export class LlamaCppVisionProvider implements VisionProvider {
         ],
         max_tokens: 1024,
       }),
+      signal: AbortSignal.timeout(120_000),
     });
     if (!res.ok) throw new Error(`llamacpp vision failed: ${res.status}`);
     const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };

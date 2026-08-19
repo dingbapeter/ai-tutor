@@ -36,13 +36,24 @@ export function loadPersonas(): Persona[] {
   return personaCache;
 }
 
+/** The only packs that exist. Everything else is a client error, never a crash. */
+export const PACK_IDS = ["math-ms", "exam-prep", "language"] as const;
+
+export class UnknownPackError extends Error {
+  constructor(packId: string) {
+    super(`unknown pack: ${packId}`);
+  }
+}
+
 const packCache = new Map<string, CurriculumPack>();
 export function loadPack(packId: string): CurriculumPack {
-  if (!packCache.has(packId)) {
-    const safe = packId.replace(/[^a-z0-9-]/gi, "");
-    packCache.set(safe, JSON.parse(readFileSync(join(ROOT, "curriculum", safe, "pack.json"), "utf8")));
+  if (!(PACK_IDS as readonly string[]).includes(packId)) throw new UnknownPackError(packId);
+  let pack = packCache.get(packId);
+  if (!pack) {
+    pack = JSON.parse(readFileSync(join(ROOT, "curriculum", packId, "pack.json"), "utf8")) as CurriculumPack;
+    packCache.set(packId, pack);
   }
-  return packCache.get(packId.replace(/[^a-z0-9-]/gi, ""))!;
+  return pack;
 }
 
 /**

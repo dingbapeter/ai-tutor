@@ -62,6 +62,27 @@ LLAMACPP_URL=http://<contabo-host>:8080
 cd services/mathcheck && pip install -r requirements.txt && uvicorn main:app --port 8090
 ```
 
+## What's verified vs. what's pending
+
+Honesty table — updated whenever it changes. "Verified" means exercised by the
+automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
+
+| Piece | Status |
+|---|---|
+| Socratic session loop (SSE streaming, history, recovery on provider failure) | ✅ tested (12 API integration tests) |
+| llama.cpp adapter against a REAL model (Qwen 2.5 0.5B, full session) | ✅ live-verified end-to-end |
+| Adapter wire protocols (llama.cpp SSE incl. split chunks, whisper, kokoro) | ✅ tested (7 protocol tests) |
+| Postgres persistence + cross-session memory | ✅ live-verified against Postgres 16 |
+| Memory resilience with weak/refusing models (deterministic factual line) | ✅ regression-tested |
+| SymPy verification incl. hostile input (exponent bombs, garbage) | ✅ tested (7 pytest cases) |
+| Family-scoped student identity | ✅ tested |
+| Rate limiting, input validation, payload caps, graceful shutdown | ✅ in place |
+| Parent email (mailcow SMTP) | ⚠️ code-complete; needs a live SMTP run at deploy |
+| Whisper STT / Kokoro TTS against real engines | ⚠️ protocol-tested; live run happens on Contabo at deploy |
+| Voice UI, avatar, practice-mode UI | ❌ Sprint 3 |
+| Auth/accounts (name+parent-email scoping is a stand-in) | ❌ Sprint 3 |
+| Payments, parent dashboard, WhatsApp | ❌ later sprints |
+
 ## Roadmap
 
 - [x] Sprint 1: monorepo, ai-gateway, DB schema, end-to-end Socratic text loop

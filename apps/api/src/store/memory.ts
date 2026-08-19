@@ -8,13 +8,13 @@ export class MemoryStore implements Store {
   private sessions = new Map<string, { studentId: string; recap?: SessionRecap }>();
 
   async ensureStudent(name: string, parentEmail?: string) {
-    const key = name.toLowerCase();
+    // Scope identity by parent email so two families' "Ada"s never collide.
+    // Real accounts/auth replace this in the auth sprint.
+    const key = `${name.toLowerCase()}::${(parentEmail ?? "").toLowerCase()}`;
     let s = this.students.get(key);
     if (!s) {
       s = { id: crypto.randomUUID(), parentEmail };
       this.students.set(key, s);
-    } else if (parentEmail) {
-      s.parentEmail = parentEmail;
     }
     return { id: s.id };
   }
@@ -35,7 +35,8 @@ export class MemoryStore implements Store {
   }
 
   async getMemories(studentId: string) {
-    return (this.memories.get(studentId) ?? []).map((m) => m.content);
+    // Newest 12, oldest-first, so long-lived students don't bloat the prompt.
+    return (this.memories.get(studentId) ?? []).slice(-12).map((m) => m.content);
   }
 
   async addMemory(studentId: string, kind: "academic" | "personal" | "goal", content: string) {

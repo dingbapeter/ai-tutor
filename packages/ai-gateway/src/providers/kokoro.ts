@@ -20,6 +20,7 @@ export class KokoroTtsProvider implements TtsProvider {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: this.model, input: text, voice: voiceId, response_format: "mp3" }),
+      signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) throw new Error(`tts failed: ${res.status}`);
     return {
