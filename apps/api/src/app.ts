@@ -36,9 +36,28 @@ export interface AppDeps {
 
 const MAX_TEXT = 4000;
 
+/**
+ * Learning formats — the text-first slice of IDEAS.md #001. The tutor can
+ * re-shape an explanation for the student's age and taste with zero extra
+ * infrastructure; image/animation formats arrive with the GPU phase.
+ */
+const FORMATS: Record<string, string> = {
+  plain: "",
+  story:
+    "Explain this as a SHORT STORY with characters and a tiny plot, matched to my age. Keep the math/content correct inside the story.",
+  comic:
+    "Explain this as a COMIC-STRIP SCRIPT: numbered panels, each with a scene description and dialogue. Keep it fun and the content correct.",
+  song: "Explain this as a short catchy SONG or RAP with rhymes I can memorize. Keep the content correct.",
+};
+
 export async function buildApp({ gateway, store, env = process.env }: AppDeps): Promise<FastifyInstance> {
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
+
+  // Raw audio uploads for push-to-talk (multipart adds nothing here).
+  app.addContentTypeParser(/^audio\/.*/, { parseAs: "buffer" }, (_req, body, done) =>
+    done(null, body),
+  );
 
   await app.register(cors, { origin: env.WEB_ORIGIN ?? true });
   await app.register(rateLimit, {
@@ -59,7 +78,14 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
   }));
 
   app.get("/personas", async () =>
-    loadPersonas().map(({ id, name, style, voiceId }) => ({ id, name, style, voiceId })),
+    loadPersonas().map(({ id, name, style, voiceId, color, accent }) => ({
+      id,
+      name,
+      style,
+      voiceId,
+      color,
+      accent,
+    })),
   );
 
   app.get("/packs", async () =>
@@ -143,7 +169,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
   );
 
   /** Student turn in, tutor reply streamed out as SSE. */
-  app.post<{ Params: { id: string }; Body: { text: string } }>(
+  app.post<{ Params: { id: string }; Body: { text: string; format?: string } }>(
     "/sessions/:id/message",
     {
       schema: {
@@ -151,7 +177,10 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           type: "object",
           required: ["text"],
           additionalProperties: false,
-          properties: { text: { type: "string", minLength: 1, maxLength: MAX_TEXT } },
+          properties: {
+            text: { type: "string", minLength: 1, maxLength: MAX_TEXT },
+            format: { type: "string", enum: Object.keys(FORMATS) },
+          },
         },
       },
     },
@@ -161,8 +190,10 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       session.busy = true;
 
-      session.history.push({ role: "user", content: req.body.text });
-      await store.saveMessage(session.id, "user", req.body.text);
+      const formatNote = FORMATS[req.body.format ?? "plain"];
+      const turnText = formatNote ? `${req.body.text}\n\n[${formatNote}]` : req.body.text;
+      session.history.push({ role: "user", content: turnText });
+      await store.saveMessage(session.id, "user", turnText);
 
       reply.raw.writeHead(200, {
         "content-type": "text/event-stream",
@@ -266,6 +297,61 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         await store.saveMessage(session.id, "assistant", feedback);
 
         return { correct, feedback };
+      } finally {
+        session.busy = false;
+      }
+    },
+  );
+
+  /**
+   * Push-to-talk: one round trip. Raw audio in (Content-Type: audio/*) →
+   * STT transcript → tutor reply → TTS audio back, all in a single JSON
+   * response so the client stays simple and the turn feels like a call.
+   */
+  app.post<{ Params: { id: string } }>(
+    "/sessions/:id/voice",
+    { bodyLimit: 4 << 20 },
+    async (req, reply) => {
+      const session = live.get(req.params.id);
+      if (!session) return reply.code(404).send({ error: "no such session" });
+      if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
+      const audioIn = req.body as Buffer;
+      if (!Buffer.isBuffer(audioIn) || audioIn.length === 0) {
+        return reply.code(400).send({ error: "send raw audio with an audio/* content-type" });
+      }
+      session.busy = true;
+
+      try {
+        const mime = req.headers["content-type"] ?? "audio/webm";
+        const transcript = (
+          await gateway.stt.transcribe(new Uint8Array(audioIn), mime)
+        ).trim();
+        if (!transcript) {
+          return reply.code(422).send({ error: "could not hear anything in that recording" });
+        }
+
+        session.history.push({ role: "user", content: transcript });
+        await store.saveMessage(session.id, "user", transcript);
+
+        let replyText = "";
+        for await (const delta of gateway.chat.chat(session.history, {
+          signal: AbortSignal.timeout(120_000),
+        }))
+          replyText += delta;
+        session.history.push({ role: "assistant", content: replyText });
+        await store.saveMessage(session.id, "assistant", replyText);
+
+        const persona = loadPersonas().find((p) => p.id === session.personaId)!;
+        // TTS engines have input caps; a long reply gets its head spoken and
+        // the full text still arrives for the transcript view.
+        const spoken = await gateway.tts.speak(replyText.slice(0, 2000), persona.voiceId);
+
+        return {
+          transcript,
+          reply: replyText,
+          audio: Buffer.from(spoken.audio).toString("base64"),
+          audioMime: spoken.mimeType,
+        };
       } finally {
         session.busy = false;
       }

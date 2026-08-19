@@ -37,4 +37,7 @@ Format: date · idea · why it's parked · when to bring it back.
 
 ## GRADUATED
 
-(none yet)
+### 001 (text slice) — story / comic-script / song formats → shipped in Sprint 3
+- Message endpoint accepts `format: story|comic|song`; UI has format chips.
+- Remaining (image/cartoon panels, format-preference learning) stays parked
+  under 001 for the GPU phase.

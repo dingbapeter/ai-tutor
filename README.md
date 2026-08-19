@@ -79,7 +79,9 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Rate limiting, input validation, payload caps, graceful shutdown | ✅ in place |
 | Parent email (mailcow SMTP) | ⚠️ code-complete; needs a live SMTP run at deploy |
 | Whisper STT / Kokoro TTS against real engines | ⚠️ protocol-tested; live run happens on Contabo at deploy |
-| Voice UI, avatar, practice-mode UI | ❌ Sprint 3 |
+| Push-to-talk voice turn (audio→STT→reply→TTS, one round trip) | ✅ tested + live-verified vs real LLM |
+| Voice-note playback, avatar v0 (blink/talk states), practice UI, format chips | ✅ built; web build verified |
+| Learning formats (story/comic/song) endpoint | ✅ tested (model compliance depends on deploy model size) |
 | Auth/accounts (name+parent-email scoping is a stand-in) | ❌ Sprint 3 |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 
@@ -89,8 +91,9 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 - [x] Sprint 2: Postgres persistence, learner memory read/write across sessions,
       SymPy verification in the live practice loop, parent recap email via
       mailcow (SMTP), deployment kit (Dockerfiles + Contabo compose + DEPLOY.md)
-- [ ] Sprint 3: TTS voice notes in UI, turn-based voice (push-to-talk), avatar v0,
-      practice mode UI, "explain as story/comic-script" formats (IDEAS.md #001)
+- [x] Sprint 3: TTS voice notes in UI, turn-based voice (push-to-talk), avatar v0
+      (SVG rig: idle blink, talking mouth, per-persona palette), practice mode UI,
+      "explain as story/comic/song" formats (IDEAS.md #001 text slice)
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
 

@@ -212,6 +212,51 @@ describe("session lifecycle", () => {
     expect((await app.inject({ method: "POST", url: `/sessions/${sessionId}/end` })).statusCode).toBe(404);
   });
 
+  it("handles a push-to-talk voice turn: audio in → transcript + reply + audio out", async () => {
+    const { sessionId } = await createSession("Gozie");
+    const res = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/voice`,
+      headers: { "content-type": "audio/webm" },
+      payload: Buffer.from([1, 2, 3, 4, 5]),
+    });
+    expect(res.statusCode).toBe(200);
+    const json = res.json();
+    expect(json.transcript).toContain("mock transcription");
+    expect(json.reply.length).toBeGreaterThan(10);
+    expect(Buffer.from(json.audio, "base64").subarray(0, 4).toString()).toBe("RIFF");
+    expect(json.audioMime).toBe("audio/wav");
+  });
+
+  it("rejects an empty voice upload", async () => {
+    const { sessionId } = await createSession("Hafsat");
+    const res = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/voice`,
+      headers: { "content-type": "audio/webm" },
+      payload: Buffer.alloc(0),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("accepts learning-format requests and rejects unknown formats", async () => {
+    const { sessionId } = await createSession("Ify");
+    const ok = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "explain fractions", format: "story" },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.body).toContain('"done":true');
+
+    const bad = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "explain fractions", format: "hologram" },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it("produces a playable WAV voice note via /tts", async () => {
     const res = await app.inject({
       method: "POST",

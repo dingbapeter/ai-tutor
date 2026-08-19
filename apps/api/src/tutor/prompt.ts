@@ -10,6 +10,8 @@ export interface Persona {
   style: string;
   voiceId: string;
   systemStyle: string;
+  color?: string;
+  accent?: string;
 }
 
 export interface CurriculumProblem {
