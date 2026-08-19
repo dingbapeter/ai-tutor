@@ -8,6 +8,8 @@ import {
 import { LlamaCppChatProvider, LlamaCppVisionProvider } from "./providers/llamacpp.js";
 import { WhisperSttProvider } from "./providers/whisper.js";
 import { KokoroTtsProvider } from "./providers/kokoro.js";
+import { RulesModerationProvider } from "./providers/moderation-rules.js";
+import { AnthropicModerationProvider } from "./providers/moderation-anthropic.js";
 
 /**
  * Builds the gateway from environment config. This file is the ONLY place
@@ -68,11 +70,23 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
     }
   };
 
+  const moderation = () => {
+    switch (env.AI_MODERATION_PROVIDER ?? "rules") {
+      case "anthropic":
+        return new AnthropicModerationProvider(env.ANTHROPIC_API_KEY);
+      case "rules":
+        return new RulesModerationProvider();
+      default:
+        throw new Error(`Unknown moderation provider: ${env.AI_MODERATION_PROVIDER}`);
+    }
+  };
+
   return {
     chat: chatFor(env.AI_CHAT_PROVIDER),
     planner: chatFor(env.AI_CHAT_PLANNER_PROVIDER ?? env.AI_CHAT_PROVIDER),
     stt: stt(),
     tts: tts(),
     vision: vision(),
+    moderation: moderation(),
   };
 }

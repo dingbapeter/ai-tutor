@@ -47,6 +47,20 @@ export interface VisionProvider {
   see(image: Uint8Array, mimeType: string, instruction: string): Promise<string>;
 }
 
+export interface ModerationVerdict {
+  /** True when the text should not pass through unchanged. */
+  flagged: boolean;
+  /** e.g. ["self-harm"], ["contact-exchange"], ["jailbreak"] */
+  categories: string[];
+  /** none < concern < danger. danger triggers guardian alerts. */
+  severity: "none" | "concern" | "danger";
+}
+
+export interface ModerationProvider {
+  readonly name: string;
+  moderate(text: string, direction: "student" | "tutor"): Promise<ModerationVerdict>;
+}
+
 /** The single object the rest of the codebase imports. */
 export interface AiGateway {
   /** Live conversational turns — the cheap, always-on engine. */
@@ -56,4 +70,6 @@ export interface AiGateway {
   stt: SttProvider;
   tts: TtsProvider;
   vision: VisionProvider;
+  /** Safety gate for a kids' product. Never optional — worst case is `rules`. */
+  moderation: ModerationProvider;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import MathText from "./MathText";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -391,6 +392,8 @@ export default function Home() {
             <a href="/account" style={{ color: "#68718a" }}>
               {token ? "Family dashboard →" : "Parents: create an account for progress reports →"}
             </a>
+            {" · "}
+            <a href="/credits" style={{ color: "#68718a" }}>Built on open work 💙</a>
           </p>
         </div>
       </main>
@@ -452,7 +455,7 @@ export default function Home() {
             color: m.role === "user" ? "#fff" : "#1a1a2e",
             borderRadius: 12, padding: "10px 14px", maxWidth: "82%", whiteSpace: "pre-wrap",
           }}>
-            {m.content || "…"}
+            {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
             {m.role === "assistant" && m.content && !m.content.startsWith("(") && (
               <button onClick={() => speakMessage(m.content)} title="Hear this"
                 style={{ border: "none", background: "transparent", cursor: "pointer", marginLeft: 6, fontSize: 14 }}>

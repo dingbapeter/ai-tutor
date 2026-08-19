@@ -11,8 +11,9 @@ import {
 } from "./tutor/prompt.js";
 import type { Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
-import { sendParentRecap } from "./email.js";
+import { sendParentRecap, sendSafetyAlert } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
+import { createHash } from "node:crypto";
 
 /** Live conversational state; durable state goes through the Store. */
 interface LiveSession {
@@ -51,9 +52,87 @@ const FORMATS: Record<string, string> = {
   song: "Explain this as a short catchy SONG or RAP with rhymes I can memorize. Keep the content correct.",
 };
 
+/** What the tutor says instead of an LLM reply when input is blocked. */
+function safeReply(categories: string[], studentName: string): string {
+  if (categories.includes("self-harm") || categories.includes("abuse-disclosure")) {
+    return (
+      `${studentName}, thank you for trusting me with that — it matters, and YOU matter. ` +
+      `I'm a tutor, so the best thing I can do is ask you to share this with a trusted adult — a parent, a teacher, or a counselor — today. ` +
+      `You deserve real support from people who care about you. I'm always happy to learn together whenever you're ready.`
+    );
+  }
+  return (
+    `Let's keep our session a safe place for learning, ${studentName}. ` +
+    `I can't help with that — but I'd love to get back to what we were working on. Ready?`
+  );
+}
+
 export async function buildApp({ gateway, store, env = process.env }: AppDeps): Promise<FastifyInstance> {
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
+
+  /**
+   * Safety gate for student input. Returns null to let the message through,
+   * or the tutor's safe reply when it must not reach the LLM. All flags are
+   * logged; danger flags also alert the guardian immediately.
+   */
+  async function gateStudentInput(session: LiveSession, text: string): Promise<string | null> {
+    const verdict = await gateway.moderation.moderate(text, "student");
+    if (!verdict.flagged) return null;
+    await store.recordIncident({
+      studentId: session.studentId,
+      sessionId: session.id,
+      direction: "student",
+      categories: verdict.categories,
+      severity: verdict.severity === "danger" ? "danger" : "concern",
+      excerpt: text.slice(0, 300),
+    });
+    if (verdict.severity === "danger") {
+      if (session.parentEmail) {
+        sendSafetyAlert({
+          to: session.parentEmail,
+          studentName: session.studentName,
+          categories: verdict.categories,
+          excerpt: text.slice(0, 300),
+        }).catch((err) => app.log.error(err, "safety alert email failed"));
+      }
+      return safeReply(verdict.categories, session.studentName);
+    }
+    // Concern-level: jailbreaks and off-color content are blocked from the
+    // model too — the canned redirect is safer than trusting the persona.
+    return safeReply(verdict.categories, session.studentName);
+  }
+
+  /** Post-generation check on tutor output; logs (never retracts mid-stream). */
+  async function auditTutorOutput(session: LiveSession, text: string): Promise<void> {
+    const verdict = await gateway.moderation.moderate(text, "tutor");
+    if (verdict.flagged) {
+      await store.recordIncident({
+        studentId: session.studentId,
+        sessionId: session.id,
+        direction: "tutor",
+        categories: verdict.categories,
+        severity: verdict.severity === "danger" ? "danger" : "concern",
+        excerpt: text.slice(0, 300),
+      });
+      app.log.warn({ categories: verdict.categories }, "tutor output flagged");
+    }
+  }
+
+  /** TTS cache: identical text+voice never hits the engine twice. */
+  const ttsCache = new Map<string, { audio: Uint8Array; mimeType: string }>();
+  async function cachedSpeak(text: string, voiceId: string) {
+    const key = createHash("sha256").update(`${gateway.tts.name}|${voiceId}|${text}`).digest("hex");
+    const hit = ttsCache.get(key);
+    if (hit) return hit;
+    const result = await gateway.tts.speak(text, voiceId);
+    if (ttsCache.size > 500) {
+      const oldest = ttsCache.keys().next().value;
+      if (oldest) ttsCache.delete(oldest);
+    }
+    ttsCache.set(key, { audio: result.audio, mimeType: result.mimeType });
+    return result;
+  }
 
   // Raw audio uploads for push-to-talk (multipart adds nothing here).
   app.addContentTypeParser(/^audio\/.*/, { parseAs: "buffer" }, (_req, body, done) =>
@@ -152,6 +231,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           ...s,
           sessions: await store.listSessionSummaries(s.id, 5),
           mastery: await store.getMasterySnapshot(s.id),
+          safety: await store.listIncidents(s.id, 10),
         })),
       ),
     };
@@ -168,6 +248,14 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       vision: gateway.vision.name,
     },
   }));
+
+  app.get("/credits", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+    return JSON.parse(readFileSync(join(root, "config/credits.json"), "utf8"));
+  });
 
   app.get("/personas", async () =>
     loadPersonas().map(({ id, name, style, voiceId, color, accent }) => ({
@@ -315,6 +403,26 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       session.busy = true;
 
+      const blocked = await gateStudentInput(session, req.body.text);
+      if (blocked) {
+        session.busy = false;
+        session.history.push({ role: "user", content: "[message withheld by safety filter]" });
+        session.history.push({ role: "assistant", content: blocked });
+        await store.saveMessage(session.id, "user", "[message withheld by safety filter]");
+        await store.saveMessage(session.id, "assistant", blocked);
+        // Same SSE shape as a normal reply so the client needs no special case.
+        reply.raw.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+          "access-control-allow-origin": env.WEB_ORIGIN ?? "*",
+        });
+        reply.raw.write(`data: ${JSON.stringify({ delta: blocked })}\n\n`);
+        reply.raw.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        reply.raw.end();
+        return;
+      }
+
       const formatNote = FORMATS[req.body.format ?? "plain"];
       const turnText = formatNote ? `${req.body.text}\n\n[${formatNote}]` : req.body.text;
       session.history.push({ role: "user", content: turnText });
@@ -343,6 +451,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         session.history.push({ role: "assistant", content: full });
         await store.saveMessage(session.id, "assistant", full);
         reply.raw.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        auditTutorOutput(session, full).catch((err) => app.log.error(err));
       } catch (err) {
         app.log.error(err);
         // Keep the user's turn and any partial reply so the conversation
@@ -398,9 +507,12 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           if (correct) session.practiceCorrect += 1;
         }
 
-        const diagnosis = problem.misconceptions?.find(
-          (m) => m.answer.replace(/\s/g, "") === answer.replace(/\s/g, ""),
-        )?.diagnosis;
+        const diagnosis =
+          correct === false
+            ? problem.misconceptions?.find(
+                (m) => m.answer.replace(/\s/g, "") === answer.replace(/\s/g, ""),
+              )?.diagnosis
+            : undefined;
 
         const verdictNote =
           correct === null
@@ -455,21 +567,33 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           return reply.code(422).send({ error: "could not hear anything in that recording" });
         }
 
-        session.history.push({ role: "user", content: transcript });
-        await store.saveMessage(session.id, "user", transcript);
-
-        let replyText = "";
-        for await (const delta of gateway.chat.chat(session.history, {
-          signal: AbortSignal.timeout(120_000),
-        }))
-          replyText += delta;
-        session.history.push({ role: "assistant", content: replyText });
-        await store.saveMessage(session.id, "assistant", replyText);
-
         const persona = loadPersonas().find((p) => p.id === session.personaId)!;
+
+        const blocked = await gateStudentInput(session, transcript);
+        let replyText: string;
+        if (blocked) {
+          replyText = blocked;
+          session.history.push({ role: "user", content: "[message withheld by safety filter]" });
+          session.history.push({ role: "assistant", content: replyText });
+          await store.saveMessage(session.id, "user", "[message withheld by safety filter]");
+          await store.saveMessage(session.id, "assistant", replyText);
+        } else {
+          session.history.push({ role: "user", content: transcript });
+          await store.saveMessage(session.id, "user", transcript);
+
+          replyText = "";
+          for await (const delta of gateway.chat.chat(session.history, {
+            signal: AbortSignal.timeout(120_000),
+          }))
+            replyText += delta;
+          session.history.push({ role: "assistant", content: replyText });
+          await store.saveMessage(session.id, "assistant", replyText);
+          auditTutorOutput(session, replyText).catch((err) => app.log.error(err));
+        }
+
         // TTS engines have input caps; a long reply gets its head spoken and
         // the full text still arrives for the transcript view.
-        const spoken = await gateway.tts.speak(replyText.slice(0, 2000), persona.voiceId);
+        const spoken = await cachedSpeak(replyText.slice(0, 2000), persona.voiceId);
 
         return {
           transcript,
@@ -502,7 +626,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
     async (req, reply) => {
       const persona = loadPersonas().find((p) => p.id === req.body.personaId);
       if (!persona) return reply.code(400).send({ error: "unknown persona" });
-      const result = await gateway.tts.speak(req.body.text, persona.voiceId);
+      const result = await cachedSpeak(req.body.text, persona.voiceId);
       reply.header("content-type", result.mimeType);
       return reply.send(Buffer.from(result.audio));
     },

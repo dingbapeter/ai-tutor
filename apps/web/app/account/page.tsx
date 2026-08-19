@@ -14,6 +14,7 @@ interface StudentRow {
   displayName: string;
   sessions: SessionSummary[];
   mastery: Array<{ skillId: string; level: number }>;
+  safety: Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: string }>;
 }
 
 export default function Account() {
@@ -200,6 +201,20 @@ export default function Account() {
             </>
           )}
           {s.sessions.length === 0 && <small style={{ color: "#68718a" }}>No sessions yet.</small>}
+
+          {s.safety?.length > 0 && (
+            <>
+              <h4 style={{ marginBottom: 6, color: "#9d2b2b" }}>Flagged moments ({s.safety.length})</h4>
+              {s.safety.map((i, idx) => (
+                <div key={idx} style={{ borderLeft: `3px solid ${i.severity === "danger" ? "#c0605a" : "#d9a13f"}`, paddingLeft: 10, marginBottom: 8 }}>
+                  <small style={{ color: "#68718a" }}>
+                    {new Date(i.createdAt).toLocaleString()} · {i.severity} · {i.categories.join(", ")} · said by {i.direction === "student" ? s.displayName : "the tutor"}
+                  </small>
+                  <p style={{ margin: "2px 0", fontSize: 14 }}>&ldquo;{i.excerpt}&rdquo;</p>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       ))}
     </main>

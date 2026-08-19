@@ -4,31 +4,876 @@
   "vertical": "k12-math",
   "description": "Grades 6-8 core: fractions through linear equations. Every numeric answer is verifiable by the mathcheck service.",
   "skills": [
-    { "id": "math-ms.fractions.equivalent", "title": "Equivalent fractions", "prerequisites": [] },
-    { "id": "math-ms.fractions.add-sub", "title": "Adding & subtracting fractions", "prerequisites": ["math-ms.fractions.equivalent"] },
-    { "id": "math-ms.decimals.compare", "title": "Comparing decimals", "prerequisites": [] },
-    { "id": "math-ms.negatives.operations", "title": "Operations with negative numbers", "prerequisites": [] },
-    { "id": "math-ms.linear-eq.one-step", "title": "One-step equations", "prerequisites": ["math-ms.negatives.operations"] },
-    { "id": "math-ms.linear-eq.two-step", "title": "Two-step equations", "prerequisites": ["math-ms.linear-eq.one-step"] }
+    {
+      "id": "math-ms.fractions.equivalent",
+      "title": "Equivalent fractions",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.fractions.add-sub",
+      "title": "Adding & subtracting fractions",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
+    },
+    {
+      "id": "math-ms.decimals.compare",
+      "title": "Comparing decimals",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.negatives.operations",
+      "title": "Operations with negative numbers",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.linear-eq.one-step",
+      "title": "One-step equations",
+      "prerequisites": [
+        "math-ms.negatives.operations"
+      ]
+    },
+    {
+      "id": "math-ms.linear-eq.two-step",
+      "title": "Two-step equations",
+      "prerequisites": [
+        "math-ms.linear-eq.one-step"
+      ]
+    }
   ],
   "problems": [
     {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 2x + 3 = 11",
-      "answer": "4",
-      "check": { "type": "solve", "equation": "2*x + 3 = 11", "variable": "x" },
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 9x = 72",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "9*x = 72",
+        "variable": "x"
+      },
       "misconceptions": [
-        { "answer": "7", "diagnosis": "Subtracted 3 from the left side only — remind: whatever you do to one side, do to the other." }
+        {
+          "answer": "63",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/8",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 10x = 110",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "10*x = 110",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "100",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/11",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 4x = 28",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "4*x = 28",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "24",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/7",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 12x = 96",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "12*x = 96",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "84",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/8",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 4x = 32",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "4*x = 32",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "28",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/8",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 3x = 6",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "3*x = 6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/2",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 3x = 39",
+      "answer": "13",
+      "check": {
+        "type": "solve",
+        "equation": "3*x = 39",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/13",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 4x = 40",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "4*x = 40",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/10",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 6x = 36",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "6*x = 36",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "30",
+          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/6",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 2x = 4",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "2*x = 4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1/2",
+          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 5x + 9 = 64",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "5*x + 9 = 64",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "55",
+          "diagnosis": "You found 5x = 55 and stopped — one more step: divide both sides by 5."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 3x + 17 = 41",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "3*x + 17 = 41",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "24",
+          "diagnosis": "You found 3x = 24 and stopped — one more step: divide both sides by 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 5x + 1 = 36",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "5*x + 1 = 36",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "35",
+          "diagnosis": "You found 5x = 35 and stopped — one more step: divide both sides by 5."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 3x + 10 = 28",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "3*x + 10 = 28",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "You found 3x = 18 and stopped — one more step: divide both sides by 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 6x + 20 = 68",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 20 = 68",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "48",
+          "diagnosis": "You found 6x = 48 and stopped — one more step: divide both sides by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 6x + 9 = 33",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 9 = 33",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "24",
+          "diagnosis": "You found 6x = 24 and stopped — one more step: divide both sides by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 8x + 3 = 91",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "8*x + 3 = 91",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "88",
+          "diagnosis": "You found 8x = 88 and stopped — one more step: divide both sides by 8."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 9x + 12 = 57",
+      "answer": "5",
+      "check": {
+        "type": "solve",
+        "equation": "9*x + 12 = 57",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "45",
+          "diagnosis": "You found 9x = 45 and stopped — one more step: divide both sides by 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 7x + 8 = 71",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 8 = 71",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "63",
+          "diagnosis": "You found 7x = 63 and stopped — one more step: divide both sides by 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 2x + 12 = 18",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "2*x + 12 = 18",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "You found 2x = 6 and stopped — one more step: divide both sides by 2."
+        },
+        {
+          "answer": "9",
+          "diagnosis": "Looks like 12 was only removed from one side — whatever you do to one side, do to the other."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 5x + 1 = 51",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "5*x + 1 = 51",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "50",
+          "diagnosis": "You found 5x = 50 and stopped — one more step: divide both sides by 5."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 7x + 12 = 82",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 12 = 82",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "70",
+          "diagnosis": "You found 7x = 70 and stopped — one more step: divide both sides by 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 3/4 + 6/12 (answer as a fraction like 3/4)",
+      "answer": "5/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3/4 + 6/12",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9/16",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 2/3 + 3/9 (answer as a fraction like 3/4)",
+      "answer": "1/1",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/3 + 3/9",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "5/12",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 4/5 + 6/10 (answer as a fraction like 3/4)",
+      "answer": "7/5",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4/5 + 6/10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "10/15",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 2/3 + 1/6 (answer as a fraction like 3/4)",
+      "answer": "5/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/3 + 1/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3/9",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 1/4 (answer as a fraction like 3/4)",
+      "answer": "3/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/2 + 1/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2/6",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 1/3 (answer as a fraction like 3/4)",
+      "answer": "5/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/2 + 1/3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2/5",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 2/4 + 1/12 (answer as a fraction like 3/4)",
+      "answer": "7/12",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/4 + 1/12",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3/16",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/3 + 4/6 (answer as a fraction like 3/4)",
+      "answer": "1/1",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/3 + 4/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "5/9",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 2/4 (answer as a fraction like 3/4)",
+      "answer": "1/1",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/2 + 2/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3/6",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 1/4 (answer as a fraction like 3/4)",
+      "answer": "3/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/2 + 1/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2/6",
+          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+        }
       ]
     },
     {
       "skillId": "math-ms.decimals.compare",
-      "prompt": "Which is larger: 0.25 or 0.5?",
-      "answer": "0.5",
-      "check": { "type": "compare", "left": "0.25", "right": "0.5", "expected": "<" },
+      "prompt": "Which is larger: 1.7 or 1.1?",
+      "answer": "1.7",
+      "check": {
+        "type": "compare",
+        "left": "1.1",
+        "right": "1.7",
+        "expected": "<"
+      },
       "misconceptions": [
-        { "answer": "0.25", "diagnosis": "Comparing decimals like whole numbers (25 > 5). Line up place values instead." }
+        {
+          "answer": "1.1",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
       ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 1.7 or 1.72?",
+      "answer": "1.72",
+      "check": {
+        "type": "compare",
+        "left": "1.7",
+        "right": "1.72",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "1.7",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.55 or 0.45?",
+      "answer": "0.55",
+      "check": {
+        "type": "compare",
+        "left": "0.45",
+        "right": "0.55",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.45",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.54 or 0.88?",
+      "answer": "0.88",
+      "check": {
+        "type": "compare",
+        "left": "0.54",
+        "right": "0.88",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.54",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.95 or 0.4?",
+      "answer": "0.95",
+      "check": {
+        "type": "compare",
+        "left": "0.4",
+        "right": "0.95",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.4",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 1.54 or 1.24?",
+      "answer": "1.54",
+      "check": {
+        "type": "compare",
+        "left": "1.24",
+        "right": "1.54",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "1.24",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.7 or 0.9?",
+      "answer": "0.9",
+      "check": {
+        "type": "compare",
+        "left": "0.7",
+        "right": "0.9",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.7",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 0.86 or 0.1?",
+      "answer": "0.86",
+      "check": {
+        "type": "compare",
+        "left": "0.1",
+        "right": "0.86",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.1",
+          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-6) * 12",
+      "answer": "-72",
+      "check": {
+        "type": "solve",
+        "equation": "x = -6 * 12",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "72",
+          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-9) + 6",
+      "answer": "-3",
+      "check": {
+        "type": "solve",
+        "equation": "x = -9 + 6",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-7) + 12",
+      "answer": "5",
+      "check": {
+        "type": "solve",
+        "equation": "x = -7 + 12",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-7) * 12",
+      "answer": "-84",
+      "check": {
+        "type": "solve",
+        "equation": "x = -7 * 12",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "84",
+          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-6) * 6",
+      "answer": "-36",
+      "check": {
+        "type": "solve",
+        "equation": "x = -6 * 6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-4) * 10",
+      "answer": "-40",
+      "check": {
+        "type": "solve",
+        "equation": "x = -4 * 10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "40",
+          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-12) + 11",
+      "answer": "-1",
+      "check": {
+        "type": "solve",
+        "equation": "x = -12 + 11",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-11) - 4",
+      "answer": "-15",
+      "check": {
+        "type": "solve",
+        "equation": "x = -11 - 4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "-7",
+          "diagnosis": "Subtracting from a negative moves you FURTHER below zero — picture the number line."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-12) - 7",
+      "answer": "-19",
+      "check": {
+        "type": "solve",
+        "equation": "x = -12 - 7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "-5",
+          "diagnosis": "Subtracting from a negative moves you FURTHER below zero — picture the number line."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-2) + 3",
+      "answer": "1",
+      "check": {
+        "type": "solve",
+        "equation": "x = -2 + 3",
+        "variable": "x"
+      },
+      "misconceptions": []
     }
-  ]
+  ],
+  "generated": {
+    "tool": "tools/curriculum/generate.py",
+    "count": 50,
+    "verified": "sympy-at-build"
+  }
 }

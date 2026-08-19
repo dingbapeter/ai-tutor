@@ -130,6 +130,34 @@ export class MemoryStore implements Store {
     return this.profiles.get(studentId)?.displayName ?? null;
   }
 
+  private incidents: Array<{
+    studentId: string;
+    sessionId?: string;
+    direction: "student" | "tutor";
+    categories: string[];
+    severity: "concern" | "danger";
+    excerpt: string;
+    createdAt: Date;
+  }> = [];
+
+  async recordIncident(incident: {
+    studentId: string;
+    sessionId?: string;
+    direction: "student" | "tutor";
+    categories: string[];
+    severity: "concern" | "danger";
+    excerpt: string;
+  }) {
+    this.incidents.push({ ...incident, createdAt: new Date() });
+  }
+
+  async listIncidents(studentId: string, limit: number) {
+    return this.incidents
+      .filter((i) => i.studentId === studentId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
   async listSessionSummaries(studentId: string, limit: number) {
     return [...this.sessions.values()]
       .filter((s) => s.studentId === studentId)

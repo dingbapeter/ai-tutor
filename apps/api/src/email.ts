@@ -12,6 +12,47 @@ export interface RecapEmail {
   recap: string;
 }
 
+export interface SafetyAlertEmail {
+  to: string;
+  studentName: string;
+  categories: string[];
+  excerpt: string;
+}
+
+/** Immediate guardian notification for danger-severity safety incidents. */
+export async function sendSafetyAlert(msg: SafetyAlertEmail): Promise<"sent" | "skipped"> {
+  const host = process.env.SMTP_HOST;
+  if (!host) {
+    console.log(`[email] SMTP not configured — would send SAFETY ALERT to ${msg.to}`);
+    return "skipped";
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"AI Tutor Safety" <tutor@${host.replace(/^mail\./, "")}>`,
+    to: msg.to,
+    subject: `Please check in with ${msg.studentName} — something came up in today's session`,
+    text: [
+      `Hello,`,
+      ``,
+      `During ${msg.studentName}'s tutoring session today, they said something we think you should know about (category: ${msg.categories.join(", ")}):`,
+      ``,
+      `"${msg.excerpt}"`,
+      ``,
+      `The tutor responded with care and encouraged them to talk to a trusted adult. We recommend checking in with them soon.`,
+      ``,
+      `You can review flagged moments any time from your family dashboard.`,
+    ].join("\n"),
+  });
+  return "sent";
+}
+
 export async function sendParentRecap(msg: RecapEmail): Promise<"sent" | "skipped"> {
   const host = process.env.SMTP_HOST;
   if (!host) {

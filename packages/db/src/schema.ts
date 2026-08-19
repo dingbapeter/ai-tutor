@@ -94,6 +94,21 @@ export const messages = pgTable("messages", {
 });
 
 /**
+ * Safety incidents: every flagged message, reviewable by guardians.
+ * `danger` severity also triggers an immediate guardian email.
+ */
+export const safetyIncidents = pgTable("safety_incidents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  sessionId: uuid("session_id"),
+  direction: text("direction", { enum: ["student", "tutor"] }).notNull(),
+  categories: jsonb("categories").$type<string[]>().notNull().default([]),
+  severity: text("severity", { enum: ["concern", "danger"] }).notNull(),
+  excerpt: text("excerpt").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
  * Compressed long-term memory: rolling facts the tutor should always know
  * ("struggles with negative signs", "has a dog called Biscuit", "SAT on Dec 6").
  * Loaded into every system prompt instead of full transcripts.

@@ -58,4 +58,21 @@ export interface Store {
     studentId: string,
     limit: number,
   ): Promise<Array<{ startedAt: Date; endedAt: Date | null; summary: string | null }>>;
+
+  // ---- Safety (Sprint 5) ----
+
+  recordIncident(incident: {
+    studentId: string;
+    sessionId?: string;
+    direction: "student" | "tutor";
+    categories: string[];
+    severity: "concern" | "danger";
+    excerpt: string;
+  }): Promise<void>;
+  listIncidents(
+    studentId: string,
+    limit: number,
+  ): Promise<
+    Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: Date }>
+  >;
 }

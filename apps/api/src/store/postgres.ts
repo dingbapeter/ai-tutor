@@ -265,6 +265,33 @@ export class PostgresStore implements Store {
     return rows[0]?.displayName ?? null;
   }
 
+  async recordIncident(incident: {
+    studentId: string;
+    sessionId?: string;
+    direction: "student" | "tutor";
+    categories: string[];
+    severity: "concern" | "danger";
+    excerpt: string;
+  }) {
+    await this.db.insert(schema.safetyIncidents).values(incident);
+  }
+
+  async listIncidents(studentId: string, limit: number) {
+    const rows = await this.db
+      .select({
+        direction: schema.safetyIncidents.direction,
+        categories: schema.safetyIncidents.categories,
+        severity: schema.safetyIncidents.severity,
+        excerpt: schema.safetyIncidents.excerpt,
+        createdAt: schema.safetyIncidents.createdAt,
+      })
+      .from(schema.safetyIncidents)
+      .where(eq(schema.safetyIncidents.studentId, studentId))
+      .orderBy(desc(schema.safetyIncidents.createdAt))
+      .limit(limit);
+    return rows;
+  }
+
   async listSessionSummaries(studentId: string, limit: number) {
     const rows = await this.db
       .select({

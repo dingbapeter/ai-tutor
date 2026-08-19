@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "katex/dist/katex.min.css";
 
 export const metadata = { title: "AI Tutor" };
 

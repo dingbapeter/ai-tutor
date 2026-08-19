@@ -84,7 +84,11 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Learning formats (story/comic/song) endpoint | ✅ tested (model compliance depends on deploy model size) |
 | Auth: register/login (bcrypt + hashed tokens), family profiles, ownership | ✅ tested + live-verified on Postgres |
 | Guest→account upgrade (claiming a parent email adopts guest-era students) | ✅ live-verified |
-| Parent dashboard (mastery bars, session recaps) | ✅ built + live-verified |
+| Parent dashboard (mastery bars, session recaps, flagged moments) | ✅ built + live-verified |
+| Safety gate: rules engine on every message, canned safe replies, incident log, guardian alerts | ✅ tested (danger/jailbreak/normal paths) |
+| Claude API moderation adapter (rules floor + classifier, fail-safe merge) | ⚠️ code-complete; needs ANTHROPIC_API_KEY at deploy |
+| Generated curriculum: 58 SymPy-verified problems with derived misconceptions | ✅ verified at build time |
+| Credits system (/credits + page), KaTeX math rendering, TTS cache | ✅ built |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 
 ## Roadmap
@@ -99,8 +103,13 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 - [x] Sprint 4: accounts & auth (register/login, bearer tokens, bcrypt), family
       student profiles with ownership enforcement, guest→account upgrade path,
       parent dashboard (skill mastery bars + recent session recaps)
-- [ ] Sprint 5: payments (Stripe/Paystack), study plans & scheduling, WhatsApp
-      nudges, spaced-repetition warm-ups
+- [x] Sprint 5: safety & moderation layer (rules engine + optional Claude API
+      classifier, incident log, guardian alert emails, dashboard visibility),
+      curriculum generator (SymPy-verified problem banks with derived
+      misconceptions), visible credits (/credits + ATTRIBUTIONS.md), KaTeX
+      math rendering, TTS caching
+- [ ] Sprint 6 (needs deploy/env): payments (Stripe/Paystack), password reset,
+      study plans & scheduling, WhatsApp nudges, spaced-repetition warm-ups
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
 

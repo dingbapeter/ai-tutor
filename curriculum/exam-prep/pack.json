@@ -4,20 +4,163 @@
   "vertical": "exam-prep",
   "description": "Timed-practice oriented pack. Skills map to exam sections; problems carry timing metadata for mock-exam mode.",
   "skills": [
-    { "id": "exam.sat-math.heart-of-algebra", "title": "SAT Math: Heart of Algebra", "prerequisites": [] },
-    { "id": "exam.sat-math.problem-solving", "title": "SAT Math: Problem Solving & Data", "prerequisites": [] },
-    { "id": "exam.waec-math.algebraic-processes", "title": "WAEC Math: Algebraic processes", "prerequisites": [] }
+    {
+      "id": "exam.sat-math.heart-of-algebra",
+      "title": "SAT Math: Heart of Algebra",
+      "prerequisites": []
+    },
+    {
+      "id": "exam.sat-math.problem-solving",
+      "title": "SAT Math: Problem Solving & Data",
+      "prerequisites": []
+    },
+    {
+      "id": "exam.waec-math.algebraic-processes",
+      "title": "WAEC Math: Algebraic processes",
+      "prerequisites": []
+    }
   ],
   "problems": [
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 3(x - 2) = 15, what is the value of x?",
-      "answer": "7",
-      "check": { "type": "solve", "equation": "3*(x - 2) = 15", "variable": "x" },
+      "prompt": "If 2(x − 1) = 2, what is the value of x?",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "2*(x - 1) = 2",
+        "variable": "x"
+      },
       "timeLimitSec": 75,
       "misconceptions": [
-        { "answer": "5", "diagnosis": "Divided by 3 but forgot to add back the 2." }
+        {
+          "answer": "1",
+          "diagnosis": "Divided by 2 but forgot to add 1 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 4(x − 6) = 24, what is the value of x?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x - 6) = 24",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "Divided by 4 but forgot to add 6 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x − 5) = 18, what is the value of x?",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x - 5) = 18",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "Divided by 3 but forgot to add 5 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 4(x − 5) = 28, what is the value of x?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x - 5) = 28",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "7",
+          "diagnosis": "Divided by 4 but forgot to add 5 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 5(x − 3) = 45, what is the value of x?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x - 3) = 45",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "9",
+          "diagnosis": "Divided by 5 but forgot to add 3 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 7(x − 4) = 14, what is the value of x?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "7*(x - 4) = 14",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "Divided by 7 but forgot to add 4 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 5(x − 9) = 5, what is the value of x?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x - 9) = 5",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "Divided by 5 but forgot to add 9 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 8(x − 1) = 80, what is the value of x?",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "8*(x - 1) = 80",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "10",
+          "diagnosis": "Divided by 8 but forgot to add 1 back."
+        }
       ]
     }
-  ]
+  ],
+  "generated": {
+    "tool": "tools/curriculum/generate.py",
+    "count": 8,
+    "verified": "sympy-at-build"
+  }
 }
