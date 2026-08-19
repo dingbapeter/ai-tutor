@@ -65,6 +65,13 @@ cd services/mathcheck && pip install -r requirements.txt && uvicorn main:app --p
 ## Roadmap
 
 - [x] Sprint 1: monorepo, ai-gateway, DB schema, end-to-end Socratic text loop
-- [ ] Sprint 2: Postgres wiring, learner memory read/write, SymPy in the loop, parent recap email via mailcow
-- [ ] Sprint 3: TTS voice notes in UI, turn-based voice (push-to-talk), avatar v0
-- [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework camera
+- [x] Sprint 2: Postgres persistence, learner memory read/write across sessions,
+      SymPy verification in the live practice loop, parent recap email via
+      mailcow (SMTP), deployment kit (Dockerfiles + Contabo compose + DEPLOY.md)
+- [ ] Sprint 3: TTS voice notes in UI, turn-based voice (push-to-talk), avatar v0,
+      practice mode UI, "explain as story/comic-script" formats (IDEAS.md #001)
+- [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
+      camera, image generation for cartoon panels (IDEAS.md #001 full version)
+
+See `deploy/DEPLOY.md` for the Railway + Contabo deployment guide and
+`IDEAS.md` for the founder idea parking lot.

@@ -1,0 +1,66 @@
+# The self-hosted AI stack for the Contabo box. Zero API spend:
+# every service here is open source and runs on your own hardware.
+#
+#   docker compose -f deploy/docker-compose.contabo.yml up -d
+#
+# CPU-only works for Phase 0/1 (use small GGUF models). If the box has an
+# NVIDIA GPU, uncomment the `deploy.resources` blocks and use bigger models.
+#
+# Models are downloaded once into the ./models volume — see deploy/DEPLOY.md.
+
+services:
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: >
+      -m /models/chat.gguf
+      --host 0.0.0.0 --port 8080
+      -c 8192 --parallel 4
+    volumes:
+      - ./models:/models
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  stt:
+    # OpenAI-compatible faster-whisper server (project: speaches, formerly faster-whisper-server)
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-small
+    ports:
+      - "8081:8000"
+    restart: unless-stopped
+
+  tts:
+    # Kokoro-82M behind an OpenAI-compatible /v1/audio/speech
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    ports:
+      - "8082:8880"
+    restart: unless-stopped
+
+  mathcheck:
+    build: ../services/mathcheck
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
+  postgres:
+    # Use this OR Railway Postgres — not both. Keeping the DB next to the app
+    # on Railway is simpler; this is here if you want everything on Contabo.
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tutor
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: tutor
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../packages/db/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

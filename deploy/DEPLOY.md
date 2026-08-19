@@ -1,0 +1,85 @@
+# Deployment
+
+Two boxes, one rule: **Railway runs the app, Contabo runs the AI.**
+Everything self-hosted; the only recurring costs are servers you already pay for.
+
+```
+[student browser] ──► Railway: web (Next.js)
+                 ──► Railway: api (Fastify) ──► Railway: Postgres
+                                            ──► Contabo: llm / stt / tts / mathcheck
+                                            ──► Contabo: mailcow (SMTP, existing)
+```
+
+## 1. Contabo — the AI stack
+
+```bash
+# on the Contabo VPS
+git clone <this repo> && cd ai-tutor
+
+# download a chat model once (pick ONE to start; ~5GB):
+mkdir -p deploy/models
+# Qwen2.5-7B-Instruct Q4 — good default:
+curl -L -o deploy/models/chat.gguf \
+  https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
+
+docker compose -f deploy/docker-compose.contabo.yml up -d
+curl localhost:8080/health   # llm
+curl localhost:8081/health   # stt
+curl localhost:8090/health   # mathcheck
+```
+
+Then open ports 8080-8090 ONLY to your Railway app's egress (firewall/ufw), not
+to the public internet — these services have no auth of their own.
+
+## 2. Railway — the app
+
+Create two services from this repo (Railway auto-detects the Dockerfiles):
+
+| Service | Dockerfile | Port |
+|---|---|---|
+| api | `apps/api/Dockerfile` (root context) | 4000 |
+| web | `apps/web/Dockerfile` (root context, build-arg `NEXT_PUBLIC_API_URL=https://<api-domain>`) | 3000 |
+
+Add a Railway **Postgres** plugin, then run the migration once:
+```bash
+psql $DATABASE_URL -f packages/db/migrations/0000_init.sql
+```
+
+### api environment
+```
+DATABASE_URL=<railway postgres url>
+AI_CHAT_PROVIDER=llamacpp
+AI_STT_PROVIDER=whisper
+AI_TTS_PROVIDER=kokoro
+AI_VISION_PROVIDER=mock          # until a VL model is loaded
+LLAMACPP_URL=http://<contabo-ip>:8080
+WHISPER_URL=http://<contabo-ip>:8081
+TTS_URL=http://<contabo-ip>:8082
+MATHCHECK_URL=http://<contabo-ip>:8090
+WEB_ORIGIN=https://<web-domain>
+# mailcow SMTP for parent recap emails
+SMTP_HOST=<mailcow host>
+SMTP_PORT=587
+SMTP_USER=tutor@<your-domain>
+SMTP_PASS=<mailbox password>
+SMTP_FROM="AI Tutor" <tutor@<your-domain>>
+```
+
+## 3. Smoke test after deploy
+
+```bash
+curl https://<api-domain>/health
+# expect: {"ok":true,"store":"postgres","providers":{"chat":"llamacpp",...}}
+```
+
+Open the web app → pick a tutor → run a session → end it → the parent email
+arrives via mailcow, and a second session for the same student should report
+`remembered > 0`.
+
+## Scaling notes
+
+- CPU VPS: keep `-c 8192 --parallel 4` modest; 7B Q4 ≈ 5-15 tok/s.
+- Adding a GPU box later: move the `llm`/`stt`/`tts` services there, change
+  three URLs in Railway env. Nothing else moves.
+- Paying for a frontier model later (e.g. lesson planning only): set
+  `AI_CHAT_PLANNER_PROVIDER` to a new adapter — conversation stays free.

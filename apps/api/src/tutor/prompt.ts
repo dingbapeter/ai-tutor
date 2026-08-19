@@ -12,13 +12,22 @@ export interface Persona {
   systemStyle: string;
 }
 
+export interface CurriculumProblem {
+  skillId?: string;
+  prompt: string;
+  answer?: string;
+  check: Record<string, unknown>;
+  timeLimitSec?: number;
+  misconceptions?: Array<{ answer: string; diagnosis: string }>;
+}
+
 export interface CurriculumPack {
   id: string;
   title: string;
   vertical: string;
   description: string;
   skills: Array<{ id: string; title: string; prerequisites: string[] }>;
-  problems: Array<Record<string, unknown>>;
+  problems: CurriculumProblem[];
 }
 
 let personaCache: Persona[] | null = null;
