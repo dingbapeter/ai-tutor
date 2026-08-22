@@ -40,6 +40,9 @@ interface LiveSession {
     answers: Map<number, { answer: string; correct: boolean | null }>;
     startedAt: number;
   };
+  /** Live-class state: friends sitting in, each paying their own way. */
+  inviteCode?: string;
+  participants: Map<string, Participant>;
 }
 
 export interface PlanLimits {
@@ -48,7 +51,23 @@ export interface PlanLimits {
   familySeats: number;
   examMode: boolean;
   premiumBrain: boolean;
+  /** How many friends this plan may invite into a live class (0 = none). */
+  classInvites: number;
 }
+
+/** A friend sitting in on someone's live class. */
+interface Participant {
+  id: string;
+  name: string;
+  /** Set when the friend is a signed-in member — their own allowance pays. */
+  userId?: string;
+  plan: string;
+  /** Guests get a taste, not a seat: messages remaining on the class pass. */
+  guestMessagesLeft: number;
+}
+
+/** Guest class pass: enough to feel the magic, short enough to want more. */
+const GUEST_CLASS_MESSAGES = 8;
 
 export interface AppDeps {
   gateway: AiGateway;
@@ -474,6 +493,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         ownerUserId,
         apiKeyId,
         plan,
+        participants: new Map(),
       });
       return {
         sessionId,
@@ -485,7 +505,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   /** Student turn in, tutor reply streamed out as SSE. */
-  app.post<{ Params: { id: string }; Body: { text: string; format?: string } }>(
+  app.post<{ Params: { id: string }; Body: { text: string; format?: string; participantId?: string } }>(
     "/sessions/:id/message",
     {
       schema: {
@@ -496,6 +516,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           properties: {
             text: { type: "string", minLength: 1, maxLength: MAX_TEXT },
             format: { type: "string", enum: Object.keys(FORMATS) },
+            participantId: { type: "string", format: "uuid" },
           },
         },
       },
@@ -505,10 +526,37 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
 
-      const capped = await checkAllowance(session, "message");
-      if (capped) return reply.code(402).send({ error: capped, upgrade: true });
-      session.busy = true;
-      await meter(session, "message");
+      // Who's speaking, and whose allowance pays for it.
+      let speaker = session.studentName;
+      if (req.body.participantId) {
+        const p = session.participants.get(req.body.participantId);
+        if (!p) return reply.code(404).send({ error: "you're not in this class" });
+        speaker = p.name;
+        if (p.userId) {
+          // A member friend: their own plan's allowance pays.
+          const used = await store.sumUsage({ userId: p.userId }, "message", startOfToday());
+          if (used >= limitsFor(p.plan).dailyMessages) {
+            return reply.code(402).send({ error: `Your daily allowance on the ${p.plan} plan is used up — upgrade for more class time.`, upgrade: true });
+          }
+          await store.recordUsage({ userId: p.userId, studentId: session.studentId, kind: "message" });
+        } else {
+          // A guest on a class pass: a taste, then the invitation to stay.
+          if (p.guestMessagesLeft <= 0) {
+            return reply.code(402).send({
+              error: `Your free class pass with ${session.studentName} is used up — join as a member to keep learning together.`,
+              upgrade: true,
+            });
+          }
+          p.guestMessagesLeft -= 1;
+          await store.recordUsage({ studentId: session.studentId, kind: "message" });
+        }
+        session.busy = true;
+      } else {
+        const capped = await checkAllowance(session, "message");
+        if (capped) return reply.code(402).send({ error: capped, upgrade: true });
+        session.busy = true;
+        await meter(session, "message");
+      }
 
       const blocked = await gateStudentInput(session, req.body.text);
       if (blocked) {
@@ -531,7 +579,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       }
 
       const formatNote = FORMATS[req.body.format ?? "plain"];
-      const turnText = formatNote ? `${req.body.text}\n\n[${formatNote}]` : req.body.text;
+      let turnText = formatNote ? `${req.body.text}\n\n[${formatNote}]` : req.body.text;
+      // In a group class every line is attributed so the tutor tracks voices.
+      if (session.participants.size > 0) turnText = `${speaker}: ${turnText}`;
       session.history.push({ role: "user", content: turnText });
       await store.saveMessage(session.id, "user", turnText);
 
@@ -826,6 +876,76 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       mastery: await store.getMasterySnapshot(session.studentId),
     };
   });
+
+  // ---- Live class invites: bring your friends, everyone pays their own way ----
+
+  /** Host mints an invite code (paid plans only; capped seats per plan). */
+  app.post<{ Params: { id: string } }>("/sessions/:id/invite", async (req, reply) => {
+    const session = live.get(req.params.id);
+    if (!session) return reply.code(404).send({ error: "no such session" });
+    const seats = limitsFor(session.plan).classInvites;
+    if (seats === 0) {
+      return reply.code(402).send({
+        error: "Inviting friends to a live class is for members — upgrade to learn together.",
+        upgrade: true,
+      });
+    }
+    session.inviteCode ??= randomBytes(4).toString("hex");
+    return { code: session.inviteCode, seats, seatsUsed: session.participants.size };
+  });
+
+  /** A friend joins with the code — as a member (their plan pays) or a guest (class pass). */
+  app.post<{ Body: { code: string; guestName?: string } }>(
+    "/sessions/join",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["code"],
+          additionalProperties: false,
+          properties: {
+            code: { type: "string", minLength: 4, maxLength: 16 },
+            guestName: { type: "string", minLength: 1, maxLength: 80 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const session = [...live.values()].find((s) => s.inviteCode === req.body.code);
+      if (!session) return reply.code(404).send({ error: "that class code isn't live" });
+      if (session.participants.size >= limitsFor(session.plan).classInvites) {
+        return reply.code(409).send({ error: "this class is full" });
+      }
+
+      const user = await userFromRequest(req, store);
+      const participant: Participant = user
+        ? {
+            id: crypto.randomUUID(),
+            name: (await store.listStudentProfiles(user.userId))[0]?.displayName ?? user.email.split("@")[0],
+            userId: user.userId,
+            plan: await store.getUserPlan(user.userId),
+            guestMessagesLeft: Number.MAX_SAFE_INTEGER, // members draw from their own allowance
+          }
+        : {
+            id: crypto.randomUUID(),
+            name: (req.body.guestName ?? "Guest").trim(),
+            plan: "free",
+            guestMessagesLeft: GUEST_CLASS_MESSAGES,
+          };
+      session.participants.set(participant.id, participant);
+      session.history.push({
+        role: "user",
+        content: `[${participant.name} just joined the class as ${session.studentName}'s friend — welcome them warmly in one sentence when you next speak, and from now on address students by name.]`,
+      });
+      return {
+        participantId: participant.id,
+        sessionId: session.id,
+        host: session.studentName,
+        member: Boolean(user),
+        guestMessages: user ? null : GUEST_CLASS_MESSAGES,
+      };
+    },
+  );
 
   // ---- Exam mode (premium): timed mock, silent grading, post-mortem ----
 

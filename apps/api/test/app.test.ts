@@ -447,8 +447,8 @@ describe("session lifecycle", () => {
 
   it("enforces daily message allowances per plan and upsells with a 402", async () => {
     const tiny = {
-      free: { dailyMessages: 2, dailyVoiceTurns: 1, familySeats: 1, examMode: false, premiumBrain: false },
-      premium: { dailyMessages: 100, dailyVoiceTurns: 100, familySeats: 6, examMode: true, premiumBrain: true },
+      free: { dailyMessages: 2, dailyVoiceTurns: 1, familySeats: 1, examMode: false, premiumBrain: false, classInvites: 0 },
+      premium: { dailyMessages: 100, dailyVoiceTurns: 100, familySeats: 6, examMode: true, premiumBrain: true, classInvites: 4 },
     };
     const isolated = await buildApp({
       gateway: gateway(),
@@ -605,6 +605,82 @@ describe("session lifecycle", () => {
       payload: { studentName: "Y", personaId: "amara", packId: "math-ms" },
     });
     expect(afterRevoke.statusCode).toBe(401);
+  });
+
+  it("runs a live class: paid host invites, guest gets a class pass then hits the wall, member friend pays their own way", async () => {
+    const classPlans = {
+      free: { dailyMessages: 100, dailyVoiceTurns: 10, familySeats: 1, examMode: false, premiumBrain: false, classInvites: 2 },
+    };
+    const store = new MemoryStore();
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store,
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000" },
+      plans: classPlans,
+    });
+
+    const host = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Host", personaId: "amara", packId: "math-ms" },
+    });
+    const sid = host.json().sessionId;
+
+    const invite = await isolated.inject({ method: "POST", url: `/sessions/${sid}/invite` });
+    expect(invite.statusCode).toBe(200);
+    const code = invite.json().code as string;
+
+    // Guest friend joins on a class pass.
+    const guest = await isolated.inject({ method: "POST", url: "/sessions/join", payload: { code, guestName: "Efe" } });
+    expect(guest.json().member).toBe(false);
+    const passSize = guest.json().guestMessages as number;
+    const pid = guest.json().participantId as string;
+
+    for (let i = 0; i < passSize; i++) {
+      const ok = await isolated.inject({
+        method: "POST",
+        url: `/sessions/${sid}/message`,
+        payload: { text: `guest question ${i}`, participantId: pid },
+      });
+      expect(ok.statusCode).toBe(200);
+    }
+    const wall = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sid}/message`,
+      payload: { text: "one more?", participantId: pid },
+    });
+    expect(wall.statusCode).toBe(402);
+    expect(wall.json().error).toContain("class pass");
+
+    // A member friend joins: their own allowance pays.
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "friend@example.com", password: "password12", role: "student", displayName: "Bisi" },
+    });
+    const friendAuth = { authorization: `Bearer ${reg.json().token}` };
+    const memberJoin = await isolated.inject({ method: "POST", url: "/sessions/join", headers: friendAuth, payload: { code } });
+    expect(memberJoin.json().member).toBe(true);
+
+    const memberMsg = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sid}/message`,
+      payload: { text: "can I try the next one?", participantId: memberJoin.json().participantId },
+    });
+    expect(memberMsg.statusCode).toBe(200);
+    const usage = await isolated.inject({ method: "GET", url: "/me/usage", headers: friendAuth });
+    expect(usage.json().today.messages).toBe(1); // drawn from the FRIEND's allowance
+
+    // A third guest can't join: class is full (2 seats).
+    const full = await isolated.inject({ method: "POST", url: "/sessions/join", payload: { code, guestName: "Late" } });
+    expect(full.statusCode).toBe(409);
+    await isolated.close();
+  }, 30_000);
+
+  it("refuses class invites on plans without seats", async () => {
+    const { sessionId } = await createSession("Solo");
+    const res = await app.inject({ method: "POST", url: `/sessions/${sessionId}/invite` });
+    expect(res.statusCode).toBe(402); // guest sessions run the free plan: 0 invites
   });
 
   it("reports usage against plan limits at /me/usage", async () => {

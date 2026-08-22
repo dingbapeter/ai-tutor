@@ -94,6 +94,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Org/school accounts: seats, roster import, teacher dashboard | ✅ tested |
 | B2B API keys (scoped, hashed, quota'd, metered) + Tutor-as-a-Service sessions | ✅ tested + live-verified |
 | Premium-brain routing per plan (gateway slot) | ✅ wired; point AI_PREMIUM_CHAT_PROVIDER at a bigger model at deploy |
+| Live classes: invite codes, guest class pass → upsell, per-member metering | ✅ tested (full flow incl. class-full + pass wall) |
 | Billing (Stripe/Paystack) | ❌ Sprint 6b (needs deploy + env) — /admin/plan bridges until then |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 

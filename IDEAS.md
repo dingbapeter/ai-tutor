@@ -118,6 +118,17 @@ Format: date · idea · why it's parked · when to bring it back.
 
 ## GRADUATED
 
+### 006 — Bring-a-friend live classes (shipped v1, same day as parked)
+- **Idea (founder, 2026-08-24):** a paid subscriber invites friends into a
+  LIVE class; guests get limited time unless they're also paid — in which
+  case the class draws from each member's own allowance.
+- **Shipped:** invite codes (paid plans only, seats per plan), guest class
+  pass (8 messages then a 402 upsell naming the host), member friends
+  metered against their own plan, speaker-attributed group chat so the tutor
+  addresses each student by name, class-full handling.
+- **Remaining (parked):** full-duplex VOICE group classes ride on LiveKit in
+  Phase 2; guest-pass → signup conversion funnel UI in the web app.
+
 ### 001 (text slice) — story / comic-script / song formats → shipped in Sprint 3
 - Message endpoint accepts `format: story|comic|song`; UI has format chips.
 - Remaining (image/cartoon panels, format-preference learning) stays parked

@@ -6,21 +6,24 @@
       "dailyVoiceTurns": 5,
       "familySeats": 1,
       "examMode": false,
-      "premiumBrain": false
+      "premiumBrain": false,
+      "classInvites": 0
     },
     "plus": {
       "dailyMessages": 400,
       "dailyVoiceTurns": 60,
       "familySeats": 3,
       "examMode": false,
-      "premiumBrain": false
+      "premiumBrain": false,
+      "classInvites": 2
     },
     "premium": {
       "dailyMessages": 2000,
       "dailyVoiceTurns": 300,
       "familySeats": 6,
       "examMode": true,
-      "premiumBrain": true
+      "premiumBrain": true,
+      "classInvites": 4
     }
   }
 }
