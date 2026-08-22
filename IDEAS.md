@@ -35,6 +35,35 @@ Format: date · idea · why it's parked · when to bring it back.
 
 ---
 
+### 002 — Bedtime stories, read aloud, for children AND adults
+- **Logged:** 2026-08-22
+- **Idea (founder):** Part of what the platform does should be reading bedtime
+  stories to both children and adults.
+- **Why it's strong:** It converts the tutor from a "homework tool" into a
+  daily companion — bedtime is a ritual, and rituals drive retention like
+  nothing else. It reuses the exact stack we already have (story generation
+  via chat provider + Kokoro TTS + the persona's own voice + TTS cache), so
+  the marginal build cost is small. For adults: wind-down stories, audiobook-
+  style readings, even language-learning stories read slowly in the target
+  language (double value with the language vertical). For kids: the SAME
+  tutor character who taught them fractions reads them to sleep — that is
+  relationship depth no competitor has.
+- **Free content shortcut:** African Storybook / StoryWeaver / Global Digital
+  Library (all CC BY, multilingual) give thousands of ready children's
+  stories legally embeddable with attribution; Project Gutenberg &
+  LibriVox-adjacent public domain texts cover adults. Personalized generated
+  stories ("a story where Amina the astronaut uses fractions") layer on top.
+- **Product shape v1:** "Story time" mode — pick length (3/5/10 min), pick a
+  story (library or 'make one for me'), tutor reads it with the existing TTS,
+  gentle pacing, optional soft page-turn sounds (Freesound CC0). Parents can
+  schedule it (pairs with the WhatsApp/scheduling sprint). Safety layer
+  already covers generated story content.
+- **Bring back when:** Sprint 6/7 — after deploy. v1 needs zero new
+  infrastructure; a "sleep timer + slower TTS speed" tweak and a story-pack
+  format (stories as a new pack `vertical: "story-time"`) are the only
+  engineering. Cartoon-illustrated stories join when the GPU phase lands
+  (ties into #001).
+
 ## GRADUATED
 
 ### 001 (text slice) — story / comic-script / song formats → shipped in Sprint 3
