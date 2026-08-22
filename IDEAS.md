@@ -64,6 +64,58 @@ Format: date · idea · why it's parked · when to bring it back.
   engineering. Cartoon-illustrated stories join when the GPU phase lands
   (ties into #001).
 
+### 003 — Speak all languages
+- **Logged:** 2026-08-22
+- **Idea (founder):** The tutor should be able to speak all languages.
+- **Feasibility:** The brain and ears are nearly there already — Qwen-class
+  models are strongly multilingual, and Whisper transcribes ~100 languages
+  out of the box. The bottleneck is the MOUTH: Kokoro covers a handful of
+  languages well; **Piper (MIT)** has free voices for dozens of languages and
+  is the legal path to breadth; premium voices per flagship market can come
+  later. Voice-per-language slots fit the existing gateway config cleanly.
+- **Product angle:** ties directly to the vision doc's code-switching tutor
+  (explains in English, drops into Yoruba/Hindi/Spanish when stuck) and to
+  bedtime stories in the family's home language (#002).
+- **Bring back when:** first language-vertical sprint; start with the top 5
+  languages of our launch markets, not "all" — breadth follows demand.
+
+### 004 — Remembers birthdays, sings birthday songs
+- **Logged:** 2026-08-22
+- **Idea (founder):** Tutor remembers birthdays from profile info and sings
+  for the student.
+- **Feasibility:** Birthday memory is trivial (profile field + scheduled
+  trigger — pairs with the Sprint 6 scheduling/nudge work). Singing is the
+  fun part: TTS engines don't sing. Path A (ship now): warm spoken birthday
+  message from their tutor + "Happy Birthday" melody underneath (the song is
+  public domain since 2016; Freesound CC0 for instrumentation) + a birthday
+  card email to the family via mailcow. Path B (later, GPU): open
+  singing-synthesis (DiffSinger-class) for actual persona singing voices.
+- **Why it matters:** it's the single cheapest "the tutor KNOWS me" moment on
+  the platform — pure retention magic, and parents will screen-record it and
+  share it. Marketing that builds itself.
+- **Bring back when:** Sprint 6 (scheduling exists) for Path A.
+
+### 005 — Custom faces: pick from a gallery or upload a photo; hyper-real personas
+- **Logged:** 2026-08-22
+- **Idea (founder):** Users pick from faces or upload a picture they prefer —
+  real human AI personas, "too real to be believed to be AI."
+- **Feasibility:** Gallery of generated faces/styles: easy (DiceBear variants
+  now; richer rigged sets with the avatar-v1 sprint). Photo upload →
+  stylized avatar of yourself as tutor-character: GPU phase (img2img,
+  self-hosted SDXL/Flux). Photoreal talking-head: expensive per-stream and
+  uncanny-valley risky; stylized-real is the sweet spot.
+- **⚠️ DESIGN BOUNDARY (non-negotiable):** maximum warmth and realism, but
+  the platform ALWAYS discloses it's AI. (1) Ethics: our own vision doc
+  commits to healthy-attachment guardrails for children. (2) Law: AI
+  companion/chatbot disclosure requirements are live or arriving in several
+  markets (California-style companion rules, EU AI Act transparency) —
+  "believed to be human" as a product goal would be a regulatory time bomb.
+  (3) Uploaded photos need consent rails: your OWN face as an avatar is
+  delightful; arbitrary real people (classmates, exes, deceased relatives)
+  is an impersonation/abuse surface we refuse. Frame the promise as
+  "a character so warm you forget it's software — while never being lied to."
+- **Bring back when:** gallery in avatar-v1 sprint; photo-upload in GPU phase.
+
 ## GRADUATED
 
 ### 001 (text slice) — story / comic-script / song formats → shipped in Sprint 3
