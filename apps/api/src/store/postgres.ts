@@ -1,6 +1,6 @@
 import { createDb, schema, type Db } from "@tutor/db";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
-import type { SessionRecap, Store } from "./types.js";
+import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import type { SessionRecap, Store, UsageKind } from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
 
 export class PostgresStore implements Store {
@@ -308,5 +308,145 @@ export class PostgresStore implements Store {
       endedAt: r.endedAt,
       summary: r.recap?.summary ?? null,
     }));
+  }
+
+  // ---- Business wiring ----
+
+  async recordUsage(e: { userId?: string; studentId?: string; apiKeyId?: string; kind: UsageKind; quantity?: number }) {
+    await this.db.insert(schema.usageEvents).values({ ...e, quantity: e.quantity ?? 1 });
+  }
+
+  async sumUsage(
+    subject: { userId?: string; studentId?: string; apiKeyId?: string },
+    kind: UsageKind | null,
+    since: Date,
+  ) {
+    const subjectCond = subject.userId
+      ? eq(schema.usageEvents.userId, subject.userId)
+      : subject.studentId
+        ? eq(schema.usageEvents.studentId, subject.studentId)
+        : eq(schema.usageEvents.apiKeyId, subject.apiKeyId!);
+    const conds = [subjectCond, gte(schema.usageEvents.createdAt, since)];
+    if (kind !== null) conds.push(eq(schema.usageEvents.kind, kind));
+    const rows = await this.db
+      .select({ total: sql<number>`coalesce(sum(${schema.usageEvents.quantity}), 0)` })
+      .from(schema.usageEvents)
+      .where(and(...conds));
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  async getUserPlan(userId: string) {
+    const rows = await this.db
+      .select({ plan: schema.users.plan })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return rows[0]?.plan ?? "free";
+  }
+
+  async setUserPlan(email: string, plan: string) {
+    const rows = await this.db
+      .update(schema.users)
+      .set({ plan })
+      .where(eq(schema.users.email, email.toLowerCase()))
+      .returning({ id: schema.users.id });
+    return rows.length > 0;
+  }
+
+  async createOrg(ownerUserId: string, name: string, seats: number) {
+    const [org] = await this.db
+      .insert(schema.orgs)
+      .values({ ownerUserId, name, seats })
+      .returning({ id: schema.orgs.id });
+    await this.db
+      .update(schema.users)
+      .set({ role: "teacher", orgId: org.id, plan: "premium" })
+      .where(eq(schema.users.id, ownerUserId));
+    return org;
+  }
+
+  async getOrgByOwner(ownerUserId: string) {
+    const rows = await this.db
+      .select({ id: schema.orgs.id, name: schema.orgs.name, seats: schema.orgs.seats, plan: schema.orgs.plan })
+      .from(schema.orgs)
+      .where(eq(schema.orgs.ownerUserId, ownerUserId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async addOrgStudents(orgId: string, ownerUserId: string, names: string[]) {
+    const out: Array<{ id: string; displayName: string }> = [];
+    for (const name of names) {
+      const s = await this.addStudentProfile(ownerUserId, name);
+      await this.db.update(schema.students).set({ orgId }).where(eq(schema.students.id, s.id));
+      out.push({ id: s.id, displayName: name });
+    }
+    return out;
+  }
+
+  async listOrgStudents(orgId: string) {
+    return this.db
+      .select({ id: schema.students.id, displayName: schema.students.displayName })
+      .from(schema.students)
+      .where(eq(schema.students.orgId, orgId));
+  }
+
+  async countOrgStudents(orgId: string) {
+    const rows = await this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.students)
+      .where(eq(schema.students.orgId, orgId));
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[]) {
+    const [key] = await this.db
+      .insert(schema.apiKeys)
+      .values({ ownerUserId, name, keyHash, scopes })
+      .returning({ id: schema.apiKeys.id });
+    return key;
+  }
+
+  async resolveApiKey(keyHash: string) {
+    const rows = await this.db
+      .select({
+        id: schema.apiKeys.id,
+        ownerUserId: schema.apiKeys.ownerUserId,
+        scopes: schema.apiKeys.scopes,
+        monthlyQuota: schema.apiKeys.monthlyQuota,
+        revoked: schema.apiKeys.revoked,
+      })
+      .from(schema.apiKeys)
+      .where(eq(schema.apiKeys.keyHash, keyHash))
+      .limit(1);
+    const k = rows[0];
+    if (!k || k.revoked) return null;
+    await this.db
+      .update(schema.apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(schema.apiKeys.id, k.id));
+    return { id: k.id, ownerUserId: k.ownerUserId, scopes: k.scopes, monthlyQuota: k.monthlyQuota };
+  }
+
+  async listApiKeys(ownerUserId: string) {
+    return this.db
+      .select({
+        id: schema.apiKeys.id,
+        name: schema.apiKeys.name,
+        scopes: schema.apiKeys.scopes,
+        monthlyQuota: schema.apiKeys.monthlyQuota,
+        revoked: schema.apiKeys.revoked,
+      })
+      .from(schema.apiKeys)
+      .where(eq(schema.apiKeys.ownerUserId, ownerUserId));
+  }
+
+  async revokeApiKey(ownerUserId: string, keyId: string) {
+    const rows = await this.db
+      .update(schema.apiKeys)
+      .set({ revoked: true })
+      .where(and(eq(schema.apiKeys.id, keyId), eq(schema.apiKeys.ownerUserId, ownerUserId)))
+      .returning({ id: schema.apiKeys.id });
+    return rows.length > 0;
   }
 }

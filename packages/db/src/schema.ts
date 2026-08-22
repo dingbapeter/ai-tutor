@@ -13,10 +13,49 @@ import {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
-  role: text("role", { enum: ["student", "parent", "admin"] }).notNull().default("student"),
+  role: text("role", { enum: ["student", "parent", "teacher", "admin"] }).notNull().default("student"),
   /** bcrypt hash; null for auto-created guest/placeholder users. */
   passwordHash: text("password_hash"),
   displayName: text("display_name"),
+  /** Entitlement plan (see config/plans.json). Billing sets this later. */
+  plan: text("plan").notNull().default("free"),
+  orgId: uuid("org_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Institutions: a school/company owning seats and a roster of students. */
+export const orgs = pgTable("orgs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  seats: integer("seats").notNull().default(30),
+  plan: text("plan").notNull().default("premium"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Scoped, quota'd keys for the B2B API (Tutor-as-a-Service etc.). */
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  keyHash: text("key_hash").notNull().unique(),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+  monthlyQuota: integer("monthly_quota").notNull().default(10_000),
+  revoked: boolean("revoked").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
+/** Metering: every billable action, attributable to a user/student/API key. */
+export const usageEvents = pgTable("usage_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id"),
+  studentId: uuid("student_id"),
+  apiKeyId: uuid("api_key_id"),
+  kind: text("kind", {
+    enum: ["message", "voice_turn", "tts_chars", "practice", "exam", "api_call"],
+  }).notNull(),
+  quantity: integer("quantity").notNull().default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -37,6 +76,8 @@ export const students = pgTable("students", {
   locale: text("locale").notNull().default("en"),
   /** Chosen tutor persona (see config/personas.json). Persistent — same tutor every session. */
   personaId: text("persona_id").notNull().default("amara"),
+  /** Set when the student belongs to a school/org roster. */
+  orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

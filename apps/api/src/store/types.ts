@@ -75,4 +75,46 @@ export interface Store {
   ): Promise<
     Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: Date }>
   >;
+
+  // ---- Business wiring (Sprint 6a) ----
+
+  /** Metering: attribute a billable action to whoever should pay for it. */
+  recordUsage(event: {
+    userId?: string;
+    studentId?: string;
+    apiKeyId?: string;
+    kind: UsageKind;
+    quantity?: number;
+  }): Promise<void>;
+  /** Sum of a kind since `since`, keyed by user OR student OR api key. */
+  sumUsage(
+    subject: { userId?: string; studentId?: string; apiKeyId?: string },
+    kind: UsageKind | null,
+    since: Date,
+  ): Promise<number>;
+
+  getUserPlan(userId: string): Promise<string>;
+  setUserPlan(email: string, plan: string): Promise<boolean>;
+
+  createOrg(ownerUserId: string, name: string, seats: number): Promise<{ id: string }>;
+  getOrgByOwner(ownerUserId: string): Promise<{ id: string; name: string; seats: number; plan: string } | null>;
+  addOrgStudents(orgId: string, ownerUserId: string, names: string[]): Promise<Array<{ id: string; displayName: string }>>;
+  listOrgStudents(orgId: string): Promise<Array<{ id: string; displayName: string }>>;
+  countOrgStudents(orgId: string): Promise<number>;
+
+  createApiKey(
+    ownerUserId: string,
+    name: string,
+    keyHash: string,
+    scopes: string[],
+  ): Promise<{ id: string }>;
+  resolveApiKey(
+    keyHash: string,
+  ): Promise<{ id: string; ownerUserId: string; scopes: string[]; monthlyQuota: number } | null>;
+  listApiKeys(
+    ownerUserId: string,
+  ): Promise<Array<{ id: string; name: string; scopes: string[]; monthlyQuota: number; revoked: boolean }>>;
+  revokeApiKey(ownerUserId: string, keyId: string): Promise<boolean>;
 }
+
+export type UsageKind = "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "api_call";

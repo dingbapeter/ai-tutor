@@ -31,9 +31,11 @@ const FIRST_SKILL = mathPack.problems[0].skillId;
 let app: FastifyInstance;
 
 function gateway() {
+  const planner = new MockChatProvider();
   return {
     chat: new MockChatProvider(),
-    planner: new MockChatProvider(),
+    planner,
+    premiumChat: planner,
     stt: new MockSttProvider(),
     tts: new MockTtsProvider(),
     vision: new MockVisionProvider(),
@@ -441,6 +443,191 @@ describe("session lifecycle", () => {
     const names = res.json().credits.map((c: { name: string }) => c.name);
     expect(names).toContain("SymPy");
     expect(names).toContain("llama.cpp");
+  });
+
+  it("enforces daily message allowances per plan and upsells with a 402", async () => {
+    const tiny = {
+      free: { dailyMessages: 2, dailyVoiceTurns: 1, familySeats: 1, examMode: false, premiumBrain: false },
+      premium: { dailyMessages: 100, dailyVoiceTurns: 100, familySeats: 6, examMode: true, premiumBrain: true },
+    };
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000" },
+      plans: tiny,
+    });
+    const create = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Capped", personaId: "amara", packId: "math-ms" },
+    });
+    const { sessionId } = create.json();
+    for (let i = 0; i < 2; i++) {
+      const ok = await isolated.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/message`,
+        payload: { text: `question number ${i}` },
+      });
+      expect(ok.statusCode).toBe(200);
+    }
+    const third = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "one more?" },
+    });
+    expect(third.statusCode).toBe(402);
+    expect(third.json().upgrade).toBe(true);
+    await isolated.close();
+  });
+
+  it("gates exam mode to premium, then runs a full mock exam with sealed verdicts and a post-mortem", async () => {
+    const store = new MemoryStore();
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store,
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", ADMIN_KEY: "sesame" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "examfam@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Zik" } });
+    const start = async () => {
+      const s = await isolated.inject({
+        method: "POST",
+        url: "/sessions",
+        headers: auth,
+        payload: { studentId: kid.json().id, personaId: "kofi", packId: "exam-prep" },
+      });
+      return s.json().sessionId as string;
+    };
+
+    // Free plan: exam mode refused with an upsell.
+    const freeSession = await start();
+    const refused = await isolated.inject({ method: "POST", url: `/sessions/${freeSession}/exam/start` });
+    expect(refused.statusCode).toBe(402);
+
+    // Admin upgrade -> premium unlocks it.
+    const up = await isolated.inject({
+      method: "POST",
+      url: "/admin/plan",
+      headers: { "x-admin-key": "sesame" },
+      payload: { email: "examfam@example.com", plan: "premium" },
+    });
+    expect(up.statusCode).toBe(200);
+
+    const sid = await start();
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sid}/exam/start` });
+    expect(exam.statusCode).toBe(200);
+    const problems = exam.json().problems as Array<{ index: number }>;
+    expect(problems.length).toBeGreaterThan(3);
+
+    const first = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sid}/exam/answer`,
+      payload: { problemIndex: problems[0].index, answer: "999999" },
+    });
+    expect(first.json()).not.toHaveProperty("correct"); // verdicts sealed during the exam
+
+    const finish = await isolated.inject({ method: "POST", url: `/sessions/${sid}/exam/finish` });
+    const report = finish.json();
+    expect(report.of).toBe(problems.length);
+    expect(report.score).toBeLessThan(report.of);
+    expect(report.postMortem.length).toBeGreaterThan(10);
+    expect(report.results.find((r: { index: number }) => r.index === problems[0].index).correct).toBe(false);
+    await isolated.close();
+  });
+
+  it("runs the org lifecycle: create school, roster import, seat cap, teacher dashboard", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "head@school.example", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+
+    const org = await app.inject({ method: "POST", url: "/orgs", headers: auth, payload: { name: "Sunrise Academy", seats: 3 } });
+    expect(org.statusCode).toBe(200);
+
+    const roster = await app.inject({
+      method: "POST",
+      url: "/orgs/roster",
+      headers: auth,
+      payload: { names: ["Ada O.", "Ben K.", "Chi N."] },
+    });
+    expect(roster.statusCode).toBe(200);
+    expect(roster.json().seatsUsed).toBe(3);
+
+    const overflow = await app.inject({ method: "POST", url: "/orgs/roster", headers: auth, payload: { names: ["One Too Many"] } });
+    expect(overflow.statusCode).toBe(402);
+
+    const dash = await app.inject({ method: "GET", url: "/orgs/dashboard", headers: auth });
+    expect(dash.json().students).toHaveLength(3);
+    expect(dash.json().org.name).toBe("Sunrise Academy");
+  });
+
+  it("supports the B2B API-key flow: mint, use for a metered session, revoke", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "dev@partner.example", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+
+    const minted = await app.inject({ method: "POST", url: "/apikeys", headers: auth, payload: { name: "prod", scopes: ["tutor"] } });
+    const rawKey = minted.json().key as string;
+    expect(rawKey.startsWith("tk_")).toBe(true);
+
+    const session = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { "x-api-key": rawKey },
+      payload: { studentName: "PartnerStudent", personaId: "amara", packId: "math-ms" },
+    });
+    expect(session.statusCode).toBe(200);
+
+    const badKey = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { "x-api-key": "tk_definitely_wrong" },
+      payload: { studentName: "X", personaId: "amara", packId: "math-ms" },
+    });
+    expect(badKey.statusCode).toBe(401);
+
+    const revoked = await app.inject({ method: "DELETE", url: `/apikeys/${minted.json().id}`, headers: auth });
+    expect(revoked.json().revoked).toBe(true);
+    const afterRevoke = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { "x-api-key": rawKey },
+      payload: { studentName: "Y", personaId: "amara", packId: "math-ms" },
+    });
+    expect(afterRevoke.statusCode).toBe(401);
+  });
+
+  it("reports usage against plan limits at /me/usage", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "meter@example.com", password: "password12", role: "student", displayName: "Meter" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const session = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId: reg.json().studentId, personaId: "juno", packId: "language" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${session.json().sessionId}/message`,
+      payload: { text: "hola, how do I introduce myself?" },
+    });
+    const usage = await app.inject({ method: "GET", url: "/me/usage", headers: auth });
+    expect(usage.json().today.messages).toBe(1);
+    expect(usage.json().today.limits.messages).toBeGreaterThan(0);
   });
 
   it("produces a playable WAV voice note via /tts", async () => {

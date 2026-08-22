@@ -89,6 +89,12 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Claude API moderation adapter (rules floor + classifier, fail-safe merge) | ⚠️ code-complete; needs ANTHROPIC_API_KEY at deploy |
 | Generated curriculum: 58 SymPy-verified problems with derived misconceptions | ✅ verified at build time |
 | Credits system (/credits + page), KaTeX math rendering, TTS cache | ✅ built |
+| Usage metering + plan entitlements (daily caps → 402 upsell, family seats) | ✅ tested + live-verified |
+| Exam mode: timed mocks, sealed verdicts, post-mortem, premium-gated | ✅ tested + live-verified |
+| Org/school accounts: seats, roster import, teacher dashboard | ✅ tested |
+| B2B API keys (scoped, hashed, quota'd, metered) + Tutor-as-a-Service sessions | ✅ tested + live-verified |
+| Premium-brain routing per plan (gateway slot) | ✅ wired; point AI_PREMIUM_CHAT_PROVIDER at a bigger model at deploy |
+| Billing (Stripe/Paystack) | ❌ Sprint 6b (needs deploy + env) — /admin/plan bridges until then |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 
 ## Roadmap
@@ -108,7 +114,12 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       curriculum generator (SymPy-verified problem banks with derived
       misconceptions), visible credits (/credits + ATTRIBUTIONS.md), KaTeX
       math rendering, TTS caching
-- [ ] Sprint 6 (needs deploy/env): payments (Stripe/Paystack), password reset,
+- [x] Sprint 6a (the money wiring): usage metering, plan entitlements with
+      daily allowances + 402 upsells, family seat caps, org/school accounts
+      (seats, roster, teacher dashboard), scoped B2B API keys with monthly
+      quotas, exam mode (timed mocks + post-mortem, premium-gated),
+      premium-brain routing, /me/usage, /admin/plan bridge
+- [ ] Sprint 6b (needs deploy/env): payments (Stripe/Paystack), password reset,
       study plans & scheduling, WhatsApp nudges, spaced-repetition warm-ups
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)

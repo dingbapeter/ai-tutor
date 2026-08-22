@@ -67,6 +67,9 @@ export interface AiGateway {
   chat: ChatProvider;
   /** Lesson planning & weekly analysis — the slot you may upgrade to a frontier model. */
   planner: ChatProvider;
+  /** The premium-tier brain: used instead of `chat`/`planner` for subscribers
+   *  whose plan has `premiumBrain`. Defaults to `planner` when unconfigured. */
+  premiumChat: ChatProvider;
   stt: SttProvider;
   tts: TtsProvider;
   vision: VisionProvider;

@@ -13,7 +13,10 @@ import type { Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Live conversational state; durable state goes through the Store. */
 interface LiveSession {
@@ -28,12 +31,31 @@ interface LiveSession {
   busy: boolean;
   practiceTotal: number;
   practiceCorrect: number;
+  /** Whose entitlements govern this session + which key gets metered. */
+  ownerUserId?: string;
+  apiKeyId?: string;
+  plan: string;
+  exam?: {
+    problemIndexes: number[];
+    answers: Map<number, { answer: string; correct: boolean | null }>;
+    startedAt: number;
+  };
+}
+
+export interface PlanLimits {
+  dailyMessages: number;
+  dailyVoiceTurns: number;
+  familySeats: number;
+  examMode: boolean;
+  premiumBrain: boolean;
 }
 
 export interface AppDeps {
   gateway: AiGateway;
   store: Store;
   env?: Record<string, string | undefined>;
+  /** Override plan limits (tests); defaults to config/plans.json. */
+  plans?: Record<string, PlanLimits>;
 }
 
 const MAX_TEXT = 4000;
@@ -67,9 +89,55 @@ function safeReply(categories: string[], studentName: string): string {
   );
 }
 
-export async function buildApp({ gateway, store, env = process.env }: AppDeps): Promise<FastifyInstance> {
+function loadPlans(): Record<string, PlanLimits> {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+  return (JSON.parse(readFileSync(join(root, "config/plans.json"), "utf8")) as { plans: Record<string, PlanLimits> }).plans;
+}
+
+export async function buildApp({ gateway, store, env = process.env, plans }: AppDeps): Promise<FastifyInstance> {
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
+  const PLANS = plans ?? loadPlans();
+  const limitsFor = (plan: string): PlanLimits => PLANS[plan] ?? PLANS.free;
+  const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  /** Pick the brain for a session: premium plans get the premium provider. */
+  const chatFor = (session: LiveSession) =>
+    limitsFor(session.plan).premiumBrain ? gateway.premiumChat : gateway.chat;
+
+  /**
+   * Entitlement gate for metered actions. Returns an error string when the
+   * plan's daily allowance is exhausted; null when the action may proceed.
+   */
+  async function checkAllowance(
+    session: LiveSession,
+    kind: "message" | "voice_turn",
+  ): Promise<string | null> {
+    const limits = limitsFor(session.plan);
+    const cap = kind === "message" ? limits.dailyMessages : limits.dailyVoiceTurns;
+    const subject = session.ownerUserId ? { userId: session.ownerUserId } : { studentId: session.studentId };
+    const used = await store.sumUsage(subject, kind, startOfToday());
+    if (used >= cap) {
+      return kind === "message"
+        ? `Daily message limit reached on the ${session.plan} plan — upgrade for more time with your tutor.`
+        : `Daily voice limit reached on the ${session.plan} plan — upgrade for more voice time with your tutor.`;
+    }
+    return null;
+  }
+
+  async function meter(session: LiveSession, kind: "message" | "voice_turn" | "tts_chars" | "practice" | "exam", quantity = 1) {
+    await store.recordUsage({
+      userId: session.ownerUserId,
+      studentId: session.studentId,
+      apiKeyId: session.apiKeyId,
+      kind,
+      quantity,
+    });
+  }
 
   /**
    * Safety gate for student input. Returns null to let the message through,
@@ -215,6 +283,14 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
     async (req, reply) => {
       const user = await userFromRequest(req, store);
       if (!user) return reply.code(401).send({ error: "sign in required" });
+      const plan = await store.getUserPlan(user.userId);
+      const existing = await store.listStudentProfiles(user.userId);
+      if (existing.length >= limitsFor(plan).familySeats) {
+        return reply.code(402).send({
+          error: `The ${plan} plan includes ${limitsFor(plan).familySeats} student ${limitsFor(plan).familySeats === 1 ? "seat" : "seats"} — upgrade for a bigger family.`,
+          upgrade: true,
+        });
+      }
       const student = await store.addStudentProfile(user.userId, req.body.displayName.trim());
       return { id: student.id, displayName: req.body.displayName.trim() };
     },
@@ -335,6 +411,28 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       let studentIdResolved: string;
       let studentName: string;
       let parentEmail: string | undefined;
+      let ownerUserId: string | undefined;
+      let apiKeyId: string | undefined;
+      let plan = "free";
+
+      // B2B path: Tutor-as-a-Service via X-Api-Key (guest-style body, metered per key).
+      const rawKey = req.headers["x-api-key"];
+      if (typeof rawKey === "string" && rawKey) {
+        const key = await store.resolveApiKey(createHash("sha256").update(rawKey).digest("hex"));
+        if (!key) return reply.code(401).send({ error: "invalid API key" });
+        if (!key.scopes.includes("tutor")) return reply.code(403).send({ error: "key lacks 'tutor' scope" });
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        const used = await store.sumUsage({ apiKeyId: key.id }, null, monthStart);
+        if (used >= key.monthlyQuota) {
+          return reply.code(429).send({ error: "monthly API quota exhausted — contact us to raise it" });
+        }
+        apiKeyId = key.id;
+        ownerUserId = key.ownerUserId;
+        plan = "premium"; // API traffic is paid traffic: full capabilities, metered per call
+        await store.recordUsage({ apiKeyId: key.id, kind: "api_call" });
+      }
 
       if (req.body.studentId) {
         const user = await userFromRequest(req, store);
@@ -346,6 +444,8 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         studentName = (await store.getStudentName(studentIdResolved)) ?? "Student";
         // Recaps go to the parent account's inbox; adult learners get their own.
         parentEmail = user.email.endsWith("@students.local") ? undefined : user.email;
+        ownerUserId = user.userId;
+        plan = await store.getUserPlan(user.userId);
       } else if (req.body.studentName) {
         const student = await store.ensureStudent(req.body.studentName.trim(), req.body.parentEmail);
         studentIdResolved = student.id;
@@ -371,6 +471,9 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         busy: false,
         practiceTotal: 0,
         practiceCorrect: 0,
+        ownerUserId,
+        apiKeyId,
+        plan,
       });
       return {
         sessionId,
@@ -401,7 +504,11 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       const session = live.get(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
+
+      const capped = await checkAllowance(session, "message");
+      if (capped) return reply.code(402).send({ error: capped, upgrade: true });
       session.busy = true;
+      await meter(session, "message");
 
       const blocked = await gateStudentInput(session, req.body.text);
       if (blocked) {
@@ -444,7 +551,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
 
       let full = "";
       try {
-        for await (const delta of gateway.chat.chat(session.history, { signal: abort.signal })) {
+        for await (const delta of chatFor(session).chat(session.history, { signal: abort.signal })) {
           full += delta;
           reply.raw.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
@@ -506,6 +613,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           session.practiceTotal += 1;
           if (correct) session.practiceCorrect += 1;
         }
+        await meter(session, "practice");
 
         const diagnosis =
           correct === false
@@ -526,7 +634,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
         });
 
         let feedback = "";
-        for await (const delta of gateway.chat.chat(session.history, {
+        for await (const delta of chatFor(session).chat(session.history, {
           signal: AbortSignal.timeout(120_000),
         }))
           feedback += delta;
@@ -556,7 +664,10 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       if (!Buffer.isBuffer(audioIn) || audioIn.length === 0) {
         return reply.code(400).send({ error: "send raw audio with an audio/* content-type" });
       }
+      const capped = await checkAllowance(session, "voice_turn");
+      if (capped) return reply.code(402).send({ error: capped, upgrade: true });
       session.busy = true;
+      await meter(session, "voice_turn");
 
       try {
         const mime = req.headers["content-type"] ?? "audio/webm";
@@ -582,7 +693,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
           await store.saveMessage(session.id, "user", transcript);
 
           replyText = "";
-          for await (const delta of gateway.chat.chat(session.history, {
+          for await (const delta of chatFor(session).chat(session.history, {
             signal: AbortSignal.timeout(120_000),
           }))
             replyText += delta;
@@ -593,6 +704,7 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
 
         // TTS engines have input caps; a long reply gets its head spoken and
         // the full text still arrives for the transcript view.
+        await meter(session, "tts_chars", Math.min(replyText.length, 2000));
         const spoken = await cachedSpeak(replyText.slice(0, 2000), persona.voiceId);
 
         return {
@@ -712,6 +824,280 @@ export async function buildApp({ gateway, store, env = process.env }: AppDeps): 
       turns: session.history.filter((m) => m.role !== "system").length,
       emailStatus,
       mastery: await store.getMasterySnapshot(session.studentId),
+    };
+  });
+
+  // ---- Exam mode (premium): timed mock, silent grading, post-mortem ----
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/exam/start", async (req, reply) => {
+    const session = live.get(req.params.id);
+    if (!session) return reply.code(404).send({ error: "no such session" });
+    if (!limitsFor(session.plan).examMode) {
+      return reply.code(402).send({ error: "Exam mode is a premium feature — upgrade to unlock timed mocks with a full post-mortem.", upgrade: true });
+    }
+    if (session.exam) return reply.code(409).send({ error: "an exam is already in progress" });
+    const pack = loadPack(session.packId);
+    const problemIndexes = pack.problems
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.skillId)
+      .slice(0, 8)
+      .map(({ i }) => i);
+    if (problemIndexes.length === 0) return reply.code(400).send({ error: "this pack has no exam problems" });
+    session.exam = { problemIndexes, answers: new Map(), startedAt: Date.now() };
+    await meter(session, "exam");
+    return {
+      problems: problemIndexes.map((i) => ({
+        index: i,
+        prompt: pack.problems[i].prompt,
+        timeLimitSec: pack.problems[i].timeLimitSec ?? 90,
+      })),
+      totalTimeSec: problemIndexes.reduce((n, i) => n + (pack.problems[i].timeLimitSec ?? 90), 0),
+    };
+  });
+
+  app.post<{ Params: { id: string }; Body: { problemIndex: number; answer: string } }>(
+    "/sessions/:id/exam/answer",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["problemIndex", "answer"],
+          additionalProperties: false,
+          properties: {
+            problemIndex: { type: "integer", minimum: 0 },
+            answer: { type: "string", minLength: 1, maxLength: 500 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const session = live.get(req.params.id);
+      if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
+      if (!session.exam.problemIndexes.includes(req.body.problemIndex)) {
+        return reply.code(400).send({ error: "not part of this exam" });
+      }
+      const problem = loadPack(session.packId).problems[req.body.problemIndex];
+      const answer = req.body.answer.trim();
+      let correct = await verifyAnswer(problem.check as Check, answer);
+      if (correct === null && problem.answer !== undefined) {
+        correct = answer.replace(/\s/g, "") === String(problem.answer).replace(/\s/g, "");
+      }
+      // Exam conditions: verdicts stay sealed until the post-mortem.
+      session.exam.answers.set(req.body.problemIndex, { answer, correct });
+      return { received: true, answered: session.exam.answers.size, of: session.exam.problemIndexes.length };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/exam/finish", async (req, reply) => {
+    const session = live.get(req.params.id);
+    if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
+    const pack = loadPack(session.packId);
+    const exam = session.exam;
+    session.exam = undefined;
+
+    const results = exam.problemIndexes.map((i) => {
+      const p = pack.problems[i];
+      const a = exam.answers.get(i);
+      return { index: i, prompt: p.prompt, skillId: p.skillId, answer: a?.answer ?? null, correct: a?.correct ?? false };
+    });
+    for (const r of results) {
+      if (r.skillId && r.answer !== null) {
+        await store.recordAttempt(session.studentId, String(r.skillId), Boolean(r.correct));
+      }
+    }
+    const correctCount = results.filter((r) => r.correct).length;
+    const durationSec = Math.round((Date.now() - exam.startedAt) / 1000);
+
+    let postMortem = "";
+    for await (const delta of (limitsFor(session.plan).premiumBrain ? gateway.premiumChat : gateway.planner).chat(
+      [
+        ...session.history,
+        {
+          role: "user",
+          content:
+            `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length} in ${durationSec}s. Results: ` +
+            results.map((r) => `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct ? "✓" : "✗"}]`).join(" ") +
+            ` As the tutor, write a short post-mortem: celebrate what went right, name the pattern behind the misses, and give the single highest-impact thing to practice before the real exam.`,
+        },
+      ],
+      { signal: AbortSignal.timeout(120_000) },
+    ))
+      postMortem += delta;
+    session.history.push({ role: "assistant", content: postMortem });
+    await store.saveMessage(session.id, "assistant", postMortem);
+
+    return { score: correctCount, of: results.length, durationSec, results, postMortem };
+  });
+
+  // ---- Orgs (schools): seats, roster, teacher dashboard ----
+
+  app.post<{ Body: { name: string; seats?: number } }>(
+    "/orgs",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 2, maxLength: 120 },
+            seats: { type: "integer", minimum: 1, maximum: 10_000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (await store.getOrgByOwner(user.userId)) return reply.code(409).send({ error: "you already have an organization" });
+      const org = await store.createOrg(user.userId, req.body.name.trim(), req.body.seats ?? 30);
+      return { id: org.id, name: req.body.name.trim(), seats: req.body.seats ?? 30 };
+    },
+  );
+
+  app.post<{ Body: { names: string[] } }>(
+    "/orgs/roster",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["names"],
+          additionalProperties: false,
+          properties: {
+            names: {
+              type: "array",
+              minItems: 1,
+              maxItems: 500,
+              items: { type: "string", minLength: 1, maxLength: 80 },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      const org = await store.getOrgByOwner(user.userId);
+      if (!org) return reply.code(404).send({ error: "create an organization first" });
+      const current = await store.countOrgStudents(org.id);
+      if (current + req.body.names.length > org.seats) {
+        return reply.code(402).send({
+          error: `roster would exceed your ${org.seats} seats (${current} used) — contact us to add seats`,
+          upgrade: true,
+        });
+      }
+      const added = await store.addOrgStudents(org.id, user.userId, req.body.names.map((n) => n.trim()));
+      return { added, seatsUsed: current + added.length, seats: org.seats };
+    },
+  );
+
+  /** Teacher dashboard: whole-class mastery, activity, and safety visibility. */
+  app.get("/orgs/dashboard", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const org = await store.getOrgByOwner(user.userId);
+    if (!org) return reply.code(404).send({ error: "create an organization first" });
+    const students = await store.listOrgStudents(org.id);
+    return {
+      org: { name: org.name, seats: org.seats, seatsUsed: students.length },
+      students: await Promise.all(
+        students.map(async (s) => ({
+          ...s,
+          mastery: await store.getMasterySnapshot(s.id),
+          sessions: await store.listSessionSummaries(s.id, 3),
+          safety: await store.listIncidents(s.id, 5),
+        })),
+      ),
+    };
+  });
+
+  // ---- API keys (B2B: Tutor-as-a-Service) ----
+
+  app.post<{ Body: { name: string; scopes?: string[] } }>(
+    "/apikeys",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 80 },
+            scopes: { type: "array", maxItems: 8, items: { type: "string", enum: ["tutor", "pedagogy", "safety"] } },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      const raw = `tk_${randomBytes(24).toString("hex")}`;
+      const key = await store.createApiKey(
+        user.userId,
+        req.body.name.trim(),
+        createHash("sha256").update(raw).digest("hex"),
+        req.body.scopes ?? ["tutor"],
+      );
+      // The raw key is shown exactly once; only its hash is stored.
+      return { id: key.id, key: raw, scopes: req.body.scopes ?? ["tutor"] };
+    },
+  );
+
+  app.get("/apikeys", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    return store.listApiKeys(user.userId);
+  });
+
+  app.delete<{ Params: { id: string } }>("/apikeys/:id", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const ok = await store.revokeApiKey(user.userId, req.params.id);
+    return ok ? { revoked: true } : reply.code(404).send({ error: "no such key" });
+  });
+
+  // ---- Admin (pre-billing): set a user's plan manually ----
+
+  app.post<{ Body: { email: string; plan: string } }>(
+    "/admin/plan",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["email", "plan"],
+          additionalProperties: false,
+          properties: {
+            email: { type: "string", format: "email" },
+            plan: { type: "string", enum: ["free", "plus", "premium"] },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+      if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+      const ok = await store.setUserPlan(req.body.email, req.body.plan);
+      return ok ? { email: req.body.email, plan: req.body.plan } : reply.code(404).send({ error: "no such account" });
+    },
+  );
+
+  /** Usage summary for the signed-in account (today + this month). */
+  app.get("/me/usage", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const plan = await store.getUserPlan(user.userId);
+    const limits = limitsFor(plan);
+    return {
+      plan,
+      today: {
+        messages: await store.sumUsage({ userId: user.userId }, "message", startOfToday()),
+        voiceTurns: await store.sumUsage({ userId: user.userId }, "voice_turn", startOfToday()),
+        limits: { messages: limits.dailyMessages, voiceTurns: limits.dailyVoiceTurns },
+      },
+      monthTotal: await store.sumUsage({ userId: user.userId }, null, monthStart),
     };
   });
 

@@ -1,4 +1,4 @@
-import type { SessionRecap, Store } from "./types.js";
+import type { SessionRecap, Store, UsageKind } from "./types.js";
 
 export class MemoryStore implements Store {
   readonly kind = "memory";
@@ -168,5 +168,119 @@ export class MemoryStore implements Store {
         endedAt: s.endedAt,
         summary: s.recap?.summary ?? null,
       }));
+  }
+
+  // ---- Business wiring ----
+
+  private usage: Array<{
+    userId?: string;
+    studentId?: string;
+    apiKeyId?: string;
+    kind: UsageKind;
+    quantity: number;
+    createdAt: Date;
+  }> = [];
+  private plans = new Map<string, string>(); // userId -> plan
+  private orgs = new Map<string, { id: string; name: string; ownerUserId: string; seats: number; plan: string }>();
+  private orgStudents = new Map<string, string>(); // studentId -> orgId
+  private apiKeys = new Map<
+    string,
+    { id: string; ownerUserId: string; name: string; scopes: string[]; monthlyQuota: number; revoked: boolean }
+  >(); // keyHash -> record
+
+  async recordUsage(e: { userId?: string; studentId?: string; apiKeyId?: string; kind: UsageKind; quantity?: number }) {
+    this.usage.push({ ...e, quantity: e.quantity ?? 1, createdAt: new Date() });
+  }
+
+  async sumUsage(
+    subject: { userId?: string; studentId?: string; apiKeyId?: string },
+    kind: UsageKind | null,
+    since: Date,
+  ) {
+    return this.usage
+      .filter(
+        (u) =>
+          u.createdAt >= since &&
+          (kind === null || u.kind === kind) &&
+          ((subject.userId && u.userId === subject.userId) ||
+            (subject.studentId && u.studentId === subject.studentId) ||
+            (subject.apiKeyId && u.apiKeyId === subject.apiKeyId)),
+      )
+      .reduce((n, u) => n + u.quantity, 0);
+  }
+
+  async getUserPlan(userId: string) {
+    return this.plans.get(userId) ?? "free";
+  }
+
+  async setUserPlan(email: string, plan: string) {
+    const a = this.accounts.get(email.toLowerCase());
+    if (!a) return false;
+    this.plans.set(a.userId, plan);
+    return true;
+  }
+
+  async createOrg(ownerUserId: string, name: string, seats: number) {
+    const id = crypto.randomUUID();
+    this.orgs.set(id, { id, name, ownerUserId, seats, plan: "premium" });
+    return { id };
+  }
+
+  async getOrgByOwner(ownerUserId: string) {
+    for (const o of this.orgs.values()) if (o.ownerUserId === ownerUserId) return o;
+    return null;
+  }
+
+  async addOrgStudents(orgId: string, ownerUserId: string, names: string[]) {
+    const out: Array<{ id: string; displayName: string }> = [];
+    for (const name of names) {
+      const s = await this.addStudentProfile(ownerUserId, name);
+      this.orgStudents.set(s.id, orgId);
+      out.push({ id: s.id, displayName: name });
+    }
+    return out;
+  }
+
+  async listOrgStudents(orgId: string) {
+    const out: Array<{ id: string; displayName: string }> = [];
+    for (const [studentId, oid] of this.orgStudents) {
+      if (oid === orgId) {
+        const p = this.profiles.get(studentId);
+        if (p) out.push({ id: p.id, displayName: p.displayName });
+      }
+    }
+    return out;
+  }
+
+  async countOrgStudents(orgId: string) {
+    return (await this.listOrgStudents(orgId)).length;
+  }
+
+  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[]) {
+    const id = crypto.randomUUID();
+    this.apiKeys.set(keyHash, { id, ownerUserId, name, scopes, monthlyQuota: 10_000, revoked: false });
+    return { id };
+  }
+
+  async resolveApiKey(keyHash: string) {
+    const k = this.apiKeys.get(keyHash);
+    if (!k || k.revoked) return null;
+    return { id: k.id, ownerUserId: k.ownerUserId, scopes: k.scopes, monthlyQuota: k.monthlyQuota };
+  }
+
+  async listApiKeys(ownerUserId: string) {
+    return [...this.apiKeys.values()]
+      .filter((k) => k.ownerUserId === ownerUserId)
+      .map(({ id, name, scopes, monthlyQuota, revoked }) => ({ id, name, scopes, monthlyQuota, revoked }));
+  }
+
+  async revokeApiKey(ownerUserId: string, keyId: string) {
+    for (const k of this.apiKeys.values()) {
+      if (k.id === keyId && k.ownerUserId === ownerUserId) {
+        k.revoked = true;
+        return true;
+      }
+    }
+    return false;
   }
 }

@@ -81,9 +81,11 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
     }
   };
 
+  const planner = chatFor(env.AI_CHAT_PLANNER_PROVIDER ?? env.AI_CHAT_PROVIDER);
   return {
     chat: chatFor(env.AI_CHAT_PROVIDER),
-    planner: chatFor(env.AI_CHAT_PLANNER_PROVIDER ?? env.AI_CHAT_PROVIDER),
+    planner,
+    premiumChat: env.AI_PREMIUM_CHAT_PROVIDER ? chatFor(env.AI_PREMIUM_CHAT_PROVIDER) : planner,
     stt: stt(),
     tts: tts(),
     vision: vision(),

@@ -1,0 +1,26 @@
+{
+  "note": "Entitlements per plan. Limits are per-day unless stated. Billing flips users.plan later; until then the admin endpoint sets it.",
+  "plans": {
+    "free": {
+      "dailyMessages": 30,
+      "dailyVoiceTurns": 5,
+      "familySeats": 1,
+      "examMode": false,
+      "premiumBrain": false
+    },
+    "plus": {
+      "dailyMessages": 400,
+      "dailyVoiceTurns": 60,
+      "familySeats": 3,
+      "examMode": false,
+      "premiumBrain": false
+    },
+    "premium": {
+      "dailyMessages": 2000,
+      "dailyVoiceTurns": 300,
+      "familySeats": 6,
+      "examMode": true,
+      "premiumBrain": true
+    }
+  }
+}
