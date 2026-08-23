@@ -683,6 +683,44 @@ describe("session lifecycle", () => {
     expect(res.statusCode).toBe(402); // guest sessions run the free plan: 0 invites
   });
 
+  it("enforces API-key monthly quota mid-session, not just at creation", async () => {
+    // Regression: quota was only checked when a session started, so one long
+    // session could overrun it. Now every metered turn re-checks.
+    const store = new MemoryStore();
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store,
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "tinyquota@example.com", password: "password12", role: "parent" },
+    });
+    const { createHash, randomBytes } = await import("node:crypto");
+    const raw = `tk_${randomBytes(24).toString("hex")}`;
+    // Quota of 3: 1 api_call (session create) + 2 messages, then the wall.
+    const account = await store.getAccountByEmail("tinyquota@example.com");
+    await store.createApiKey(account!.userId, "tiny", createHash("sha256").update(raw).digest("hex"), ["tutor"], 3);
+
+    const session = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { "x-api-key": raw },
+      payload: { studentName: "QuotaKid", personaId: "amara", packId: "math-ms" },
+    });
+    const sid = session.json().sessionId;
+    for (let i = 0; i < 2; i++) {
+      const ok = await isolated.inject({ method: "POST", url: `/sessions/${sid}/message`, payload: { text: `q${i}` } });
+      expect(ok.statusCode).toBe(200);
+    }
+    const wall = await isolated.inject({ method: "POST", url: `/sessions/${sid}/message`, payload: { text: "over" } });
+    expect(wall.statusCode).toBe(402);
+    expect(wall.json().error).toContain("quota");
+    expect(reg.statusCode).toBe(200);
+    await isolated.close();
+  }, 20_000);
+
   it("reports usage against plan limits at /me/usage", async () => {
     const reg = await app.inject({
       method: "POST",

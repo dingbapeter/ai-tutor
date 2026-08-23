@@ -66,6 +66,15 @@ export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [family, setFamily] = useState<Array<{ id: string; displayName: string }>>([]);
   const [studentId, setStudentId] = useState<string | null>(null);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinName, setJoinName] = useState("");
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [hostName, setHostName] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [examProblems, setExamProblems] = useState<Array<{ index: number; prompt: string }> | null>(null);
+  const [examAnswers, setExamAnswers] = useState<Record<number, string>>({});
+  const [examSubmitted, setExamSubmitted] = useState<Set<number>>(new Set());
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -154,6 +163,97 @@ export default function Home() {
     }
   }
 
+  async function joinClass() {
+    if (!joinCode.trim()) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions/join`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          code: joinCode.trim(),
+          ...(token ? {} : { guestName: joinName.trim() || "Guest" }),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `could not join (${res.status})`);
+      const json = await res.json();
+      setSessionId(json.sessionId);
+      setParticipantId(json.participantId);
+      setHostName(json.host);
+      setPersonaId(json.persona.id);
+      setMessages([
+        {
+          role: "assistant",
+          content: `(You joined ${json.host}'s ${json.pack} class with ${json.persona.name}.${json.guestMessages ? ` Free class pass: ${json.guestMessages} messages.` : ""})`,
+        },
+      ]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not join class");
+    }
+  }
+
+  async function inviteFriend() {
+    if (!sessionId) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/invite`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "invites unavailable");
+      setInviteCode((await res.json()).code);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "invites unavailable");
+    }
+  }
+
+  async function startExam() {
+    if (!sessionId) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/exam/start`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "exam unavailable");
+      const json = await res.json();
+      setExamProblems(json.problems);
+      setExamAnswers({});
+      setExamSubmitted(new Set());
+      setShowPractice(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "exam unavailable");
+    }
+  }
+
+  async function submitExamAnswer(index: number) {
+    const answer = examAnswers[index]?.trim();
+    if (!answer || !sessionId) return;
+    const res = await fetch(`${API}/sessions/${sessionId}/exam/answer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ problemIndex: index, answer }),
+    });
+    if (res.ok) setExamSubmitted((s) => new Set(s).add(index));
+  }
+
+  async function finishExam() {
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/exam/finish`, { method: "POST" });
+      if (!res.ok) throw new Error("could not finish exam");
+      const json = await res.json();
+      setExamProblems(null);
+      setMessages((m) => [
+        ...m,
+        { role: "user", content: `✍️ Finished the mock exam.` },
+        { role: "assistant", content: `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.\n\n${json.postMortem}` },
+      ]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not finish exam");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send() {
     if (!input.trim() || !sessionId || busy) return;
     const text = input.trim();
@@ -166,7 +266,11 @@ export default function Home() {
       const res = await fetch(`${API}/sessions/${sessionId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, ...(format !== "plain" ? { format } : {}) }),
+        body: JSON.stringify({
+          text,
+          ...(format !== "plain" ? { format } : {}),
+          ...(participantId ? { participantId } : {}),
+        }),
       });
       if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
       const reader = res.body.getReader();
@@ -388,6 +492,26 @@ export default function Home() {
             style={{ ...btn, marginTop: 20 }}>
             Start session
           </button>
+          <div style={{ marginTop: 14, borderTop: "1px solid #e7ebf4", paddingTop: 12 }}>
+            {!joinOpen ? (
+              <p style={{ textAlign: "center", margin: 0 }}>
+                <button onClick={() => setJoinOpen(true)}
+                  style={{ border: "none", background: "none", color: "#2b4c8c", cursor: "pointer", fontSize: 15 }}>
+                  🎟️ Have a class code? Join a friend&apos;s live class
+                </button>
+              </p>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)}
+                  style={{ ...inp, flex: 1, minWidth: 110, margin: 0 }} placeholder="Class code" />
+                {!token && (
+                  <input value={joinName} onChange={(e) => setJoinName(e.target.value)}
+                    style={{ ...inp, flex: 1, minWidth: 110, margin: 0 }} placeholder="Your name" />
+                )}
+                <button onClick={joinClass} style={btn}>Join class</button>
+              </div>
+            )}
+          </div>
           <p style={{ textAlign: "center", marginBottom: 0 }}>
             <a href="/account" style={{ color: "#68718a" }}>
               {token ? "Family dashboard →" : "Parents: create an account for progress reports →"}
@@ -419,11 +543,44 @@ export default function Home() {
             <small style={{ color: "#68718a" }}>{speaking ? "speaking…" : busy ? "thinking…" : "listening"}</small>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={openPractice} style={{ ...btn, background: showPractice ? "#2b4c8c" : "#5a678a" }}>Practice</button>
-          <button onClick={endSession} style={{ ...btn, background: "#8a93a6" }}>End session</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!participantId && (
+            <>
+              <button onClick={inviteFriend} style={{ ...btn, background: "#5a678a" }}>Invite</button>
+              <button onClick={startExam} style={{ ...btn, background: "#5a678a" }}>Mock exam</button>
+              <button onClick={openPractice} style={{ ...btn, background: showPractice ? "#2b4c8c" : "#5a678a" }}>Practice</button>
+              <button onClick={endSession} style={{ ...btn, background: "#8a93a6" }}>End session</button>
+            </>
+          )}
+          {participantId && <small style={{ color: "#68718a", alignSelf: "center" }}>in {hostName}&apos;s class</small>}
         </div>
       </div>
+
+      {inviteCode && (
+        <div style={{ ...card, margin: "10px 0", textAlign: "center" }}>
+          🎟️ Friends join with code: <b style={{ fontSize: 22, letterSpacing: 3 }}>{inviteCode}</b>
+          <div><small style={{ color: "#68718a" }}>They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+        </div>
+      )}
+
+      {examProblems && (
+        <div style={{ ...card, margin: "10px 0", maxHeight: 260, overflowY: "auto" }}>
+          <b>✍️ Mock exam — answers are checked at the end, keep moving!</b>
+          {examProblems.map((p) => (
+            <div key={p.index} style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0" }}>
+              <span style={{ flex: 1 }}>{examSubmitted.has(p.index) ? "📩 " : ""}{p.prompt}</span>
+              <input value={examAnswers[p.index] ?? ""} disabled={examSubmitted.has(p.index)}
+                onChange={(e) => setExamAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
+                style={{ ...inp, width: 110, margin: 0 }} placeholder="answer" />
+              <button onClick={() => submitExamAnswer(p.index)} disabled={examSubmitted.has(p.index)}
+                style={{ ...btn, padding: "8px 12px" }}>Lock in</button>
+            </div>
+          ))}
+          <button onClick={finishExam} disabled={busy} style={{ ...btn, marginTop: 8, background: "#2b4c8c" }}>
+            Finish exam & get my results
+          </button>
+        </div>
+      )}
 
       {showPractice && (
         <div style={{ ...card, margin: "10px 0", maxHeight: 220, overflowY: "auto" }}>
@@ -477,7 +634,7 @@ export default function Home() {
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
-        <button
+        {!participantId && <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
           onMouseLeave={() => recording && stopRecording()}
@@ -488,7 +645,7 @@ export default function Home() {
           title="Hold to talk"
           style={{ ...btn, background: recording ? "#c0392b" : "#2b4c8c", minWidth: 52 }}>
           🎤
-        </button>
+        </button>}
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           style={{ ...inp, flex: 1, margin: 0 }} placeholder={recording ? "listening…" : "Say something to your tutor…"} />

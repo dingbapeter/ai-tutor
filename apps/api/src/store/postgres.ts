@@ -399,10 +399,10 @@ export class PostgresStore implements Store {
     return Number(rows[0]?.n ?? 0);
   }
 
-  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[]) {
+  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[], monthlyQuota = 10_000) {
     const [key] = await this.db
       .insert(schema.apiKeys)
-      .values({ ownerUserId, name, keyHash, scopes })
+      .values({ ownerUserId, name, keyHash, scopes, monthlyQuota })
       .returning({ id: schema.apiKeys.id });
     return key;
   }

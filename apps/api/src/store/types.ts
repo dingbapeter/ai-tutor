@@ -107,6 +107,7 @@ export interface Store {
     name: string,
     keyHash: string,
     scopes: string[],
+    monthlyQuota?: number,
   ): Promise<{ id: string }>;
   resolveApiKey(
     keyHash: string,

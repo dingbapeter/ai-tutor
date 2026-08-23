@@ -223,6 +223,8 @@ export class MemoryStore implements Store {
   async createOrg(ownerUserId: string, name: string, seats: number) {
     const id = crypto.randomUUID();
     this.orgs.set(id, { id, name, ownerUserId, seats, plan: "premium" });
+    // Keep parity with PostgresStore: org owners run on the premium plan.
+    this.plans.set(ownerUserId, "premium");
     return { id };
   }
 
@@ -256,9 +258,9 @@ export class MemoryStore implements Store {
     return (await this.listOrgStudents(orgId)).length;
   }
 
-  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[]) {
+  async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[], monthlyQuota = 10_000) {
     const id = crypto.randomUUID();
-    this.apiKeys.set(keyHash, { id, ownerUserId, name, scopes, monthlyQuota: 10_000, revoked: false });
+    this.apiKeys.set(keyHash, { id, ownerUserId, name, scopes, monthlyQuota, revoked: false });
     return { id };
   }
 

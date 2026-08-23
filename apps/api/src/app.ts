@@ -43,6 +43,9 @@ interface LiveSession {
   /** Live-class state: friends sitting in, each paying their own way. */
   inviteCode?: string;
   participants: Map<string, Participant>;
+  createdAt: number;
+  /** Copied from the API key at session start so quota holds mid-session. */
+  apiKeyQuota?: number;
 }
 
 export interface PlanLimits {
@@ -136,6 +139,18 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     session: LiveSession,
     kind: "message" | "voice_turn",
   ): Promise<string | null> {
+    // API-key sessions: the monthly quota holds for the whole session, not
+    // just its creation — long-lived sessions can't overrun it.
+    if (session.apiKeyId && session.apiKeyQuota !== undefined) {
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      const used = await store.sumUsage({ apiKeyId: session.apiKeyId }, null, monthStart);
+      if (used >= session.apiKeyQuota) {
+        return "monthly API quota exhausted — contact us to raise it";
+      }
+      return null;
+    }
     const limits = limitsFor(session.plan);
     const cap = kind === "message" ? limits.dailyMessages : limits.dailyVoiceTurns;
     const subject = session.ownerUserId ? { userId: session.ownerUserId } : { studentId: session.studentId };
@@ -332,6 +347,16 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     };
   });
 
+  // Live sessions are in-memory conversation state; sweep abandoned ones so a
+  // long-running server doesn't accumulate them forever.
+  const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+  const sweeper = setInterval(() => {
+    const cutoff = Date.now() - SESSION_TTL_MS;
+    for (const [id, s] of live) if (s.createdAt < cutoff && !s.busy) live.delete(id);
+  }, 10 * 60 * 1000);
+  sweeper.unref?.();
+  app.addHook("onClose", async () => clearInterval(sweeper));
+
   app.get("/health", async () => ({
     ok: true,
     store: store.kind,
@@ -432,6 +457,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       let parentEmail: string | undefined;
       let ownerUserId: string | undefined;
       let apiKeyId: string | undefined;
+      let apiKeyQuota: number | undefined;
       let plan = "free";
 
       // B2B path: Tutor-as-a-Service via X-Api-Key (guest-style body, metered per key).
@@ -451,6 +477,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         ownerUserId = key.ownerUserId;
         plan = "premium"; // API traffic is paid traffic: full capabilities, metered per call
         await store.recordUsage({ apiKeyId: key.id, kind: "api_call" });
+        apiKeyQuota = key.monthlyQuota;
       }
 
       if (req.body.studentId) {
@@ -494,6 +521,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         apiKeyId,
         plan,
         participants: new Map(),
+        createdAt: Date.now(),
+        apiKeyQuota,
       });
       return {
         sessionId,
@@ -937,12 +966,15 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         role: "user",
         content: `[${participant.name} just joined the class as ${session.studentName}'s friend — welcome them warmly in one sentence when you next speak, and from now on address students by name.]`,
       });
+      const persona = loadPersonas().find((p) => p.id === session.personaId)!;
       return {
         participantId: participant.id,
         sessionId: session.id,
         host: session.studentName,
         member: Boolean(user),
         guestMessages: user ? null : GUEST_CLASS_MESSAGES,
+        persona: { id: persona.id, name: persona.name },
+        pack: loadPack(session.packId).title,
       };
     },
   );

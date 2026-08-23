@@ -28,6 +28,10 @@ export default function Account() {
   const [meEmail, setMeEmail] = useState("");
   const [newChild, setNewChild] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{
+    plan: string;
+    today: { messages: number; voiceTurns: number; limits: { messages: number; voiceTurns: number } };
+  } | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
@@ -50,6 +54,8 @@ export default function Account() {
       setStudents(dash.students);
       const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
       if (me.ok) setMeEmail((await me.json()).email);
+      const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${t}` } });
+      if (u.ok) setUsage(await u.json());
     } catch {
       setError("could not load dashboard");
     }
@@ -150,6 +156,14 @@ export default function Account() {
         </div>
       </div>
       {error && <p style={errBox}>{error}</p>}
+
+      {usage && (
+        <div style={{ ...card, marginBottom: 16, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+          <b style={{ textTransform: "capitalize" }}>{usage.plan} plan</b>
+          <span>💬 Today: {usage.today.messages}/{usage.today.limits.messages} messages</span>
+          <span>🎤 {usage.today.voiceTurns}/{usage.today.limits.voiceTurns} voice turns</span>
+        </div>
+      )}
 
       <div style={{ ...card, marginBottom: 16 }}>
         <b>Add a student</b>
