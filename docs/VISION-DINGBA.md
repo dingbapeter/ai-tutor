@@ -1,5 +1,12 @@
 # DINGBA.AI — Product Vision & Design Direction (founder upload, 2026-08-24)
 
+**Domain: `dingba.ai` — PURCHASED by the founder (confirmed 2026-08-24).**
+**Narrative/tagline: "dingba.ai — Your Personal A.I Tutor".**
+Use the tagline verbatim in the rebrand: page titles, hero subline, email
+sender name, PWA manifest, README. Deploy targets to move to the domain when
+DNS is pointed: `WEB_ORIGIN=https://dingba.ai`, api on `api.dingba.ai`,
+mailcow sender `tutor@dingba.ai` (or similar mailbox the founder creates).
+
 Digest of the two founder documents shared at the end of the 2026-08-24
 session (feature spec + homepage design template). This file is the driving
 spec for upcoming sprints. Source images: to be added under `docs/design/`
@@ -174,5 +181,7 @@ Sections, top to bottom:
   (Amara/Kofi/Juno) stay as Dingba's "faces", per the current architecture?
 - The 3D avatar asset: source/licensing for the hoodie character (needs a
   ✅-licensed asset or commissioned art; register item, rule 2).
-- Domain(s): dingba.ai availability/ownership — needed for mailcow sender,
-  WEB_ORIGIN, and the footer.
+- ~~Domain(s): dingba.ai availability/ownership~~ ANSWERED: founder owns
+  `dingba.ai` (2026-08-24). Remaining: which mailbox name for the sender,
+  and when to point DNS (Railway custom domains + mailcow SPF/DKIM for
+  deliverability — do this before real parent emails go out).
