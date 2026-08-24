@@ -75,6 +75,13 @@ export default function Home() {
   const [examProblems, setExamProblems] = useState<Array<{ index: number; prompt: string }> | null>(null);
   const [examAnswers, setExamAnswers] = useState<Record<number, string>>({});
   const [examSubmitted, setExamSubmitted] = useState<Set<number>>(new Set());
+  const [diagProblems, setDiagProblems] = useState<Array<{ index: number; prompt: string }> | null>(null);
+  const [diagAnswers, setDiagAnswers] = useState<Record<number, string>>({});
+  const [diagSubmitted, setDiagSubmitted] = useState<Set<number>>(new Set());
+  const [diagResult, setDiagResult] = useState<{
+    skills: Array<{ skillId: string; title: string; assessed: boolean; pct: number | null }>;
+    recommend: { title: string; reason: string };
+  } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -221,6 +228,52 @@ export default function Home() {
       setInviteCode((await res.json()).code);
     } catch (e) {
       setError(e instanceof Error ? e.message : "invites unavailable");
+    }
+  }
+
+  async function startDiagnostic() {
+    if (!sessionId) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/diagnostic/start`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "level check unavailable");
+      const json = await res.json();
+      setDiagProblems(json.problems);
+      setDiagAnswers({});
+      setDiagSubmitted(new Set());
+      setDiagResult(null);
+      setShowPractice(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "level check unavailable");
+    }
+  }
+
+  async function submitDiagAnswer(index: number) {
+    const answer = diagAnswers[index]?.trim();
+    if (!answer || !sessionId) return;
+    const res = await fetch(`${API}/sessions/${sessionId}/diagnostic/answer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ problemIndex: index, answer }),
+    });
+    if (res.ok) setDiagSubmitted((s) => new Set(s).add(index));
+  }
+
+  async function finishDiagnostic() {
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/diagnostic/finish`, { method: "POST" });
+      if (!res.ok) throw new Error("could not finish the level check");
+      const json = await res.json();
+      setDiagProblems(null);
+      setDiagResult({ skills: json.skills, recommend: json.recommend });
+      setMessages((m) => [...m, { role: "assistant", content: json.note }]);
+      if (voiceOn && json.note) speakMessage(json.note);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not finish the level check");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -609,6 +662,7 @@ export default function Home() {
           </button>
           {!participantId && (
             <>
+              <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>
               <button onClick={inviteFriend} className="btn quiet small">Invite</button>
               <button onClick={startExam} className="btn quiet small">Mock exam</button>
               <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>
@@ -623,6 +677,53 @@ export default function Home() {
         <div className="card tray" style={{ textAlign: "center" }}>
           Friends join with code <span className="invite-code">{inviteCode}</span>
           <div><small className="status">They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+        </div>
+      )}
+
+      {diagProblems && (
+        <div className="card tray">
+          <b>Level check. Answer what you can, skip what you can&apos;t. Results at the end.</b>
+          {diagProblems.map((p) => (
+            <div key={p.index} className="row">
+              <span style={{ flex: 1 }}>{diagSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
+              <input value={diagAnswers[p.index] ?? ""} disabled={diagSubmitted.has(p.index)}
+                onChange={(e) => setDiagAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
+                className="inp" placeholder="answer" />
+              <button onClick={() => submitDiagAnswer(p.index)} disabled={diagSubmitted.has(p.index)}
+                className="btn quiet small">Lock in</button>
+            </div>
+          ))}
+          <button onClick={finishDiagnostic} disabled={busy || diagSubmitted.size === 0} className="btn" style={{ marginTop: 8 }}>
+            Show me where I stand
+          </button>
+        </div>
+      )}
+
+      {diagResult && (
+        <div className="card tray">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <b>Where you stand</b>
+            <button onClick={() => setDiagResult(null)} className="btn quiet small">Close</button>
+          </div>
+          {diagResult.skills.map((s) => (
+            <div key={s.skillId} style={{ margin: "8px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 3 }}>
+                <span>{s.title}</span>
+                <span style={{ color: "var(--text-dim)" }}>{s.assessed ? `${s.pct}%` : "not assessed"}</span>
+              </div>
+              <div style={{ background: "var(--surface-2)", borderRadius: 6, height: 9 }}>
+                <div style={{
+                  width: `${s.assessed ? s.pct : 0}%`, height: "100%", borderRadius: 6,
+                  background: (s.pct ?? 0) >= 70 ? "var(--ok)" : (s.pct ?? 0) >= 40 ? "#d9a13f" : "var(--danger)",
+                  transition: "width .4s",
+                }} />
+              </div>
+            </div>
+          ))}
+          <p style={{ margin: "8px 0 0", fontSize: 14 }}>
+            Starting point: <b>{diagResult.recommend.title}</b>{" "}
+            <span style={{ color: "var(--text-dim)" }}>({diagResult.recommend.reason})</span>
+          </p>
         </div>
       )}
 

@@ -340,6 +340,50 @@ describe("platform basics", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  it("runs a diagnostic: sealed verdicts, per-skill picture, weak-first recommendation, mastery seeded", async () => {
+    const { sessionId } = await createSession("Femi");
+    const start = await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/start` });
+    expect(start.statusCode).toBe(200);
+    const { problems } = start.json() as { problems: Array<{ index: number; prompt: string; skillId: string }> };
+    expect(problems.length).toBeGreaterThanOrEqual(4);
+
+    // Two different skills, both answered wrong: the curriculum-earliest one
+    // must win the recommendation.
+    const first = problems[0];
+    const a1 = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/diagnostic/answer`,
+      payload: { problemIndex: first.index, answer: "999999" },
+    });
+    expect(a1.statusCode).toBe(200);
+    expect(a1.json()).not.toHaveProperty("correct"); // sealed until finish
+
+    const second = problems.find((p) => p.skillId !== first.skillId)!;
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/diagnostic/answer`,
+      payload: { problemIndex: second.index, answer: "999999" },
+    });
+
+    const fin = await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/finish` });
+    expect(fin.statusCode).toBe(200);
+    const json = fin.json() as {
+      skills: Array<{ skillId: string; assessed: boolean; pct: number | null }>;
+      recommend: { skillId: string; reason: string };
+      note: string;
+    };
+    const assessed = json.skills.filter((s) => s.assessed);
+    expect(assessed.length).toBe(2);
+    expect(json.skills.some((s) => !s.assessed)).toBe(true);
+    // Both scored 0; the curriculum-earliest weak skill wins the recommendation.
+    expect(json.recommend.skillId).toBe(first.skillId);
+    expect(json.recommend.reason).toBe("shakiest first");
+    expect(json.note.length).toBeGreaterThan(0);
+
+    // Finishing twice is a client error, not a crash.
+    expect((await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/finish` })).statusCode).toBe(404);
+  });
+
   it("serves rubric problems for conversation packs without leaking criteria", async () => {
     const res = await app.inject({ url: "/packs/visa-prep/problems" });
     expect(res.statusCode).toBe(200);

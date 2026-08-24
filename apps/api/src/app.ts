@@ -44,6 +44,11 @@ interface LiveSession {
     answers: Map<number, { answer: string; correct: boolean | null }>;
     startedAt: number;
   };
+  /** Placement diagnostic: verdicts sealed until finish, results seed mastery. */
+  diagnostic?: {
+    problemIndexes: number[];
+    answers: Map<number, { answer: string; correct: boolean | null }>;
+  };
   /** Live-class state: friends sitting in, each paying their own way. */
   inviteCode?: string;
   participants: Map<string, Participant>;
@@ -1359,6 +1364,149 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   // ---- Exam mode (premium): timed mock, silent grading, post-mortem ----
+
+  /**
+   * Diagnostic assessment: "let's find out what you already know". Verifiable
+   * problems across the pack's skills, verdicts sealed until finish, then a
+   * per-skill picture, a starting recommendation, and mastery seeded so the
+   * adaptive engine starts from reality instead of assumptions.
+   */
+  app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/start", async (req, reply) => {
+    const session = live.get(req.params.id);
+    if (!session) return reply.code(404).send({ error: "no such session" });
+    if (session.diagnostic) return reply.code(409).send({ error: "a level check is already in progress" });
+    const pack = loadPack(session.packId);
+
+    // Up to 2 machine-verifiable problems per skill, in curriculum order.
+    const verifiable = (p: (typeof pack.problems)[number]) =>
+      ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) || p.answer !== undefined;
+    const problemIndexes: number[] = [];
+    for (const skill of pack.skills) {
+      const picked = pack.problems
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => p.skillId === skill.id && verifiable(p))
+        .slice(0, 2)
+        .map(({ i }) => i);
+      problemIndexes.push(...picked);
+      if (problemIndexes.length >= 12) break;
+    }
+    if (problemIndexes.length === 0) {
+      return reply.code(400).send({ error: "this subject has no checkable problems yet, your tutor will place you in conversation instead" });
+    }
+    session.diagnostic = { problemIndexes: problemIndexes.slice(0, 12), answers: new Map() };
+    return {
+      problems: session.diagnostic.problemIndexes.map((i) => ({
+        index: i,
+        prompt: pack.problems[i].prompt,
+        skillId: pack.problems[i].skillId,
+      })),
+    };
+  });
+
+  app.post<{ Params: { id: string }; Body: { problemIndex: number; answer: string } }>(
+    "/sessions/:id/diagnostic/answer",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["problemIndex", "answer"],
+          additionalProperties: false,
+          properties: {
+            problemIndex: { type: "integer", minimum: 0 },
+            answer: { type: "string", minLength: 1, maxLength: 500 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const session = live.get(req.params.id);
+      if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
+      if (!session.diagnostic.problemIndexes.includes(req.body.problemIndex)) {
+        return reply.code(400).send({ error: "not part of this level check" });
+      }
+      const problem = loadPack(session.packId).problems[req.body.problemIndex];
+      const answer = req.body.answer.trim();
+      let correct = await verifyAnswer(problem.check as Check, answer);
+      if (correct === null && problem.answer !== undefined) {
+        correct = answer.replace(/\s/g, "") === String(problem.answer).replace(/\s/g, "");
+      }
+      await meter(session, "practice");
+      session.diagnostic.answers.set(req.body.problemIndex, { answer, correct });
+      return { received: true, answered: session.diagnostic.answers.size, of: session.diagnostic.problemIndexes.length };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/finish", async (req, reply) => {
+    const session = live.get(req.params.id);
+    if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
+    const pack = loadPack(session.packId);
+    const diag = session.diagnostic;
+    session.diagnostic = undefined;
+
+    // Per-skill picture from what was actually answered.
+    const bySkill = new Map<string, { correct: number; total: number }>();
+    for (const i of diag.problemIndexes) {
+      const p = pack.problems[i];
+      const a = diag.answers.get(i);
+      if (!p.skillId || !a) continue;
+      const o = bySkill.get(String(p.skillId)) ?? { correct: 0, total: 0 };
+      o.total += 1;
+      if (a.correct) o.correct += 1;
+      bySkill.set(String(p.skillId), o);
+      await store.recordAttempt(session.studentId, String(p.skillId), Boolean(a.correct));
+      const so = session.skillOutcomes.get(String(p.skillId)) ?? { correct: 0, total: 0 };
+      so.total += 1;
+      if (a.correct) so.correct += 1;
+      session.skillOutcomes.set(String(p.skillId), so);
+    }
+
+    const skillsOut = pack.skills.map((s) => {
+      const o = bySkill.get(s.id);
+      return {
+        skillId: s.id,
+        title: s.title,
+        assessed: Boolean(o),
+        pct: o ? Math.round((o.correct / o.total) * 100) : null,
+      };
+    });
+
+    // Start where the ladder actually breaks: the first skill (in curriculum
+    // order) scoring under 60; else the first skill not yet assessed; else
+    // the last skill as a stretch.
+    const weak = skillsOut.find((s) => s.assessed && (s.pct ?? 0) < 60);
+    const fresh = skillsOut.find((s) => !s.assessed);
+    const recommend = weak ?? fresh ?? skillsOut[skillsOut.length - 1];
+    const reason = weak ? "shakiest first" : fresh ? "not tried yet" : "ready to stretch";
+
+    // The tutor reacts in their own voice; a plain line covers a model failure.
+    const summary = skillsOut
+      .map((s) => `${s.title}: ${s.assessed ? `${s.pct}%` : "not assessed"}`)
+      .join(", ");
+    let note = "";
+    try {
+      for await (const delta of gateway.planner.chat(
+        [
+          ...session.history,
+          {
+            role: "user",
+            content: `[LEVEL CHECK DONE. Results: ${summary}. Recommended starting point: ${recommend.title} (${reason}). As the tutor, react in two or three warm sentences: name one thing that clearly stuck, name what you'll start with and why, no lists.]`,
+          },
+        ],
+        { signal: AbortSignal.timeout(60_000) },
+      ))
+        note += delta;
+    } catch {
+      note = "";
+    }
+    if (!note.trim()) {
+      note = `Good work. Here's where you stand: ${summary}. We'll start with ${recommend.title}.`;
+    }
+    note = note.trim();
+    session.history.push({ role: "assistant", content: note });
+    await store.saveMessage(session.id, "assistant", note);
+
+    return { skills: skillsOut, recommend: { skillId: recommend.skillId, title: recommend.title, reason }, note };
+  });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/exam/start", async (req, reply) => {
     const session = live.get(req.params.id);
