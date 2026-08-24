@@ -52,11 +52,12 @@ H. **Share-a-recap; richer motivation loop** (goals, rewards) — product
    backlog, not risks.
 H2. **App-shell rebuild** — founder verdict on first live deploy (2026-08-24):
    "too simplistic"; upgraded to "feel like an app, not a website".
-   PARTIALLY DONE (same day): design system (indigo tokens, dark mode,
-   Plus Jakarta Sans, motion), app bar + wordmark, restyled home and
-   session screens, immersive session (app bar hides). STILL OLD STYLE:
-   account, credits, terms, privacy, reset, verify pages; no bottom tab
-   nav yet; screenshots verified light/dark/mobile/desktop locally.
+   DONE same day for every existing page: design system (indigo tokens,
+   dark mode, Plus Jakarta Sans, motion), app bar + wordmark, immersive
+   session, home/session/account/credits/terms/privacy/reset/verify all
+   restyled; light/dark/mobile/desktop screenshot-verified locally.
+   Remaining: bottom tab nav (worth it once Progress/Library sections
+   exist), real-device pass at deploy (register item A).
 I. **Pedagogy eval harness** — needed before/after every deploy-model swap;
    design in HANDOFF next-work list.
 J. **Ongoing red-teaming** of safety — periodic, human-led, never "done".

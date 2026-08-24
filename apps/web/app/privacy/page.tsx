@@ -1,14 +1,14 @@
 export default function Privacy() {
   return (
-    <main style={{ maxWidth: 720, margin: "32px auto", padding: 16, lineHeight: 1.6 }}>
+    <main className="shell wide" style={{ lineHeight: 1.6 }}>
       <h1>Privacy Policy</h1>
-      <p style={{ background: "#fff8e6", padding: "10px 14px", borderRadius: 8, color: "#7a5a00" }}>
-        <b>Draft</b> — pending legal review before public launch.
+      <p className="notice">
+        <b>Draft</b>: pending legal review before public launch.
       </p>
       <h3>What we collect</h3>
       <p>
         Account email and password (stored hashed), student first names, session conversations,
-        practice results, and usage counts. Voice recordings are transcribed and then discarded —
+        practice results, and usage counts. Voice recordings are transcribed and then discarded;
         we keep the text, not the audio.
       </p>
       <h3>Why</h3>
@@ -26,11 +26,11 @@ export default function Privacy() {
       <p>
         Conversations are processed by AI models we host ourselves. Where a third-party AI service is
         used for safety classification, only the text needed for that check is sent, and it is credited
-        on our <a href="/credits" style={{ color: "#2b4c8c" }}>credits page</a>.
+        on our <a href="/credits">credits page</a>.
       </p>
       <h3>Your rights</h3>
       <p>
-        Access, correction, export, and full deletion — the &ldquo;Delete my account and all data&rdquo;
+        Access, correction, export, and full deletion: the &ldquo;Delete my account and all data&rdquo;
         button on your account page erases the account, every student profile, all conversations,
         progress, and safety records, immediately and irreversibly.
       </p>
@@ -39,7 +39,7 @@ export default function Privacy() {
         Passwords are bcrypt-hashed; access tokens are stored hashed and expire after 30 days;
         password reset links live for one hour. Report concerns to the contact address on our site.
       </p>
-      <p><a href="/" style={{ color: "#68718a" }}>← back</a></p>
+      <p><a href="/">← back</a></p>
     </main>
   );
 }

@@ -25,21 +25,21 @@ function VerifyInner() {
   }, [token]);
 
   return (
-    <main style={{ maxWidth: 480, margin: "80px auto", padding: 16, textAlign: "center" }}>
+    <main className="shell" style={{ maxWidth: 480, textAlign: "center", paddingTop: 60 }}>
       {state === "working" && <p>Confirming your email…</p>}
       {state === "done" && (
-        <>
-          <h1>✅ Email confirmed</h1>
+        <div className="card fadeUp">
+          <h1>Email confirmed ✅</h1>
           <p>Recaps and safety alerts will reach this inbox from now on.</p>
-          <p><a href="/account">Go to your dashboard →</a></p>
-        </>
+          <p><a href="/account">Go to your dashboard</a></p>
+        </div>
       )}
       {state === "failed" && (
-        <>
+        <div className="card fadeUp">
           <h1>That link didn&apos;t work</h1>
           <p>It may have expired (links last 24 hours) or already been used.</p>
           <p>You can request a fresh one from the banner on your <a href="/account">account page</a>.</p>
-        </>
+        </div>
       )}
     </main>
   );
@@ -47,7 +47,7 @@ function VerifyInner() {
 
 export default function Verify() {
   return (
-    <Suspense fallback={<main style={{ maxWidth: 480, margin: "80px auto", padding: 16, textAlign: "center" }}><p>Loading…</p></main>}>
+    <Suspense fallback={<main className="shell" style={{ maxWidth: 480, textAlign: "center", paddingTop: 60 }}><p>Loading…</p></main>}>
       <VerifyInner />
     </Suspense>
   );

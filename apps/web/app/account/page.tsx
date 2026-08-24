@@ -204,81 +204,80 @@ export default function Account() {
 
   if (!token) {
     return (
-      <main style={{ maxWidth: 460, margin: "48px auto", padding: 16 }}>
-        <h1 style={{ textAlign: "center" }}>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-        {error && <p style={errBox}>{error}</p>}
-        <div style={card}>
+      <main className="shell" style={{ maxWidth: 480 }}>
+        <div className="hero fadeUp" style={{ paddingBottom: 12 }}>
+          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+        </div>
+        {error && <p className="err">{error}</p>}
+        <div className="card fadeUp">
           {mode === "register" && (
             <>
-              <label style={lbl}>Your name</label>
-              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={inp} />
-              <label style={lbl}>I am a…</label>
+              <label className="lbl">Your name</label>
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="inp" />
+              <label className="lbl">I am a…</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setRole("parent")} style={{ ...pill, ...(role === "parent" ? pillOn : {}) }}>
-                  Parent — my kids will learn
+                <button onClick={() => setRole("parent")} className={`pill${role === "parent" ? " on" : ""}`} style={{ flex: 1 }}>
+                  <span><b>Parent</b><br /><small>my kids will learn</small></span>
                 </button>
-                <button onClick={() => setRole("student")} style={{ ...pill, ...(role === "student" ? pillOn : {}) }}>
-                  Learner — it&apos;s for me
+                <button onClick={() => setRole("student")} className={`pill${role === "student" ? " on" : ""}`} style={{ flex: 1 }}>
+                  <span><b>Learner</b><br /><small>it&apos;s for me</small></span>
                 </button>
               </div>
             </>
           )}
-          <label style={lbl}>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} style={inp} type="email" />
-          <label style={lbl}>Password {mode === "register" && <small>(8+ characters)</small>}</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} style={inp} type="password"
+          <label className="lbl">Email</label>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} className="inp" type="email" />
+          <label className="lbl">Password {mode === "register" && <small>(8+ characters)</small>}</label>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} className="inp" type="password"
             onKeyDown={(e) => e.key === "Enter" && submit()} />
           {mode === "register" && (
-            <p style={{ fontSize: 13, color: "#68718a", marginBottom: 0 }}>
+            <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 0 }}>
               By creating an account you confirm you are an adult, you agree to our{" "}
-              <a href="/terms" style={{ color: "#2b4c8c" }}>Terms</a> and{" "}
-              <a href="/privacy" style={{ color: "#2b4c8c" }}>Privacy Policy</a>, and you consent to your
+              <a href="/terms">Terms</a> and{" "}
+              <a href="/privacy">Privacy Policy</a>, and you consent to your
               children&apos;s learning data being processed to run their tutoring.
             </p>
           )}
-          <button onClick={submit} style={{ ...btn, marginTop: 16, width: "100%" }}>
+          <button onClick={submit} className="btn big" style={{ marginTop: 18 }}>
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
           <p style={{ textAlign: "center", marginBottom: 0 }}>
             <button onClick={() => setMode(mode === "login" ? "register" : "login")}
-              style={{ border: "none", background: "none", color: "#2b4c8c", cursor: "pointer" }}>
+              style={{ border: "none", background: "none", color: "var(--brand)", cursor: "pointer", fontFamily: "inherit", fontSize: 14.5 }}>
               {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
             </button>
           </p>
           {mode === "login" && (
             <p style={{ textAlign: "center", marginBottom: 0 }}>
               {forgotSent ? (
-                <small style={{ color: "#4a7d5f" }}>If that email has an account, a reset link is on its way. ✉️</small>
+                <small style={{ color: "var(--ok)" }}>If that email has an account, a reset link is on its way. ✉️</small>
               ) : (
                 <button onClick={forgotPassword}
-                  style={{ border: "none", background: "none", color: "#68718a", cursor: "pointer", fontSize: 13 }}>
+                  style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
                   Forgot password?
                 </button>
               )}
             </p>
           )}
-          <p style={{ textAlign: "center", marginBottom: 0 }}>
-            <a href="/" style={{ color: "#68718a" }}>← back to tutoring</a>
-          </p>
         </div>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "32px auto", padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>Family dashboard</h1>
-        <div>
-          <small style={{ color: "#68718a", marginRight: 12 }}>{meEmail}</small>
-          <button onClick={signOut} style={{ ...btn, background: "#8a93a6" }}>Sign out</button>
+    <main className="shell wide">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <h1 style={{ margin: "6px 0" }}>Family dashboard</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <small style={{ color: "var(--text-dim)" }}>{meEmail}</small>
+          <button onClick={signOut} className="btn quiet small">Sign out</button>
         </div>
       </div>
-      {error && <p style={errBox}>{error}</p>}
+      {error && <p className="err">{error}</p>}
 
       {!emailVerified && (
-        <p style={{ background: "#fff8e6", color: "#7a5a00", borderRadius: 8, padding: "10px 14px" }}>
-          📧 Please confirm your email so recaps and safety alerts reach you — check your inbox.{" "}
+        <p className="notice">
+          Please confirm your email so recaps and safety alerts reach you. Check your inbox.{" "}
           {verifySent ? (
             <b>Sent!</b>
           ) : (
@@ -290,7 +289,7 @@ export default function Account() {
                 }).catch(() => {});
                 setVerifySent(true);
               }}
-              style={{ border: "none", background: "none", color: "#7a5a00", textDecoration: "underline", cursor: "pointer", padding: 0 }}
+              style={{ border: "none", background: "none", color: "inherit", textDecoration: "underline", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
             >
               Resend the link
             </button>
@@ -299,29 +298,25 @@ export default function Account() {
       )}
 
       {usage && (
-        <div style={{ ...card, marginBottom: 16, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="card" style={{ marginBottom: 14, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
           <b style={{ textTransform: "capitalize" }}>{usage.plan} plan</b>
           <span>💬 Today: {usage.today.messages}/{usage.today.limits.messages} messages</span>
           <span>🎤 {usage.today.voiceTurns}/{usage.today.limits.voiceTurns} voice turns</span>
           {pushState === "on" ? (
-            <span style={{ color: "#4a7d5f" }}>🔔 Notifications on</span>
+            <span style={{ color: "var(--ok)" }}>🔔 Notifications on</span>
           ) : pushState === "unsupported" ? (
-            <small style={{ color: "#68718a" }}>notifications unsupported on this browser</small>
+            <small style={{ color: "var(--text-dim)" }}>notifications unsupported on this browser</small>
           ) : (
-            <button onClick={enableNotifications} style={{ ...btn, padding: "6px 12px", fontSize: 13 }}>
-              🔔 Enable study reminders
-            </button>
+            <button onClick={enableNotifications} className="btn quiet small">🔔 Enable study reminders</button>
           )}
           {billingOn && usage.plan !== "premium" && (
-            <span>
+            <span style={{ display: "flex", gap: 8 }}>
               {usage.plan === "free" && (
-                <button disabled={upgrading !== null} onClick={() => upgrade("plus")}
-                  style={{ ...btn, padding: "6px 12px", fontSize: 13, marginRight: 8 }}>
+                <button disabled={upgrading !== null} onClick={() => upgrade("plus")} className="btn small">
                   {upgrading === "plus" ? "Opening checkout…" : "⭐ Upgrade to Plus"}
                 </button>
               )}
-              <button disabled={upgrading !== null} onClick={() => upgrade("premium")}
-                style={{ ...btn, padding: "6px 12px", fontSize: 13, background: "#6b4c8c" }}>
+              <button disabled={upgrading !== null} onClick={() => upgrade("premium")} className="btn small" style={{ background: "var(--brand-deep)" }}>
                 {upgrading === "premium" ? "Opening checkout…" : "👑 Go Premium"}
               </button>
             </span>
@@ -329,28 +324,28 @@ export default function Account() {
         </div>
       )}
 
-      <div style={{ ...card, marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 14 }}>
         <b>Add a student</b>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <input value={newChild} onChange={(e) => setNewChild(e.target.value)} style={{ ...inp, margin: 0 }}
+          <input value={newChild} onChange={(e) => setNewChild(e.target.value)} className="inp"
             placeholder="Child's name" onKeyDown={(e) => e.key === "Enter" && addChild()} />
-          <button onClick={addChild} style={btn}>Add</button>
+          <button onClick={addChild} className="btn">Add</button>
         </div>
       </div>
 
-      {students.length === 0 && <p>No students yet — add one above, then start a session from the <a href="/">home page</a>.</p>}
+      {students.length === 0 && <p>No students yet. Add one above, then start a session from the <a href="/">home page</a>.</p>}
 
       {students.length > 0 && (
         <p style={{ textAlign: "right" }}>
           <button onClick={deleteEverything}
-            style={{ border: "none", background: "none", color: "#c0605a", cursor: "pointer", fontSize: 13 }}>
+            style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
             Delete my account and all data
           </button>
         </p>
       )}
 
       {students.map((s) => (
-        <div key={s.id} style={{ ...card, marginBottom: 16 }}>
+        <div key={s.id} className="card fadeUp" style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ margin: 0 }}>
               {s.displayName}
@@ -358,17 +353,17 @@ export default function Account() {
                 <span style={{ fontSize: 15, marginLeft: 10 }}>🔥 {s.streakDays}-day streak</span>
               )}
             </h2>
-            <span>
+            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button onClick={() => viewTranscript(s.id)}
-                style={{ border: "none", background: "none", color: "#68718a", cursor: "pointer", marginRight: 12 }}>
+                style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}>
                 {transcript?.studentId === s.id ? "Hide transcript" : "View transcript"}
               </button>
-              <a href="/" style={{ color: "#2b4c8c" }}>Start a session →</a>
+              <a href="/">Start a session</a>
             </span>
           </div>
 
           {transcript?.studentId === s.id && (
-            <div style={{ background: "#f6f7fb", borderRadius: 8, padding: 12, margin: "10px 0", maxHeight: 260, overflowY: "auto" }}>
+            <div style={{ background: "var(--surface-2)", borderRadius: 10, padding: 12, margin: "10px 0", maxHeight: 260, overflowY: "auto" }}>
               {transcript.messages.length === 0 && <small>No conversation recorded yet.</small>}
               {transcript.messages.map((m, i) => (
                 <p key={i} style={{ margin: "4px 0", fontSize: 13 }}>
@@ -384,10 +379,10 @@ export default function Account() {
               {s.mastery.map((m) => (
                 <div key={m.skillId} style={{ marginBottom: 6 }}>
                   <small>{m.skillId.split(".").slice(1).join(" · ").replace(/-/g, " ")}</small>
-                  <div style={{ background: "#e7ebf4", borderRadius: 6, height: 10 }}>
+                  <div style={{ background: "var(--surface-2)", borderRadius: 6, height: 10 }}>
                     <div style={{
                       width: `${Math.round(m.level * 100)}%`, height: "100%", borderRadius: 6,
-                      background: m.level > 0.7 ? "#4a7d5f" : m.level > 0.35 ? "#d9a13f" : "#c0605a",
+                      background: m.level > 0.7 ? "var(--ok)" : m.level > 0.35 ? "#d9a13f" : "var(--danger)",
                       transition: "width .4s",
                     }} />
                   </div>
@@ -400,8 +395,8 @@ export default function Account() {
             <>
               <h4 style={{ marginBottom: 6 }}>Recent sessions</h4>
               {s.sessions.map((sess, i) => (
-                <div key={i} style={{ borderLeft: "3px solid #ccd3e0", paddingLeft: 10, marginBottom: 8 }}>
-                  <small style={{ color: "#68718a" }}>{new Date(sess.startedAt).toLocaleString()}</small>
+                <div key={i} style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10, marginBottom: 8 }}>
+                  <small style={{ color: "var(--text-dim)" }}>{new Date(sess.startedAt).toLocaleString()}</small>
                   <p style={{ margin: "4px 0", whiteSpace: "pre-wrap" }}>
                     {sess.summary ? sess.summary.slice(0, 300) : sess.endedAt ? "(no recap)" : "(in progress)"}
                   </p>
@@ -409,14 +404,14 @@ export default function Account() {
               ))}
             </>
           )}
-          {s.sessions.length === 0 && <small style={{ color: "#68718a" }}>No sessions yet — a fresh start is a beautiful thing.</small>}
+          {s.sessions.length === 0 && <small style={{ color: "var(--text-dim)" }}>No sessions yet. A fresh start is a beautiful thing.</small>}
 
           {s.safety?.length > 0 && (
             <>
-              <h4 style={{ marginBottom: 6, color: "#9d2b2b" }}>Flagged moments ({s.safety.length})</h4>
+              <h4 style={{ marginBottom: 6, color: "var(--danger)" }}>Flagged moments ({s.safety.length})</h4>
               {s.safety.map((i, idx) => (
-                <div key={idx} style={{ borderLeft: `3px solid ${i.severity === "danger" ? "#c0605a" : "#d9a13f"}`, paddingLeft: 10, marginBottom: 8 }}>
-                  <small style={{ color: "#68718a" }}>
+                <div key={idx} style={{ borderLeft: `3px solid ${i.severity === "danger" ? "var(--danger)" : "#d9a13f"}`, paddingLeft: 10, marginBottom: 8 }}>
+                  <small style={{ color: "var(--text-dim)" }}>
                     {new Date(i.createdAt).toLocaleString()} · {i.severity} · {i.categories.join(", ")} · said by {i.direction === "student" ? s.displayName : "the tutor"}
                   </small>
                   <p style={{ margin: "2px 0", fontSize: 14 }}>&ldquo;{i.excerpt}&rdquo;</p>
@@ -429,11 +424,3 @@ export default function Account() {
     </main>
   );
 }
-
-const card: React.CSSProperties = { background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(20,30,60,.08)" };
-const lbl: React.CSSProperties = { display: "block", margin: "14px 0 6px", fontWeight: 600 };
-const inp: React.CSSProperties = { width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccd3e0", fontSize: 15, boxSizing: "border-box" };
-const btn: React.CSSProperties = { padding: "10px 18px", borderRadius: 8, border: "none", background: "#2b4c8c", color: "#fff", fontSize: 15, cursor: "pointer" };
-const pill: React.CSSProperties = { padding: "10px 14px", borderRadius: 10, border: "1px solid #ccd3e0", background: "#fff", cursor: "pointer", flex: 1 };
-const pillOn: React.CSSProperties = { border: "2px solid #2b4c8c", background: "#eef1f8" };
-const errBox: React.CSSProperties = { background: "#fdecec", color: "#9d2b2b", borderRadius: 8, padding: "10px 14px", margin: "8px 0" };

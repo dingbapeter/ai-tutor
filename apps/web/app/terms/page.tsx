@@ -1,9 +1,9 @@
 export default function Terms() {
   return (
-    <main style={{ maxWidth: 720, margin: "32px auto", padding: 16, lineHeight: 1.6 }}>
+    <main className="shell wide" style={{ lineHeight: 1.6 }}>
       <h1>Terms of Service</h1>
-      <p style={{ background: "#fff8e6", padding: "10px 14px", borderRadius: 8, color: "#7a5a00" }}>
-        <b>Draft</b> — pending legal review before public launch.
+      <p className="notice">
+        <b>Draft</b>: pending legal review before public launch.
       </p>
       <h3>The service</h3>
       <p>
@@ -30,15 +30,15 @@ export default function Terms() {
       </p>
       <h3>Your data</h3>
       <p>
-        See the <a href="/privacy" style={{ color: "#2b4c8c" }}>Privacy Policy</a>. Short version: learning
+        See the <a href="/privacy">Privacy Policy</a>. Short version: learning
         data exists to teach your family, is never sold, and you can delete everything with one action.
       </p>
       <h3>Liability</h3>
       <p>
         The service is provided as-is; we work hard on accuracy (including machine-verifying math),
-        but no tutor — human or AI — is infallible. Our liability is limited to fees paid in the last 12 months.
+        but no tutor, human or AI, is infallible. Our liability is limited to fees paid in the last 12 months.
       </p>
-      <p><a href="/" style={{ color: "#68718a" }}>← back</a></p>
+      <p><a href="/">← back</a></p>
     </main>
   );
 }

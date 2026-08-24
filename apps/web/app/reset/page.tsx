@@ -31,18 +31,16 @@ function ResetForm() {
   if (done)
     return (
       <p>
-        ✅ Password changed — <a href="/account" style={{ color: "#2b4c8c" }}>sign in with your new password</a>.
+        Password changed. <a href="/account">Sign in with your new password</a>.
       </p>
     );
   return (
     <>
-      {error && <p style={{ background: "#fdecec", color: "#9d2b2b", borderRadius: 8, padding: "10px 14px" }}>{error}</p>}
-      <label style={{ display: "block", margin: "14px 0 6px", fontWeight: 600 }}>New password (8+ characters)</label>
+      {error && <p className="err">{error}</p>}
+      <label className="lbl">New password (8+ characters)</label>
       <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccd3e0", fontSize: 15, boxSizing: "border-box" }} />
-      <button onClick={submit}
-        style={{ marginTop: 16, width: "100%", padding: "10px 18px", borderRadius: 8, border: "none", background: "#2b4c8c", color: "#fff", fontSize: 15, cursor: "pointer" }}>
+        onKeyDown={(e) => e.key === "Enter" && submit()} className="inp" />
+      <button onClick={submit} className="btn big" style={{ marginTop: 16 }}>
         Set new password
       </button>
     </>
@@ -51,9 +49,9 @@ function ResetForm() {
 
 export default function Reset() {
   return (
-    <main style={{ maxWidth: 420, margin: "48px auto", padding: 16 }}>
+    <main className="shell" style={{ maxWidth: 440 }}>
       <h1>Choose a new password</h1>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 1px 4px rgba(20,30,60,.08)" }}>
+      <div className="card">
         <Suspense fallback={<p>…</p>}>
           <ResetForm />
         </Suspense>
