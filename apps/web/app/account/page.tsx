@@ -16,6 +16,12 @@ interface LearnerProfile {
   interests: string[];
   preferences: string[];
 }
+interface LearnerRoutine {
+  subjects: string[];
+  weekly: Array<{ day: string; blocks: Array<{ time?: string; subject: string }> }>;
+  examDates: Array<{ date: string; label: string }>;
+  notes: string;
+}
 interface StudentRow {
   id: string;
   displayName: string;
@@ -24,6 +30,7 @@ interface StudentRow {
   safety: Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: string }>;
   streakDays?: number;
   profile?: LearnerProfile | null;
+  routine?: LearnerRoutine | null;
 }
 
 const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
@@ -56,6 +63,7 @@ export default function Account() {
   const [verifySent, setVerifySent] = useState(false);
   const [billingOn, setBillingOn] = useState(false);
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [routineBusy, setRoutineBusy] = useState<string | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
@@ -176,6 +184,29 @@ export default function Account() {
       setPushState(res.ok ? "on" : "off");
     } catch {
       setPushState("off");
+    }
+  }
+
+  async function uploadRoutine(studentId: string, file: File) {
+    if (!token) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("That image is too large. Keep it under 5MB.");
+      return;
+    }
+    setRoutineBusy(studentId);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/routine`, {
+        method: "POST",
+        headers: { "content-type": file.type || "image/jpeg", authorization: `Bearer ${token}` },
+        body: file,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "could not read that timetable");
+      await refresh(token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not read that timetable");
+    } finally {
+      setRoutineBusy(null);
     }
   }
 
@@ -387,6 +418,60 @@ export default function Account() {
                 </p>
               ))}
             </div>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", flexWrap: "wrap" }}>
+            <label className="btn quiet small" style={{ cursor: "pointer" }}>
+              {routineBusy === s.id ? "Reading timetable…" : s.routine ? "Replace timetable" : "📅 Upload timetable"}
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                disabled={routineBusy !== null}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadRoutine(s.id, f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <small style={{ color: "var(--text-dim)" }}>
+              {s.routine
+                ? "Their tutor plans around this schedule."
+                : "A photo or screenshot of their timetable teaches Dingba their week."}
+            </small>
+          </div>
+
+          {s.routine && (s.routine.subjects.length > 0 || s.routine.weekly.length > 0 || s.routine.examDates.length > 0 || s.routine.notes) && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>Learning routine</h4>
+              {s.routine.subjects.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                  {s.routine.subjects.map((sub) => (
+                    <span key={sub} style={{ fontSize: 13, background: "var(--surface-2)", borderRadius: 999, padding: "2px 10px" }}>{sub}</span>
+                  ))}
+                </div>
+              )}
+              {s.routine.weekly.map((d) => (
+                <p key={d.day} style={{ margin: "2px 0", fontSize: 13.5 }}>
+                  <b>{d.day}</b>{" "}
+                  <span style={{ color: "var(--text-dim)" }}>
+                    {d.blocks.map((b) => (b.time ? `${b.subject} (${b.time})` : b.subject)).join(" · ")}
+                  </span>
+                </p>
+              ))}
+              {s.routine.examDates.length > 0 && (
+                <p style={{ margin: "4px 0", fontSize: 13.5 }}>
+                  <b>Exams:</b>{" "}
+                  <span style={{ color: "var(--text-dim)" }}>
+                    {s.routine.examDates.map((e) => `${e.label} (${e.date})`).join(" · ")}
+                  </span>
+                </p>
+              )}
+              {s.routine.subjects.length === 0 && s.routine.weekly.length === 0 && s.routine.examDates.length === 0 && s.routine.notes && (
+                <p style={{ margin: "4px 0", fontSize: 13.5, color: "var(--text-dim)" }}>{s.routine.notes.slice(0, 300)}</p>
+              )}
+            </>
           )}
 
           {s.profile && PROFILE_SECTIONS.some(({ key }) => (s.profile?.[key] ?? []).length > 0) && (

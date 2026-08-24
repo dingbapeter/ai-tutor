@@ -96,6 +96,33 @@ function profileBlock(studentName: string, p: ProfileForPrompt | null): string {
   return `\n${studentName}'s learning profile (you built this over your sessions together — act on it, don't recite it):\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
 }
 
+export interface RoutineForPrompt {
+  subjects: string[];
+  weekly: Array<{ day: string; blocks: Array<{ time?: string; subject: string }> }>;
+  examDates: Array<{ date: string; label: string }>;
+  notes: string;
+}
+
+/** The learner's real-world routine, condensed for the tutor. */
+function routineBlock(r: RoutineForPrompt | null): string {
+  if (!r) return "";
+  const lines: string[] = [];
+  if (r.subjects.length) lines.push(`Subjects on their timetable: ${r.subjects.slice(0, 12).join(", ")}.`);
+  if (r.weekly.length) {
+    const days = r.weekly
+      .slice(0, 7)
+      .map((d) => `${d.day}: ${d.blocks.slice(0, 6).map((b) => (b.time ? `${b.subject} at ${b.time}` : b.subject)).join(", ")}`)
+      .join("; ");
+    lines.push(`Weekly schedule: ${days}.`);
+  }
+  if (r.examDates.length) {
+    lines.push(`Upcoming exams: ${r.examDates.slice(0, 6).map((e) => `${e.label} on ${e.date}`).join("; ")}.`);
+  }
+  if (!lines.length && r.notes) lines.push(`From their uploaded timetable: ${r.notes.slice(0, 300)}`);
+  if (!lines.length) return "";
+  return `\nTheir real-world learning routine (from a timetable they uploaded — plan around it, mention it when relevant):\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
+}
+
 /** Spaced-review warm-up: due skills the tutor should touch before new material. */
 function warmupBlock(skillTitles: string[]): string {
   if (!skillTitles.length) return "";
@@ -112,6 +139,7 @@ export function buildSystemPrompt(opts: {
   memoryLines: string[];
   profile?: ProfileForPrompt | null;
   warmupSkills?: string[];
+  routine?: RoutineForPrompt | null;
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
   return [
@@ -129,6 +157,7 @@ export function buildSystemPrompt(opts: {
     `7. Sound like a person, not an app: contractions, short sentences, plain punctuation (no em dashes), no canned assistant phrases like "Certainly!" or "I'd be happy to". Warmth over polish.`,
     ``,
     profileBlock(studentName, opts.profile ?? null),
+    routineBlock(opts.routine ?? null),
     warmupBlock(opts.warmupSkills ?? []),
     memoryLines.length
       ? `What you remember about ${studentName}:\n${memoryLines.map((l) => `- ${l}`).join("\n")}`

@@ -209,6 +209,17 @@ export const learnerProfiles = pgTable("learner_profiles", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * The learner's real-world routine, parsed from an uploaded timetable,
+ * curriculum, or syllabus (screenshot, photo, or pasted text). One row per
+ * student; a new upload replaces the old routine.
+ */
+export const routines = pgTable("routines", {
+  studentId: uuid("student_id").primaryKey().references(() => students.id),
+  routine: jsonb("routine").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const memories = pgTable("memories", {
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id").notNull().references(() => students.id),

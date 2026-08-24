@@ -87,6 +87,19 @@ export function masteryStage(s: { level: number; attempts: number; dueAt?: Date 
   return "introduced";
 }
 
+/**
+ * A student's real-world learning routine, parsed from an uploaded
+ * timetable/curriculum (image or text). Structure is best-effort from the
+ * model; `notes` always carries the raw transcription so nothing is lost
+ * when the model can't produce clean structure.
+ */
+export interface LearnerRoutine {
+  subjects: string[];
+  weekly: Array<{ day: string; blocks: Array<{ time?: string; subject: string }> }>;
+  examDates: Array<{ date: string; label: string }>;
+  notes: string;
+}
+
 const PROFILE_LIST_CAP = 8;
 const PROFILE_ITEM_MAX_LEN = 160;
 
@@ -132,6 +145,10 @@ export interface Store {
   /** The Dingba Brain: structured learning profile, merged after sessions. */
   getProfile(studentId: string): Promise<LearnerProfile | null>;
   updateProfile(studentId: string, patch: Partial<LearnerProfile>): Promise<void>;
+
+  /** Uploaded timetable/curriculum, parsed. A new upload replaces the old. */
+  getRoutine(studentId: string): Promise<LearnerRoutine | null>;
+  saveRoutine(studentId: string, routine: LearnerRoutine): Promise<void>;
 
   /** Mastery bookkeeping for spaced repetition & adaptive difficulty. */
   recordAttempt(studentId: string, skillId: string, correct: boolean): Promise<void>;

@@ -4,6 +4,7 @@ import {
   mergeProfile,
   scheduleAttempt,
   type LearnerProfile,
+  type LearnerRoutine,
   type SessionRecap,
   type Store,
   type UsageKind,
@@ -123,6 +124,26 @@ export class PostgresStore implements Store {
       .onConflictDoUpdate({
         target: schema.learnerProfiles.studentId,
         set: { profile: merged, updatedAt: new Date() },
+      });
+  }
+
+  async getRoutine(studentId: string): Promise<LearnerRoutine | null> {
+    const [row] = await this.db
+      .select({ routine: schema.routines.routine })
+      .from(schema.routines)
+      .where(eq(schema.routines.studentId, studentId))
+      .limit(1);
+    return row ? (row.routine as unknown as LearnerRoutine) : null;
+  }
+
+  async saveRoutine(studentId: string, routine: LearnerRoutine) {
+    const value = { ...routine } as unknown as Record<string, unknown>;
+    await this.db
+      .insert(schema.routines)
+      .values({ studentId, routine: value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: schema.routines.studentId,
+        set: { routine: value, updatedAt: new Date() },
       });
   }
 
@@ -620,6 +641,7 @@ export class PostgresStore implements Store {
       await this.db.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
       await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
       await this.db.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
+      await this.db.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
       await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
       await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
       await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));

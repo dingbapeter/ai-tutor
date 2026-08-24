@@ -2,6 +2,7 @@ import {
   mergeProfile,
   scheduleAttempt,
   type LearnerProfile,
+  type LearnerRoutine,
   type MasteryState,
   type SessionRecap,
   type Store,
@@ -13,6 +14,7 @@ export class MemoryStore implements Store {
   private students = new Map<string, { id: string; parentEmail?: string }>();
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
   private learnerProfiles = new Map<string, LearnerProfile>();
+  private routines = new Map<string, LearnerRoutine>();
   private mastery = new Map<string, Map<string, MasteryState>>();
   private sessions = new Map<
     string,
@@ -83,6 +85,14 @@ export class MemoryStore implements Store {
 
   async updateProfile(studentId: string, patch: Partial<LearnerProfile>) {
     this.learnerProfiles.set(studentId, mergeProfile(this.learnerProfiles.get(studentId) ?? null, patch));
+  }
+
+  async getRoutine(studentId: string) {
+    return this.routines.get(studentId) ?? null;
+  }
+
+  async saveRoutine(studentId: string, routine: LearnerRoutine) {
+    this.routines.set(studentId, routine);
   }
 
   async recordAttempt(studentId: string, skillId: string, correct: boolean) {
@@ -249,6 +259,7 @@ export class MemoryStore implements Store {
     for (const sid of studentIds) {
       this.profiles.delete(sid);
       this.learnerProfiles.delete(sid);
+      this.routines.delete(sid);
       this.memories.delete(sid);
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);

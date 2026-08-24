@@ -414,9 +414,108 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           safety: await store.listIncidents(s.id, 10),
           streakDays: await store.getStreakDays(s.id),
           profile: await store.getProfile(s.id),
+          routine: await store.getRoutine(s.id),
         })),
       ),
     };
+  });
+
+  /**
+   * Routine upload: a timetable/curriculum as a photo, screenshot, or pasted
+   * text. Images go through the vision slot for transcription; the planner
+   * structures the result; the raw transcription always survives in `notes`
+   * so a weak model never loses the student's data.
+   */
+  app.post<{ Params: { id: string } }>(
+    "/students/:id/routine",
+    { bodyLimit: 6 << 20 },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+
+      const contentType = String(req.headers["content-type"] ?? "");
+      let raw: string;
+      if (contentType.startsWith("image/")) {
+        const imageIn = req.body as Buffer;
+        if (!Buffer.isBuffer(imageIn) || imageIn.length === 0) {
+          return reply.code(400).send({ error: "send a raw image with an image/* content-type" });
+        }
+        raw = (
+          await gateway.vision.see(
+            new Uint8Array(imageIn),
+            contentType,
+            "This is a student's timetable, curriculum, or study schedule. Transcribe everything you can read: days, times, subjects, class names, exam dates, term dates. Be complete and factual.",
+          )
+        ).trim();
+        if (!raw) return reply.code(422).send({ error: "couldn't read anything in that image, try a clearer shot" });
+      } else {
+        const body = req.body as { text?: string } | null;
+        raw = String(body?.text ?? "").trim();
+        if (!raw) return reply.code(400).send({ error: "send an image or a JSON body with a text field" });
+        if (raw.length > 8000) return reply.code(400).send({ error: "that text is too long, keep it under 8000 characters" });
+      }
+
+      // Structure is best-effort; the transcription itself always lands.
+      let routine = { subjects: [], weekly: [], examDates: [], notes: raw.slice(0, 4000) } as import("./store/types.js").LearnerRoutine;
+      try {
+        let out = "";
+        for await (const delta of gateway.planner.chat(
+          [
+            {
+              role: "user",
+              content:
+                `A student's timetable reads:\n\n${raw.slice(0, 6000)}\n\nExtract it as ONLY this JSON, no other text: ` +
+                `{"subjects":["..."],"weekly":[{"day":"Monday","blocks":[{"time":"8:00","subject":"..."}]}],"examDates":[{"date":"2026-06-01","label":"..."}]}. ` +
+                `Omit times you can't see. Empty lists are fine.`,
+            },
+          ],
+          { signal: AbortSignal.timeout(60_000) },
+        ))
+          out += delta;
+        const parsed = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as Record<string, unknown>;
+        const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(0, 20) : []);
+        routine = {
+          subjects: strList(parsed.subjects),
+          weekly: Array.isArray(parsed.weekly)
+            ? parsed.weekly
+                .filter((d): d is { day: string; blocks: unknown } => typeof (d as { day?: unknown })?.day === "string")
+                .slice(0, 7)
+                .map((d) => ({
+                  day: d.day,
+                  blocks: Array.isArray(d.blocks)
+                    ? d.blocks
+                        .filter((b): b is { subject: string; time?: string } => typeof (b as { subject?: unknown })?.subject === "string")
+                        .slice(0, 12)
+                        .map((b) => ({ subject: b.subject, ...(typeof b.time === "string" ? { time: b.time } : {}) }))
+                    : [],
+                }))
+            : [],
+          examDates: Array.isArray(parsed.examDates)
+            ? parsed.examDates
+                .filter((e): e is { date: string; label: string } =>
+                  typeof (e as { date?: unknown })?.date === "string" && typeof (e as { label?: unknown })?.label === "string")
+                .slice(0, 12)
+            : [],
+          notes: raw.slice(0, 4000),
+        };
+      } catch {
+        // keep the deterministic fallback: everything lives in notes
+      }
+      await store.saveRoutine(req.params.id, routine);
+      return { routine };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/routine", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return { routine: await store.getRoutine(req.params.id) };
   });
 
   /** Spaced-review queue: what this student should warm up on next. */
@@ -622,6 +721,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
       const memoryLines = await store.getMemories(studentIdResolved);
       const learnerProfile = await store.getProfile(studentIdResolved);
+      const routine = await store.getRoutine(studentIdResolved);
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
@@ -638,7 +738,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         personaId,
         packId,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills }) },
+          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine }) },
         ],
         busy: false,
         practiceTotal: 0,

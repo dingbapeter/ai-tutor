@@ -60,7 +60,19 @@ Three standing directives, given as we resumed building:
    existing live-class layer (invite codes, participants, metering) with
    LiveKit as the self-hosted media backbone. Waiting on the founder to
    share the code (archive upload or repo name).
-5. **No AI tells in the product.** Nothing user-facing should read as
+5. **The platform learns your routine (2026-08-24).** Users upload their
+   curriculum, timetable, syllabus, or study schedule (screenshots and
+   photos included; the platform must interpret images), and Dingba
+   builds an understanding of their daily learning life: subjects, class
+   days and times, exam dates. Feeds the Brain, session context, and
+   later the study-plans/nudges work. Interpretation quality rides the
+   vision model; the pipeline and structure are code.
+6. **Homepage caricatures (2026-08-24).** The founder's template fronts
+   the brand with a warm caricature character; the homepage must carry a
+   cast of caricatures, shown randomly per visit. Until commissioned
+   art exists, the cast is original in-house SVG in the brand style
+   (fully owned, licensing-clean, swappable later).
+7. **No AI tells in the product.** Nothing user-facing should read as
    machine-written. Concretely: no em dashes in UI copy, marketing copy,
    emails, or canned messages; no assistant-isms ("Certainly!", "I'd be
    happy to", "As an AI"); no boilerplate hedging; contractions welcome;

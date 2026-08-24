@@ -292,6 +292,54 @@ describe("platform basics", () => {
     expect(empty.statusCode).toBe(400);
   });
 
+  it("learns a routine from an uploaded timetable image, and from pasted text", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "routine@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await app.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Tunde" } });
+    const studentId = kid.json().id as string;
+
+    // Image path: the mock vision transcribes; the mock planner returns prose,
+    // so structure fails gracefully and the transcription survives in notes.
+    const img = await app.inject({
+      method: "POST",
+      url: `/students/${studentId}/routine`,
+      headers: { ...auth, "content-type": "image/png" },
+      payload: Buffer.from([1, 2, 3, 4]),
+    });
+    expect(img.statusCode).toBe(200);
+    expect((img.json() as { routine: { notes: string } }).routine.notes.length).toBeGreaterThan(0);
+
+    // Text path replaces the routine; the raw text always lands in notes.
+    const txt = await app.inject({
+      method: "POST",
+      url: `/students/${studentId}/routine`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { text: "Monday: Maths 8:00, English 10:00. WAEC exam on 2027-05-04." },
+    });
+    expect(txt.statusCode).toBe(200);
+    expect((txt.json() as { routine: { notes: string } }).routine.notes).toContain("WAEC");
+
+    const got = await app.inject({ url: `/students/${studentId}/routine`, headers: auth });
+    expect((got.json() as { routine: { notes: string } }).routine.notes).toContain("Maths");
+
+    const stranger = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "snoop4@example.com", password: "password12", role: "parent" },
+    });
+    const denied = await app.inject({
+      method: "POST",
+      url: `/students/${studentId}/routine`,
+      headers: { authorization: `Bearer ${stranger.json().token}`, "content-type": "application/json" },
+      payload: { text: "sneaky" },
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+
   it("serves rubric problems for conversation packs without leaking criteria", async () => {
     const res = await app.inject({ url: "/packs/visa-prep/problems" });
     expect(res.statusCode).toBe(200);
