@@ -84,6 +84,7 @@ export default function Home() {
   const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
   const [format, setFormat] = useState<Format>("plain");
+  const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
@@ -160,10 +161,15 @@ export default function Home() {
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
       setSessionId(json.sessionId);
-      setMessages([]);
       setVerdicts({});
-      if (json.remembered > 0) {
+      if (json.greeting) {
+        // The tutor speaks first, like a person would.
+        setMessages([{ role: "assistant", content: json.greeting }]);
+        if (voiceOn) speakMessage(json.greeting);
+      } else if (json.remembered > 0) {
         setMessages([{ role: "assistant", content: `(Your tutor remembers your last ${json.remembered > 1 ? "sessions" : "session"}.)` }]);
+      } else {
+        setMessages([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not start session");
@@ -296,6 +302,7 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
+      let full = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -309,6 +316,7 @@ export default function Home() {
             const evt = JSON.parse(data);
             if (evt.error) throw new Error("Your tutor had trouble replying. Try that again.");
             if (evt.delta) {
+              full += evt.delta;
               setMessages((m) => {
                 const copy = [...m];
                 copy[copy.length - 1] = { role: "assistant", content: copy[copy.length - 1].content + evt.delta };
@@ -320,6 +328,7 @@ export default function Home() {
           }
         }
       }
+      if (voiceOn && full.trim()) speakMessage(full);
     } catch (e) {
       setError(e instanceof Error ? e.message : "message failed");
       setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
@@ -551,13 +560,18 @@ export default function Home() {
     <main className="session">
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} size={52} />
+          <span className="avatar-live">
+            <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} size={52} />
+          </span>
           <div>
             <h2>{persona?.name}</h2>
-            <div className="status">{speaking ? "speaking" : busy ? "thinking" : "listening"}</div>
+            <div className="status">{speaking ? "speaking…" : busy ? "thinking…" : "listening"}</div>
           </div>
         </div>
         <div className="session-actions">
+          <button onClick={() => setVoiceOn(!voiceOn)} className="btn quiet small" title="Your tutor reads replies aloud">
+            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
+          </button>
           {!participantId && (
             <>
               <button onClick={inviteFriend} className="btn quiet small">Invite</button>

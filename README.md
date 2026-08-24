@@ -106,6 +106,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | GitHub Actions CI (typecheck + all three suites on every push/PR) | ✅ run green on GitHub (2026-08-24) |
 | All-of-life verticals: visa interview prep, CFA/ACCA foundations, career coaching packs + adult mentor personas (Nia, Obi) | ✅ tested (packs load, adult session end-to-end, numerics SymPy-verified incl. float-exactness) |
 | Dingba app shell: design system (indigo tokens, dark mode, Plus Jakarta Sans), app bar, immersive session, all pages restyled | ✅ built; light/dark/mobile/desktop screenshots verified against the running stack |
+| Live tutor presence: tutor greets first (in character, safety-audited, deterministic fallback), voice-on-by-default replies, avatar idle presence | ✅ tested + live-verified (greeting in create response and history; real-model greeting quality checks at deploy) |
 | Billing: Stripe + Paystack checkout, signature-verified webhooks → plan flips, cancellation downgrade, /me/billing, upgrade buttons | ✅ tested (17 cases incl. real HMAC schemes, tamper + replay rejection); ⚠ needs live keys + a real checkout at deploy — /admin/plan still bridges |
 | Email verification at signup (token email, /verify page, resend, banner) | ✅ tested; email delivery goes live with SMTP at deploy |
 | WhatsApp, study plans & scheduling | ❌ later sprints |

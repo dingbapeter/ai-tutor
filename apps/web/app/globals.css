@@ -334,6 +334,10 @@ body[data-session="1"] .appbar { display: none; }
 .rec-pulse { animation: pulse 1s infinite alternate; }
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
 
+/* The tutor is present: a slow breath while idle. */
+.avatar-live { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }

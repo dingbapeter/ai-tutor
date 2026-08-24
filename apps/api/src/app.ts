@@ -592,11 +592,40 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         createdAt: Date.now(),
         apiKeyQuota,
       });
+      // A live tutor speaks first. Generate the opening line in-character;
+      // if the model stalls or fails, a warm deterministic line covers it.
+      const session = live.get(sessionId)!;
+      const greetInstruction = memoryLines.length
+        ? `[${studentName} has just walked into the session. Greet them warmly by name in one or two short sentences, in your own voice, touching on one thing you remember about them, then ask what they'd like to start with. No lists.]`
+        : `[${studentName} has just walked into their first session with you. Greet them warmly by name in one or two short sentences, introduce yourself in your own voice, and ask one easy question to get started. No lists.]`;
+      let greeting = "";
+      try {
+        const signal = AbortSignal.timeout(8000);
+        for await (const delta of chatFor(session).chat(
+          [...session.history, { role: "user", content: greetInstruction }],
+          { signal },
+        )) {
+          greeting += delta;
+        }
+      } catch {
+        greeting = "";
+      }
+      if (!greeting.trim()) {
+        greeting = memoryLines.length
+          ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
+          : `Hi ${studentName}, I'm ${persona.name}. Glad you're here. What would you like to start with today?`;
+      }
+      greeting = greeting.trim();
+      session.history.push({ role: "assistant", content: greeting });
+      await store.saveMessage(sessionId, "assistant", greeting);
+      auditTutorOutput(session, greeting).catch((err) => app.log.error(err));
+
       return {
         sessionId,
         persona: { id: persona.id, name: persona.name },
         pack: pack.title,
         remembered: memoryLines.length,
+        greeting,
       };
     },
   );

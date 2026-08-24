@@ -44,7 +44,23 @@ Three standing directives, given as we resumed building:
    distribution channel; the experience standard is the app store.
    (Register item H2 graduates from "design pass" to "app-shell rebuild".)
 
-4. **No AI tells in the product.** Nothing user-facing should read as
+4. **The characters are LIVE, not a chatbox (2026-08-24).** Dingba is not a
+   text tutor with personas painted on. People must feel they are talking
+   to an actual person: the tutor speaks first when you arrive, greets you
+   by name, remembers you out loud, talks in their own voice by default,
+   and is visibly present (avatar idle/speaking states, human status
+   lines). This is the separation from Claude/GPT/study modes: they are
+   chat surfaces; Dingba is a person you meet. Every session-surface
+   decision gets judged by "would a live tutor do this?". Full-duplex
+   interruptible voice (Dingba Live) completes this in the GPU/LiveKit
+   phase; presence does not wait for it.
+   **Founder asset (2026-08-24): a video-conferencing interface with core
+   academic tools already exists, built by the founder outside this repo.**
+   Plan: bring it into the monorepo (or attach its repo), wire it to the
+   existing live-class layer (invite codes, participants, metering) with
+   LiveKit as the self-hosted media backbone. Waiting on the founder to
+   share the code (archive upload or repo name).
+5. **No AI tells in the product.** Nothing user-facing should read as
    machine-written. Concretely: no em dashes in UI copy, marketing copy,
    emails, or canned messages; no assistant-isms ("Certainly!", "I'd be
    happy to", "As an AI"); no boilerplate hedging; contractions welcome;

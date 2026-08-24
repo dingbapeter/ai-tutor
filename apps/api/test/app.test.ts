@@ -98,6 +98,26 @@ describe("platform basics", () => {
     expect(msg.statusCode).toBe(200);
   });
 
+  it("the tutor speaks first: session creation returns a greeting and saves it", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Zara", personaId: "amara", packId: "math-ms" },
+    });
+    expect(res.statusCode).toBe(200);
+    const json = res.json() as { sessionId: string; greeting: string };
+    expect(json.greeting.length).toBeGreaterThan(0);
+
+    // The greeting is part of the conversation, not a client-side decoration:
+    // a follow-up message must still work with it in history.
+    const msg = await app.inject({
+      method: "POST",
+      url: `/sessions/${json.sessionId}/message`,
+      payload: { text: "Hi! Fractions please." },
+    });
+    expect(msg.statusCode).toBe(200);
+  });
+
   it("serves rubric problems for conversation packs without leaking criteria", async () => {
     const res = await app.inject({ url: "/packs/visa-prep/problems" });
     expect(res.statusCode).toBe(200);
@@ -468,7 +488,9 @@ describe("session lifecycle", () => {
       .filter((e) => e.delta)
       .map((e) => e.delta)
       .join("");
-    expect(reply).toContain("Good question"); // the mock LLM DID run
+    // The mock LLM DID run: a real canned tutoring line, not the safety reply.
+    expect(reply.length).toBeGreaterThan(0);
+    expect(reply).not.toContain("safe place for learning");
   });
 
   it("serves the open-source credits", async () => {

@@ -27,8 +27,12 @@ export class MockChatProvider implements ChatProvider {
   async *chat(messages: ChatMessage[], opts?: ChatOptions): AsyncIterable<string> {
     // Derive the turn from the conversation itself — a single provider instance
     // serves many sessions, so instance state would bleed between students.
+    const last = messages[messages.length - 1];
+    const greetingAsked = last?.role === "user" && last.content.includes("walked into");
     const turn = messages.filter((m) => m.role === "assistant").length;
-    const reply = CANNED_TURNS[turn % CANNED_TURNS.length];
+    const reply = greetingAsked
+      ? "Hey, good to see you! I'm glad you came. What are we working on today?"
+      : CANNED_TURNS[turn % CANNED_TURNS.length];
     for (const word of reply.split(" ")) {
       if (opts?.signal?.aborted) return;
       await new Promise((r) => setTimeout(r, 30));
