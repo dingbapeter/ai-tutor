@@ -1,0 +1,85 @@
+{
+  "id": "pro-finance",
+  "title": "CFA / ACCA Foundations",
+  "vertical": "professional",
+  "description": "Professional exam pack. Numeric problems are verified exactly by the mathcheck service; concept and ethics questions are graded on rubric. Timing metadata feeds mock-exam mode.",
+  "skills": [
+    { "id": "fin.tvm.basics", "title": "Time value of money", "prerequisites": [] },
+    { "id": "fin.statements.reading", "title": "Reading the three statements", "prerequisites": [] },
+    { "id": "fin.ratios.core", "title": "Core ratios", "prerequisites": ["fin.statements.reading"] },
+    { "id": "fin.ethics.standards", "title": "Professional ethics", "prerequisites": [] },
+    { "id": "fin.exam.technique", "title": "Exam technique under time", "prerequisites": ["fin.tvm.basics", "fin.ratios.core"] }
+  ],
+  "problems": [
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 1,000 at 8% simple interest. How much interest have you earned after 3 years?",
+      "answer": "240",
+      "check": { "type": "solve", "equation": "x = 1000*0.08*3", "variable": "x" }
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "1,000 invested at 10%, compounded annually. What is the future value after 2 years?",
+      "answer": "1210",
+      "check": { "type": "solve", "equation": "x = 1000*(1 + 10/100)**2", "variable": "x" }
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "What is the present value of 1,210 due in 2 years, discounted at 10% a year?",
+      "answer": "1000",
+      "check": { "type": "solve", "equation": "x = 1210/(1 + 10/100)**2", "variable": "x" }
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "Explain to a client, in plain words, why money today is worth more than the same money next year.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "mentions the chance to earn a return",
+          "mentions risk or inflation",
+          "no jargon dump",
+          "under 100 words"
+        ]
+      }
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "Current assets are 150,000 and current liabilities are 60,000. What is the current ratio?",
+      "answer": "2.5",
+      "check": { "type": "solve", "equation": "x = 150000/60000", "variable": "x" }
+    },
+    {
+      "skillId": "fin.statements.reading",
+      "prompt": "A company's revenue grew this year but its cash balance fell. Name two places in the financial statements you would look first, and say why.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "mentions receivables or working capital movement",
+          "mentions the cash flow statement",
+          "links the reason to accrual versus cash timing",
+          "answer is structured, not a list of everything"
+        ]
+      }
+    },
+    {
+      "skillId": "fin.ethics.standards",
+      "prompt": "A client asks you to leave one poor-performing year out of a performance report because \"it misrepresents the fund's quality.\" What do you do, and why?",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "refuses to misrepresent performance",
+          "cites the duty of fair and accurate presentation",
+          "offers a compliant alternative, like showing the full record with context",
+          "professional, non-preachy tone"
+        ]
+      }
+    },
+    {
+      "skillId": "fin.exam.technique",
+      "prompt": "Timed. Fixed costs are 40,000. Price is 25 per unit, variable cost 15 per unit. How many units to break even?",
+      "answer": "4000",
+      "timeLimitSec": 90,
+      "check": { "type": "solve", "equation": "x = 40000/(25 - 15)", "variable": "x" }
+    }
+  ]
+}

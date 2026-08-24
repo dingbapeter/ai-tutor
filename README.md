@@ -103,7 +103,8 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Guardian transcript view, study streaks, placement-check onboarding, copy button | ✅ tested / built |
 | Terms & Privacy pages + registration consent | ✅ drafted (needs counsel before launch) |
 | Rolling 24h allowances, per-IP guest cap, error webhook, backup script | ✅ tested / in place |
-| GitHub Actions CI (typecheck + 37 API + 7 gateway + 7 mathcheck tests on every push/PR) | ✅ run green on GitHub (2026-08-24) |
+| GitHub Actions CI (typecheck + all three suites on every push/PR) | ✅ run green on GitHub (2026-08-24) |
+| All-of-life verticals: visa interview prep, CFA/ACCA foundations, career coaching packs + adult mentor personas (Nia, Obi) | ✅ tested (packs load, adult session end-to-end, numerics SymPy-verified incl. float-exactness) |
 | Billing: Stripe + Paystack checkout, signature-verified webhooks → plan flips, cancellation downgrade, /me/billing, upgrade buttons | ✅ tested (17 cases incl. real HMAC schemes, tamper + replay rejection); ⚠ needs live keys + a real checkout at deploy — /admin/plan still bridges |
 | Email verification at signup (token email, /verify page, resend, banner) | ✅ tested; email delivery goes live with SMTP at deploy |
 | WhatsApp, study plans & scheduling | ❌ later sprints |

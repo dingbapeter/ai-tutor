@@ -1,0 +1,93 @@
+{
+  "id": "career-coach",
+  "title": "Career Confidence & Communication",
+  "vertical": "career",
+  "description": "Companion-coach pack for working life: imposter syndrome, telling your wins, taking feedback, landing well in a new role. Scenario problems graded on rubric; the tutor rehearses with you, then coaches.",
+  "skills": [
+    { "id": "career.confidence.reframe", "title": "Naming and reframing imposter feelings", "prerequisites": [] },
+    { "id": "career.story.star", "title": "Telling your wins as STAR stories", "prerequisites": [] },
+    { "id": "career.feedback.conversations", "title": "Asking for and taking feedback", "prerequisites": ["career.confidence.reframe"] },
+    { "id": "career.first90.plan", "title": "Your first 90 days", "prerequisites": ["career.story.star"] }
+  ],
+  "problems": [
+    {
+      "skillId": "career.confidence.reframe",
+      "prompt": "You just started the job and a voice in your head says \"they're going to find out I'm not good enough.\" Write what you would say back to that voice, in your own words.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "names the feeling without judging it",
+          "answers it with concrete evidence of competence",
+          "realistic, not cheerleading",
+          "written in the first person"
+        ]
+      }
+    },
+    {
+      "skillId": "career.story.star",
+      "prompt": "Tell me about a time you solved a hard problem. Give it as a STAR story: situation, task, action, result.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "all four STAR parts present and in order",
+          "the result is specific or measured",
+          "under 150 words",
+          "sounds like you, not a template"
+        ]
+      }
+    },
+    {
+      "skillId": "career.feedback.conversations",
+      "prompt": "Your manager says your report \"missed the mark\" and gives no detail. Draft the exact next question you would ask.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "asks for a specific example",
+          "zero defensiveness",
+          "invites the manager to say what good looks like",
+          "one short question, not a speech"
+        ]
+      }
+    },
+    {
+      "skillId": "career.first90.plan",
+      "prompt": "Draft the 30-day slice of a first-90-days plan for your new role: what you will learn, who you will meet, and one small win you will aim for.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "a learning goal",
+          "a relationship goal with named kinds of people",
+          "one realistic quick win",
+          "scope a real person could do in 30 days"
+        ]
+      }
+    },
+    {
+      "skillId": "career.confidence.reframe",
+      "prompt": "A colleague gets public praise for work you contributed to. What do you actually do next?",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "assumes good intent first",
+          "advocates for yourself with facts, not accusation",
+          "picks a concrete moment or channel to do it",
+          "keeps the working relationship intact"
+        ]
+      }
+    },
+    {
+      "skillId": "career.story.star",
+      "prompt": "You step into the lift with a senior leader. Introduce yourself in two sentences.",
+      "timeLimitSec": 30,
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "role and the value you add, stated plainly",
+          "opens a door for follow-up",
+          "no filler",
+          "exactly two sentences"
+        ]
+      }
+    }
+  ]
+}

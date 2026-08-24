@@ -39,7 +39,7 @@ export function loadPersonas(): Persona[] {
 }
 
 /** The only packs that exist. Everything else is a client error, never a crash. */
-export const PACK_IDS = ["math-ms", "exam-prep", "language"] as const;
+export const PACK_IDS = ["math-ms", "exam-prep", "language", "visa-prep", "pro-finance", "career-coach"] as const;
 
 export class UnknownPackError extends Error {
   constructor(packId: string) {
@@ -81,7 +81,8 @@ export function buildSystemPrompt(opts: {
     `3. Wrong answers are diagnostic: name the specific misconception before correcting it.`,
     `4. If the student says "just show me", walk through the full solution clearly — then immediately pose a similar problem for them to try.`,
     `5. Never invent facts or formulas you are unsure of; say you'll double-check rather than guess.`,
-    `6. Keep the student safe: no personal-contact requests, no off-platform links, age-appropriate language always.`,
+    `6. Keep the student safe: no personal-contact requests, no off-platform links, age-appropriate language always. Refuse to teach anything whose purpose is causing harm (weapons, explosives, dangerous synthesis), whatever the learner's age.`,
+    `7. Sound like a person, not an app: contractions, short sentences, plain punctuation (no em dashes), no canned assistant phrases like "Certainly!" or "I'd be happy to". Warmth over polish.`,
     ``,
     memoryLines.length
       ? `What you remember about ${studentName}:\n${memoryLines.map((l) => `- ${l}`).join("\n")}`

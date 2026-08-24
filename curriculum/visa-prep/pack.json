@@ -1,0 +1,93 @@
+{
+  "id": "visa-prep",
+  "title": "U.S. Visa Interview Prep",
+  "vertical": "life-skills",
+  "description": "Interview rehearsal pack. Skills are interview competencies; problems are officer-question scenarios graded on rubric. The tutor plays the consular officer, then coaches.",
+  "skills": [
+    { "id": "visa.purpose.clear", "title": "Stating your purpose clearly", "prerequisites": [] },
+    { "id": "visa.ties.home", "title": "Showing your ties to home", "prerequisites": ["visa.purpose.clear"] },
+    { "id": "visa.docs.consistency", "title": "Knowing your paperwork cold", "prerequisites": ["visa.purpose.clear"] },
+    { "id": "visa.mock.composure", "title": "Staying composed under rapid questions", "prerequisites": ["visa.ties.home", "visa.docs.consistency"] }
+  ],
+  "problems": [
+    {
+      "skillId": "visa.purpose.clear",
+      "prompt": "The officer asks: \"What is the purpose of your trip?\" You are visiting your sister in Houston for three weeks. Answer in two or three sentences.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "one clear purpose stated up front",
+          "specific detail: who, where, how long",
+          "no rambling or extra volunteered information",
+          "sounds natural, not memorized"
+        ]
+      }
+    },
+    {
+      "skillId": "visa.purpose.clear",
+      "prompt": "F-1 case. The officer asks: \"Why this university?\" You are heading to an MSc in Data Science at Ohio State. Answer as yourself.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "names something specific about the program",
+          "links the degree to a career plan back home",
+          "two to four sentences",
+          "own words, not brochure language"
+        ]
+      }
+    },
+    {
+      "skillId": "visa.docs.consistency",
+      "prompt": "The officer asks: \"Who is paying for your trip?\" Your uncle is sponsoring you and his bank statement is in your file. Answer.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "names the sponsor and the relationship precisely",
+          "consistent with what the documents would show",
+          "no hedging words like maybe or I think",
+          "short and direct"
+        ]
+      }
+    },
+    {
+      "skillId": "visa.ties.home",
+      "prompt": "The officer asks: \"What work do you do?\" Describe your real job (or studies) in plain words, the way you actually would.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "plain description anyone could understand",
+          "connects the role to life at home",
+          "confident, no apologizing",
+          "under 30 seconds of speech"
+        ]
+      }
+    },
+    {
+      "skillId": "visa.ties.home",
+      "prompt": "The officer asks the big one: \"How do I know you will come back?\" Answer with your strongest real ties.",
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "names concrete ties: job, family, studies, property",
+          "states them plainly as facts",
+          "no pleading or over-explaining",
+          "does not sound rehearsed"
+        ]
+      }
+    },
+    {
+      "skillId": "visa.mock.composure",
+      "prompt": "Rapid fire, 15 seconds: \"Where will you stay?\" Go.",
+      "timeLimitSec": 15,
+      "check": {
+        "type": "rubric",
+        "criteria": [
+          "immediate specific answer",
+          "address or host named",
+          "no filler words",
+          "calm tone"
+        ]
+      }
+    }
+  ]
+}

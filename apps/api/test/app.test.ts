@@ -69,9 +69,41 @@ describe("platform basics", () => {
     expect(res.json()).toMatchObject({ ok: true, store: "memory" });
   });
 
-  it("lists personas and packs", async () => {
-    expect((await app.inject({ url: "/personas" })).json()).toHaveLength(3);
-    expect((await app.inject({ url: "/packs" })).json()).toHaveLength(3);
+  it("lists personas and packs, including the adult verticals", async () => {
+    const personas = (await app.inject({ url: "/personas" })).json() as Array<{ id: string }>;
+    expect(personas).toHaveLength(5);
+    expect(personas.map((p) => p.id)).toEqual(expect.arrayContaining(["nia", "obi"]));
+
+    const packs = (await app.inject({ url: "/packs" })).json() as Array<{ id: string }>;
+    expect(packs).toHaveLength(6);
+    expect(packs.map((p) => p.id)).toEqual(
+      expect.arrayContaining(["visa-prep", "pro-finance", "career-coach"]),
+    );
+  });
+
+  it("runs a session in an adult vertical end to end", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Peter", personaId: "obi", packId: "career-coach" },
+    });
+    expect(created.statusCode).toBe(200);
+    const { sessionId } = created.json() as { sessionId: string };
+
+    const msg = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "I just started a new job and I feel like a fraud." },
+    });
+    expect(msg.statusCode).toBe(200);
+  });
+
+  it("serves rubric problems for conversation packs without leaking criteria", async () => {
+    const res = await app.inject({ url: "/packs/visa-prep/problems" });
+    expect(res.statusCode).toBe(200);
+    const problems = res.json() as Array<Record<string, unknown>>;
+    expect(problems.length).toBeGreaterThanOrEqual(5);
+    for (const p of problems) expect(p).not.toHaveProperty("check");
   });
 
   it("serves problems without leaking answers or misconceptions", async () => {
