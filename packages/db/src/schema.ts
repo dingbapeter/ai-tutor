@@ -97,7 +97,7 @@ export const usageEvents = pgTable("usage_events", {
   studentId: uuid("student_id"),
   apiKeyId: uuid("api_key_id"),
   kind: text("kind", {
-    enum: ["message", "voice_turn", "tts_chars", "practice", "exam", "api_call"],
+    enum: ["message", "voice_turn", "tts_chars", "practice", "exam", "api_call", "camera_solve"],
   }).notNull(),
   quantity: integer("quantity").notNull().default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),

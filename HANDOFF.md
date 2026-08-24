@@ -31,7 +31,7 @@ See the honesty table in `README.md` — it is the single source of truth and
 you MUST keep it updated. Summary: Sprints 1–6a complete + 6b core
 (billing, email verification) + Sprint 7 (rebrand, adult verticals, app
 shell, live presence) + Brain v1 + homepage + adaptive engine v1.
-63 API + 7 gateway + 7 mathcheck tests pass. The stack was live-verified
+64 API + 7 gateway + 7 mathcheck tests pass. Show Dingba (photo input) shipped. The stack was live-verified
 against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
 to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
 full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
@@ -67,7 +67,7 @@ full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
 pnpm monorepo. `packages/ai-gateway` = provider abstraction (chat/planner/
 premiumChat/stt/tts/vision/moderation) — config-driven via env, NOTHING
 outside it may know which engine runs. `packages/db` = drizzle schema +
-SQL migrations 0000–0006 (apply in order). `apps/api` = Fastify: sessions
+SQL migrations 0000–0007 (apply in order). `apps/api` = Fastify: sessions
 (SSE streaming), voice turns, practice with SymPy verdicts + misconception
 diagnosis, exam mode, auth (bcrypt + hashed tokens), family/org accounts,
 entitlements (config/plans.json), usage metering, API keys, live-class

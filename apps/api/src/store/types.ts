@@ -287,4 +287,4 @@ export interface Store {
   revokeApiKey(ownerUserId: string, keyId: string): Promise<boolean>;
 }
 
-export type UsageKind = "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "api_call";
+export type UsageKind = "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "api_call" | "camera_solve";

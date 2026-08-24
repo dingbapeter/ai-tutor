@@ -184,7 +184,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     return null;
   }
 
-  async function meter(session: LiveSession, kind: "message" | "voice_turn" | "tts_chars" | "practice" | "exam", quantity = 1) {
+  async function meter(session: LiveSession, kind: "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "camera_solve", quantity = 1) {
     await store.recordUsage({
       userId: session.ownerUserId,
       studentId: session.studentId,
@@ -259,6 +259,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   // Raw audio uploads for push-to-talk (multipart adds nothing here).
   app.addContentTypeParser(/^audio\/.*/, { parseAs: "buffer" }, (_req, body, done) =>
+    done(null, body),
+  );
+  // Raw image uploads for Show Dingba (homework photos, textbook pages).
+  app.addContentTypeParser(/^image\/.*/, { parseAs: "buffer" }, (_req, body, done) =>
     done(null, body),
   );
 
@@ -948,6 +952,75 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           audio: Buffer.from(spoken.audio).toString("base64"),
           audioMime: spoken.mimeType,
         };
+      } finally {
+        session.busy = false;
+      }
+    },
+  );
+
+  /**
+   * Show Dingba: a photo in, tutoring out. The vision model describes what it
+   * sees; the tutor decides how to teach from it (explain / hint / concept),
+   * exactly like a human tutor handed a worksheet.
+   */
+  app.post<{ Params: { id: string } }>(
+    "/sessions/:id/see",
+    { bodyLimit: 6 << 20 },
+    async (req, reply) => {
+      const session = live.get(req.params.id);
+      if (!session) return reply.code(404).send({ error: "no such session" });
+      if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
+      const imageIn = req.body as Buffer;
+      if (!Buffer.isBuffer(imageIn) || imageIn.length === 0) {
+        return reply.code(400).send({ error: "send a raw image with an image/* content-type" });
+      }
+      const capped = await checkAllowance(session, "message");
+      if (capped) return reply.code(402).send({ error: capped, upgrade: true });
+      session.busy = true;
+      await meter(session, "message");
+      await meter(session, "camera_solve");
+
+      try {
+        const mime = String(req.headers["content-type"] ?? "image/jpeg");
+        const seen = (
+          await gateway.vision.see(
+            new Uint8Array(imageIn),
+            mime,
+            "You are a tutor looking at a student's photo. Describe exactly what it contains: the problem or text, any diagrams, any handwritten working, and any visible mistakes in that working. Be factual and complete. Do not teach yet.",
+          )
+        ).trim();
+        if (!seen) {
+          return reply.code(422).send({ error: "couldn't make out anything in that photo, try a clearer shot" });
+        }
+
+        // The description is derived from student-supplied content: gate it
+        // like any other student input before the tutor engages with it.
+        const blocked = await gateStudentInput(session, seen);
+        let replyText: string;
+        if (blocked) {
+          replyText = blocked;
+          session.history.push({ role: "user", content: "[image withheld by safety filter]" });
+          session.history.push({ role: "assistant", content: replyText });
+          await store.saveMessage(session.id, "user", "[image withheld by safety filter]");
+          await store.saveMessage(session.id, "assistant", replyText);
+        } else {
+          const turn =
+            `[${session.studentName} shared a photo. What you can see in it: ${seen}]\n` +
+            `[As their tutor: briefly say what you're looking at, then ask ONE question: would they like the question explained, a hint, or the concept behind it taught? If the conversation already makes their need obvious, skip the question and proceed the right way.]`;
+          session.history.push({ role: "user", content: turn });
+          await store.saveMessage(session.id, "user", `[shared a photo] ${seen}`);
+
+          replyText = "";
+          for await (const delta of chatFor(session).chat(session.history, {
+            signal: AbortSignal.timeout(120_000),
+          }))
+            replyText += delta;
+          session.history.push({ role: "assistant", content: replyText });
+          await store.saveMessage(session.id, "assistant", replyText);
+          auditTutorOutput(session, replyText).catch((err) => app.log.error(err));
+        }
+
+        return { seen: blocked ? null : seen, reply: replyText };
       } finally {
         session.busy = false;
       }

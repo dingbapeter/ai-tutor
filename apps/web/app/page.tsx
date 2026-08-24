@@ -136,8 +136,8 @@ export default function HomePage() {
             <p>Practice problems, timed mock exams, and honest post-mortems on every miss.</p>
           </div>
           <div className="card">
-            <b>Show Dingba<span className="tag-soon">on the way</span></b>
-            <p>Photograph your homework or upload a document, and be taught from it.</p>
+            <b>Show Dingba</b>
+            <p>Photograph your homework or a textbook page, and your tutor teaches from it.</p>
           </div>
           <div className="card">
             <b>Watch Dingba<span className="tag-soon">on the way</span></b>

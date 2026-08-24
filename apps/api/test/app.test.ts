@@ -262,6 +262,36 @@ describe("platform basics", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  it("Show Dingba: a photo becomes a tutoring turn through the vision slot", async () => {
+    const { sessionId } = await createSession("Amina");
+    const res = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/see`,
+      headers: { "content-type": "image/png" },
+      payload: Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]),
+    });
+    expect(res.statusCode).toBe(200);
+    const json = res.json() as { seen: string; reply: string };
+    expect(json.seen).toContain("2x + 3 = 11"); // the mock vision description
+    expect(json.reply.length).toBeGreaterThan(0);
+
+    // The photo is real conversation context: a follow-up must work on top of it.
+    const follow = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "Give me a hint please." },
+    });
+    expect(follow.statusCode).toBe(200);
+
+    const empty = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/see`,
+      headers: { "content-type": "image/png" },
+      payload: Buffer.alloc(0),
+    });
+    expect(empty.statusCode).toBe(400);
+  });
+
   it("serves rubric problems for conversation packs without leaking criteria", async () => {
     const res = await app.inject({ url: "/packs/visa-prep/problems" });
     expect(res.statusCode).toBe(200);

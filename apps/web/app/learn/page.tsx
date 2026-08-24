@@ -92,6 +92,7 @@ export default function Home() {
   const bottom = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   const persona = personas.find((p) => p.id === personaId);
 
@@ -398,6 +399,37 @@ export default function Home() {
     }
   }
 
+  async function sendPhoto(file: File) {
+    if (!sessionId || busy) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("That photo is too large. Keep it under 5MB.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessages((m) => [...m, { role: "user", content: "📷 …" }]);
+    try {
+      const res = await fetch(`${API}/sessions/${sessionId}/see`, {
+        method: "POST",
+        headers: { "content-type": file.type || "image/jpeg" },
+        body: file,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `photo failed (${res.status})`);
+      const json = await res.json();
+      setMessages((m) => [
+        ...m.slice(0, -1),
+        { role: "user", content: "📷 Shared a photo" },
+        { role: "assistant", content: json.reply },
+      ]);
+      if (voiceOn && json.reply) speakMessage(json.reply);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "photo failed");
+      setMessages((m) => (m[m.length - 1]?.content === "📷 …" ? m.slice(0, -1) : m));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openPractice() {
     setShowPractice(!showPractice);
     if (problems.length === 0 && packId) {
@@ -672,6 +704,30 @@ export default function Home() {
           style={{ minWidth: 52, padding: "12px 14px" }}>
           🎤
         </button>}
+        {!participantId && (
+          <>
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) sendPhoto(f);
+                e.target.value = "";
+              }}
+            />
+            <button
+              onClick={() => photoInput.current?.click()}
+              disabled={busy}
+              className="btn quiet"
+              title="Show your tutor a photo"
+              style={{ minWidth: 52, padding: "12px 14px" }}>
+              📷
+            </button>
+          </>
+        )}
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           className="inp" placeholder={recording ? "listening…" : "Say something to your tutor…"} />
