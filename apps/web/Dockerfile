@@ -4,9 +4,9 @@ RUN corepack enable
 WORKDIR /repo
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile --filter @tutor/web
 COPY apps/web apps/web
 RUN pnpm --filter @tutor/web build
 

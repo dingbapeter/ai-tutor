@@ -33,12 +33,27 @@ to the public internet — these services have no auth of their own.
 
 ## 2. Railway — the app
 
-Create two services from this repo (Railway auto-detects the Dockerfiles):
+Create two services from this repo. **Railway does NOT auto-detect Dockerfiles
+that live inside `apps/` — left alone it falls back to Railpack/Nixpacks,
+which runs `pnpm --filter <app> build` without building the workspace
+packages first, and the api build fails on unresolvable `@tutor/ai-gateway`
+/ `@tutor/db`.** Point each service at its Dockerfile explicitly, either way:
+
+- **Config-as-code (preferred):** service → Settings → Config-as-code →
+  set the file path: `deploy/railway-api.json` for the api service,
+  `deploy/railway-web.json` for the web service. These select the
+  DOCKERFILE builder, the right Dockerfile path, and (api) a `/health`
+  healthcheck.
+- **Or an env var:** add `RAILWAY_DOCKERFILE_PATH=apps/api/Dockerfile`
+  (resp. `apps/web/Dockerfile`) to the service's variables.
+
+Keep each service's root directory at the repo root — the Dockerfiles COPY
+workspace files from there.
 
 | Service | Dockerfile | Port |
 |---|---|---|
 | api | `apps/api/Dockerfile` (root context) | 4000 |
-| web | `apps/web/Dockerfile` (root context, build-arg `NEXT_PUBLIC_API_URL=https://<api-domain>`) | 3000 |
+| web | `apps/web/Dockerfile` (root context; set `NEXT_PUBLIC_API_URL=https://<api-domain>` as a service variable — Railway passes variables as build args) | 3000 |
 
 Add a Railway **Postgres** plugin, then run the migration once:
 ```bash
