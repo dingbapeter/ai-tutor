@@ -21,10 +21,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ai-gateway ships types/main from dist/, so it must be built before
-      # dependents can typecheck or run tests against it.
-      - name: Build ai-gateway
-        run: pnpm --filter @tutor/ai-gateway build
+      # Workspace packages (ai-gateway, db) ship types/main from dist/, so
+      # they must be built before apps can typecheck or run tests against them.
+      - name: Build workspace packages
+        run: pnpm --filter "./packages/*" build
 
       - name: Typecheck
         run: pnpm typecheck
