@@ -9,7 +9,7 @@ import {
   PACK_IDS,
   UnknownPackError,
 } from "./tutor/prompt.js";
-import type { Store } from "./store/types.js";
+import type { LearnerProfile, Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -32,6 +32,8 @@ interface LiveSession {
   busy: boolean;
   practiceTotal: number;
   practiceCorrect: number;
+  /** Per-skill outcomes this session — feeds the deterministic profile update. */
+  skillOutcomes: Map<string, { correct: number; total: number }>;
   /** Whose entitlements govern this session + which key gets metered. */
   ownerUserId?: string;
   apiKeyId?: string;
@@ -400,8 +402,22 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           mastery: await store.getMasterySnapshot(s.id),
           safety: await store.listIncidents(s.id, 10),
           streakDays: await store.getStreakDays(s.id),
+          profile: await store.getProfile(s.id),
         })),
       ),
+    };
+  });
+
+  /** The Dingba Brain, readable by whoever owns the student. */
+  app.get<{ Params: { id: string } }>("/students/:id/profile", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return {
+      profile: await store.getProfile(req.params.id),
+      mastery: await store.getMasterySnapshot(req.params.id),
     };
   });
 
@@ -570,6 +586,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       }
 
       const memoryLines = await store.getMemories(studentIdResolved);
+      const learnerProfile = await store.getProfile(studentIdResolved);
       const sessionId = await store.createSession(studentIdResolved, personaId, packId);
 
       live.set(sessionId, {
@@ -580,11 +597,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         personaId,
         packId,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines }) },
+          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile }) },
         ],
         busy: false,
         practiceTotal: 0,
         practiceCorrect: 0,
+        skillOutcomes: new Map(),
         ownerUserId,
         apiKeyId,
         plan,
@@ -788,6 +806,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           await store.recordAttempt(session.studentId, String(problem.skillId), correct);
           session.practiceTotal += 1;
           if (correct) session.practiceCorrect += 1;
+          const o = session.skillOutcomes.get(String(problem.skillId)) ?? { correct: 0, total: 0 };
+          o.total += 1;
+          if (correct) o.correct += 1;
+          session.skillOutcomes.set(String(problem.skillId), o);
         }
         await meter(session, "practice");
 
@@ -978,6 +1000,56 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       await store.addMemory(session.studentId, "academic", line);
     }
 
+    // The Dingba Brain: merge structured profile observations. Deterministic
+    // part first — per-skill verdicts the server itself verified this session.
+    const observed: Required<Pick<LearnerProfile, "strengths" | "strugglingWith">> = {
+      strengths: [],
+      strugglingWith: [],
+    };
+    for (const [skillId, o] of session.skillOutcomes) {
+      if (o.total < 2) continue;
+      const title = pack.skills.find((s) => s.id === skillId)?.title ?? skillId;
+      if (o.correct / o.total >= 0.75) observed.strengths.push(title);
+      else if (o.correct / o.total <= 0.4) observed.strugglingWith.push(title);
+    }
+
+    // Model-extracted part: strict JSON, quietly skipped when the model can't
+    // comply — the profile never depends on model quality, only gains from it.
+    let extracted: Partial<LearnerProfile> = {};
+    try {
+      let raw = "";
+      for await (const delta of gateway.planner.chat(
+        [
+          ...session.history,
+          {
+            role: "user",
+            content:
+              'From this session only, update the student\'s learning profile. Reply with ONLY this JSON, no other text: {"goals":[],"strengths":[],"strugglingWith":[],"interests":[],"preferences":[]}. Up to 2 short items per list, only things clearly evidenced in the conversation. Empty lists are fine.',
+          },
+        ],
+        { signal: AbortSignal.timeout(60_000) },
+      ))
+        raw += delta;
+      const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as Record<string, unknown>;
+      const list = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+      extracted = {
+        goals: list(parsed.goals),
+        strengths: list(parsed.strengths),
+        strugglingWith: list(parsed.strugglingWith),
+        interests: list(parsed.interests),
+        preferences: list(parsed.preferences),
+      };
+    } catch {
+      // best-effort enrichment; the deterministic part always lands
+    }
+    await store.updateProfile(session.studentId, {
+      goals: extracted.goals ?? [],
+      strengths: [...observed.strengths, ...(extracted.strengths ?? [])],
+      strugglingWith: [...observed.strugglingWith, ...(extracted.strugglingWith ?? [])],
+      interests: extracted.interests ?? [],
+      preferences: extracted.preferences ?? [],
+    });
+
     await store.endSession(session.id, { summary: recap, nextFocus: "" });
 
     let emailStatus: "sent" | "skipped" | "failed" = "skipped";
@@ -1152,6 +1224,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     for (const r of results) {
       if (r.skillId && r.answer !== null) {
         await store.recordAttempt(session.studentId, String(r.skillId), Boolean(r.correct));
+        const o = session.skillOutcomes.get(String(r.skillId)) ?? { correct: 0, total: 0 };
+        o.total += 1;
+        if (r.correct) o.correct += 1;
+        session.skillOutcomes.set(String(r.skillId), o);
       }
     }
     const correctCount = results.filter((r) => r.correct).length;

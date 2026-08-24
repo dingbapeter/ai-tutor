@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { mergeProfile } from "../src/store/types.js";
 import {
   MockChatProvider,
   MockSttProvider,
@@ -63,6 +64,19 @@ async function createSession(studentName = "Ada", parentEmail?: string) {
   return res.json() as { sessionId: string; remembered: number };
 }
 
+describe("Dingba Brain merge", () => {
+  it("dedupes case-insensitively, refreshes recency, and caps each list", () => {
+    let p = mergeProfile(null, { interests: ["football", "music"] });
+    p = mergeProfile(p, { interests: ["Football", "chess"] }); // re-mention moves to the end
+    expect(p.interests).toEqual(["music", "Football", "chess"]);
+
+    p = mergeProfile(p, { interests: ["a", "b", "c", "d", "e", "f", "g", "h", "i"] });
+    expect(p.interests).toHaveLength(8); // capped, oldest dropped
+    expect(p.interests).not.toContain("music");
+    expect(p.goals).toEqual([]);
+  });
+});
+
 describe("platform basics", () => {
   it("reports health with provider + store names", async () => {
     const res = await app.inject({ method: "GET", url: "/health" });
@@ -116,6 +130,56 @@ describe("platform basics", () => {
       payload: { text: "Hi! Fractions please." },
     });
     expect(msg.statusCode).toBe(200);
+  });
+
+  it("builds the learning profile from verified practice outcomes (Dingba Brain)", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "brain@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await app.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Chidi" } });
+    const studentId = kid.json().id as string;
+
+    const s = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "kofi", packId: "math-ms" },
+    });
+    const sessionId = s.json().sessionId as string;
+
+    // Two wrong answers on the same skill: the server has verified evidence
+    // of a struggle, whatever the model does.
+    const pack = (await app.inject({ url: "/packs/math-ms/problems" })).json() as Array<{ index: number; skillId: string; prompt: string }>;
+    const first = pack[0];
+    const twin = pack.find((p) => p.skillId === first.skillId && p.index !== first.index)!;
+    for (const p of [first, twin]) {
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/practice`,
+        payload: { problemIndex: p.index, answer: "999999" },
+      });
+    }
+    await app.inject({ method: "POST", url: `/sessions/${sessionId}/end` });
+
+    const prof = await app.inject({ url: `/students/${studentId}/profile`, headers: auth });
+    expect(prof.statusCode).toBe(200);
+    const { profile } = prof.json() as { profile: { strugglingWith: string[] } };
+    // Mock planner returns prose, not JSON — the deterministic slice must land anyway.
+    expect(profile.strugglingWith.length).toBeGreaterThan(0);
+
+    const stranger = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "snoop2@example.com", password: "password12", role: "parent" },
+    });
+    const denied = await app.inject({
+      url: `/students/${studentId}/profile`,
+      headers: { authorization: `Bearer ${stranger.json().token}` },
+    });
+    expect(denied.statusCode).toBe(403);
   });
 
   it("serves rubric problems for conversation packs without leaking criteria", async () => {

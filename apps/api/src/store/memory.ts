@@ -1,9 +1,10 @@
-import type { SessionRecap, Store, UsageKind } from "./types.js";
+import { mergeProfile, type LearnerProfile, type SessionRecap, type Store, type UsageKind } from "./types.js";
 
 export class MemoryStore implements Store {
   readonly kind = "memory";
   private students = new Map<string, { id: string; parentEmail?: string }>();
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
+  private learnerProfiles = new Map<string, LearnerProfile>();
   private mastery = new Map<string, Map<string, { level: number; attempts: number }>>();
   private sessions = new Map<
     string,
@@ -66,6 +67,14 @@ export class MemoryStore implements Store {
     const list = this.memories.get(studentId) ?? [];
     list.push({ kind, content });
     this.memories.set(studentId, list);
+  }
+
+  async getProfile(studentId: string) {
+    return this.learnerProfiles.get(studentId) ?? null;
+  }
+
+  async updateProfile(studentId: string, patch: Partial<LearnerProfile>) {
+    this.learnerProfiles.set(studentId, mergeProfile(this.learnerProfiles.get(studentId) ?? null, patch));
   }
 
   async recordAttempt(studentId: string, skillId: string, correct: boolean) {
@@ -220,6 +229,7 @@ export class MemoryStore implements Store {
     const studentIds = [...this.profiles.values()].filter((p) => p.ownerUserId === userId).map((p) => p.id);
     for (const sid of studentIds) {
       this.profiles.delete(sid);
+      this.learnerProfiles.delete(sid);
       this.memories.delete(sid);
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);

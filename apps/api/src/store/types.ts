@@ -8,6 +8,54 @@ export interface SessionRecap {
   nextFocus: string;
 }
 
+/**
+ * The Dingba Brain: the distilled "who am I teaching". Short capped lists,
+ * merged after every session — never transcripts.
+ */
+export interface LearnerProfile {
+  goals: string[];
+  strengths: string[];
+  strugglingWith: string[];
+  interests: string[];
+  preferences: string[];
+}
+
+export const EMPTY_PROFILE: LearnerProfile = {
+  goals: [],
+  strengths: [],
+  strugglingWith: [],
+  interests: [],
+  preferences: [],
+};
+
+const PROFILE_LIST_CAP = 8;
+const PROFILE_ITEM_MAX_LEN = 160;
+
+/**
+ * Merge new observations into a profile: newest wins, case-insensitive
+ * dedupe, each list capped (oldest dropped). Pure — both stores share it.
+ */
+export function mergeProfile(
+  current: LearnerProfile | null,
+  patch: Partial<LearnerProfile>,
+): LearnerProfile {
+  const base = current ?? EMPTY_PROFILE;
+  const out = { ...EMPTY_PROFILE };
+  for (const key of Object.keys(EMPTY_PROFILE) as Array<keyof LearnerProfile>) {
+    const additions = (patch[key] ?? [])
+      .map((s) => String(s).trim())
+      .filter((s) => s.length > 0 && s.length <= PROFILE_ITEM_MAX_LEN);
+    const merged = [...(base[key] ?? [])];
+    for (const item of additions) {
+      const i = merged.findIndex((m) => m.toLowerCase() === item.toLowerCase());
+      if (i >= 0) merged.splice(i, 1); // re-mention refreshes recency
+      merged.push(item);
+    }
+    out[key] = merged.slice(-PROFILE_LIST_CAP);
+  }
+  return out;
+}
+
 export interface Store {
   readonly kind: string;
 
@@ -21,6 +69,10 @@ export interface Store {
   /** Compressed learner model — short lines injected into the system prompt. */
   getMemories(studentId: string): Promise<string[]>;
   addMemory(studentId: string, kind: "academic" | "personal" | "goal", content: string): Promise<void>;
+
+  /** The Dingba Brain: structured learning profile, merged after sessions. */
+  getProfile(studentId: string): Promise<LearnerProfile | null>;
+  updateProfile(studentId: string, patch: Partial<LearnerProfile>): Promise<void>;
 
   /** Mastery bookkeeping for spaced repetition & adaptive difficulty. */
   recordAttempt(studentId: string, skillId: string, correct: boolean): Promise<void>;

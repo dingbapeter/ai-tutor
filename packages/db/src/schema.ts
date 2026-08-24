@@ -198,6 +198,17 @@ export const safetyIncidents = pgTable("safety_incidents", {
  * ("struggles with negative signs", "has a dog called Biscuit", "SAT on Dec 6").
  * Loaded into every system prompt instead of full transcripts.
  */
+/**
+ * The Dingba Brain: a structured learning profile per student, built from
+ * sessions over time. Lists are short and capped — this is the distilled
+ * "who am I teaching", not a transcript archive.
+ */
+export const learnerProfiles = pgTable("learner_profiles", {
+  studentId: uuid("student_id").primaryKey().references(() => students.id),
+  profile: jsonb("profile").$type<Record<string, string[]>>().notNull().default({}),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const memories = pgTable("memories", {
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id").notNull().references(() => students.id),

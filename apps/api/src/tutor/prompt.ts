@@ -63,11 +63,33 @@ export function loadPack(packId: string): CurriculumPack {
  * Memory lines come from the memories table — the compressed learner model,
  * never full transcripts.
  */
+export interface ProfileForPrompt {
+  goals: string[];
+  strengths: string[];
+  strugglingWith: string[];
+  interests: string[];
+  preferences: string[];
+}
+
+/** The Dingba Brain, rendered for the tutor. Empty lists say nothing. */
+function profileBlock(studentName: string, p: ProfileForPrompt | null): string {
+  if (!p) return "";
+  const lines: string[] = [];
+  if (p.goals.length) lines.push(`Their goals: ${p.goals.join("; ")}.`);
+  if (p.strengths.length) lines.push(`Going well: ${p.strengths.join("; ")}.`);
+  if (p.strugglingWith.length) lines.push(`Currently finding hard: ${p.strugglingWith.join("; ")}.`);
+  if (p.interests.length) lines.push(`Interests (use these for analogies and examples): ${p.interests.join("; ")}.`);
+  if (p.preferences.length) lines.push(`How they like to learn: ${p.preferences.join("; ")}.`);
+  if (!lines.length) return "";
+  return `\n${studentName}'s learning profile (you built this over your sessions together — act on it, don't recite it):\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
+}
+
 export function buildSystemPrompt(opts: {
   persona: Persona;
   pack: CurriculumPack;
   studentName: string;
   memoryLines: string[];
+  profile?: ProfileForPrompt | null;
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
   return [
@@ -84,6 +106,7 @@ export function buildSystemPrompt(opts: {
     `6. Keep the student safe: no personal-contact requests, no off-platform links, age-appropriate language always. Refuse to teach anything whose purpose is causing harm (weapons, explosives, dangerous synthesis), whatever the learner's age.`,
     `7. Sound like a person, not an app: contractions, short sentences, plain punctuation (no em dashes), no canned assistant phrases like "Certainly!" or "I'd be happy to". Warmth over polish.`,
     ``,
+    profileBlock(studentName, opts.profile ?? null),
     memoryLines.length
       ? `What you remember about ${studentName}:\n${memoryLines.map((l) => `- ${l}`).join("\n")}`
       : `This is your FIRST session with ${studentName}. Two jobs before teaching anything: (1) one warm sentence to get to know them and what they want to work on; (2) a quick placement check — ask 2-3 short diagnostic questions of increasing difficulty in the subject, one at a time, to find their level. React encouragingly whatever they answer, then start teaching from where they actually are, not where the curriculum assumes.`,

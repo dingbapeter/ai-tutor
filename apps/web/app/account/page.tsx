@@ -9,6 +9,13 @@ interface SessionSummary {
   endedAt: string | null;
   summary: string | null;
 }
+interface LearnerProfile {
+  goals: string[];
+  strengths: string[];
+  strugglingWith: string[];
+  interests: string[];
+  preferences: string[];
+}
 interface StudentRow {
   id: string;
   displayName: string;
@@ -16,7 +23,16 @@ interface StudentRow {
   mastery: Array<{ skillId: string; level: number }>;
   safety: Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: string }>;
   streakDays?: number;
+  profile?: LearnerProfile | null;
 }
+
+const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
+  { key: "goals", label: "Goals" },
+  { key: "strengths", label: "Going well" },
+  { key: "strugglingWith", label: "Working on" },
+  { key: "interests", label: "Interests" },
+  { key: "preferences", label: "Learns best with" },
+];
 
 export default function Account() {
   const [token, setToken] = useState<string | null>(null);
@@ -371,6 +387,26 @@ export default function Account() {
                 </p>
               ))}
             </div>
+          )}
+
+          {s.profile && PROFILE_SECTIONS.some(({ key }) => (s.profile?.[key] ?? []).length > 0) && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>{s.displayName}&apos;s learning profile</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                {PROFILE_SECTIONS.map(({ key, label }) =>
+                  (s.profile?.[key] ?? []).length > 0 ? (
+                    <div key={key} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
+                      <small style={{ color: "var(--text-dim)", minWidth: 96 }}>{label}</small>
+                      {(s.profile?.[key] ?? []).map((item) => (
+                        <span key={item} style={{ fontSize: 13, background: "var(--brand-soft)", color: "var(--brand-strong)", borderRadius: 999, padding: "2px 10px" }}>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            </>
           )}
 
           {s.mastery.length > 0 && (

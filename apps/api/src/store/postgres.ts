@@ -1,6 +1,6 @@
 import { createDb, schema, type Db } from "@tutor/db";
 import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
-import type { SessionRecap, Store, UsageKind } from "./types.js";
+import { mergeProfile, type LearnerProfile, type SessionRecap, type Store, type UsageKind } from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
 
 export class PostgresStore implements Store {
@@ -97,6 +97,26 @@ export class PostgresStore implements Store {
       .orderBy(desc(schema.memories.createdAt))
       .limit(12);
     return rows.map((r) => r.content).reverse();
+  }
+
+  async getProfile(studentId: string): Promise<LearnerProfile | null> {
+    const [row] = await this.db
+      .select({ profile: schema.learnerProfiles.profile })
+      .from(schema.learnerProfiles)
+      .where(eq(schema.learnerProfiles.studentId, studentId))
+      .limit(1);
+    return row ? (mergeProfile(null, row.profile as Partial<LearnerProfile>)) : null;
+  }
+
+  async updateProfile(studentId: string, patch: Partial<LearnerProfile>) {
+    const merged = { ...mergeProfile(await this.getProfile(studentId), patch) } as Record<string, string[]>;
+    await this.db
+      .insert(schema.learnerProfiles)
+      .values({ studentId, profile: merged, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: schema.learnerProfiles.studentId,
+        set: { profile: merged, updatedAt: new Date() },
+      });
   }
 
   async addMemory(studentId: string, kind: "academic" | "personal" | "goal", content: string) {
@@ -567,6 +587,7 @@ export class PostgresStore implements Store {
       }
       await this.db.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
       await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
+      await this.db.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
       await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
       await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
       await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
