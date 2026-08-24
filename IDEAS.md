@@ -116,6 +116,70 @@ Format: date · idea · why it's parked · when to bring it back.
   "a character so warm you forget it's software — while never being lied to."
 - **Bring back when:** gallery in avatar-v1 sprint; photo-upload in GPU phase.
 
+### 007 — Voice-tone understanding over time (does this learner sound off today?)
+- **Logged:** 2026-08-24
+- **Idea (founder):** the A.I should understand learners' voices over time, so
+  when a student sounds off it can ask a human question, listen, and guide
+  accordingly, the way a real tutor does.
+- **Shipped already (the words half):** attunement is live. The tutor's
+  contract now includes rule 8: notice shortening answers, repeated "I don't
+  know", self-criticism, giving up, mood mismatch; stop teaching; ask ONE real
+  question; let the answer steer what happens next. This works on typed text
+  AND on voice transcripts today, because Whisper gives us the words.
+- **What's parked (the sound half):** prosody, the *how* rather than the
+  *what*. Pitch, energy, speech rate, pauses, hesitation, a flat delivery of
+  "I'm fine". Two layers:
+  1. **Session-relative signals** (cheap, no model): we already receive the
+     audio blob per voice turn. Duration, silence ratio, and words-per-second
+     are computable server-side with no ML at all, compared against that
+     learner's own rolling baseline. "Half your usual pace and twice the
+     pauses" is a real signal and a defensible one.
+  2. **Learned prosody** (GPU phase): open speech-emotion models exist with
+     ✅ licenses (wav2vec2/WavLM-based classifiers, Apache/MIT checkpoints on
+     HuggingFace). They ride the same box as llama.cpp and Whisper. Accuracy
+     across accents is the honest risk: these models are trained largely on
+     Western English speech and will misread Nigerian, Ghanaian, Indian
+     prosody. Treat output as a WEAK hint that only ever nudges the tutor to
+     ask a question, never as a verdict, never shown to parents as "your
+     child was sad".
+- **Design boundary:** a tone signal may only make the tutor *ask*. It must
+  never label a learner, never appear in the dashboard as an emotion score,
+  and never trigger an alert on its own. Alerts stay the moderation layer's
+  job, driven by what was actually said.
+- **Bring back when:** GPU box exists (same phase as full-duplex voice).
+  Layer 1 (baseline timing) can land earlier and cheaply; do that first and
+  measure whether it actually predicts anything before adding a model.
+
+### 008 — Face understanding (camera-read engagement)
+- **Logged:** 2026-08-24
+- **Idea (founder):** the A.I should understand learners' faces too.
+- **Honest position:** this is the one idea in the parking lot I'd argue
+  against shipping in its literal form, and the reasons are worth keeping
+  written down rather than rediscovered later:
+  1. **Regulation.** Continuous facial analysis of minors is biometric
+     processing. The EU AI Act specifically restricts emotion inference in
+     education, and biometric data on children carries the heaviest consent
+     burden in nearly every regime we'd sell into. This is not a
+     "add a checkbox" problem.
+  2. **Accuracy.** Emotion-from-face inference is contested science even in
+     ideal conditions, and error rates are worst for darker skin tones and
+     non-Western expression norms, which is precisely our launch market.
+  3. **Trust.** "The tutor watches your child's face" is a sentence that can
+     end the company. The care call below is the opposite kind of headline.
+- **The version worth building instead (opt-in, on-device, non-biometric):**
+  presence and posture cues that never leave the device and never identify a
+  face: is the learner still in frame, has the device been face-down for ten
+  minutes, has the camera not seen motion during a "live" class. Computed in
+  the browser, reported as a boolean, never a stored image, never an emotion
+  label. That gives the pedagogical value (did they walk away? are they
+  actually here?) with none of the regulatory or ethical debt.
+- **Where the camera genuinely shines today:** Show Dingba, already shipped.
+  Learners point the camera at their WORK, not their face, and the tutor
+  teaches from it.
+- **Bring back when:** counsel reviews the opt-in presence version, or the
+  founder decides the market demands more. Anything face-related ships with
+  a lawyer in the loop, per register item E.
+
 ## GRADUATED
 
 ### 006 — Bring-a-friend live classes (shipped v1, same day as parked)

@@ -82,6 +82,7 @@ export default function Home() {
     skills: Array<{ skillId: string; title: string; assessed: boolean; pct: number | null }>;
     recommend: { title: string; reason: string };
   } | null>(null);
+  const [care, setCare] = useState<{ name: string; phone: string; relationship?: string } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -372,6 +373,8 @@ export default function Home() {
           try {
             const evt = JSON.parse(data);
             if (evt.error) throw new Error("Your tutor had trouble replying. Try that again.");
+            // The tutor saw real distress: offer the trusted person, one tap.
+            if (evt.care) setCare(evt.care);
             if (evt.delta) {
               full += evt.delta;
               setMessages((m) => {
@@ -442,6 +445,7 @@ export default function Home() {
         { role: "user", content: `🎤 ${json.transcript}` },
         { role: "assistant", content: json.reply },
       ]);
+      if (json.care) setCare(json.care);
       const bytes = Uint8Array.from(atob(json.audio), (c) => c.charCodeAt(0));
       playAudio(new Blob([bytes], { type: json.audioMime }));
     } catch (e) {
@@ -677,6 +681,24 @@ export default function Home() {
         <div className="card tray" style={{ textAlign: "center" }}>
           Friends join with code <span className="invite-code">{inviteCode}</span>
           <div><small className="status">They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+        </div>
+      )}
+
+      {care && (
+        <div className="care-card fadeUp">
+          <div style={{ flex: 1 }}>
+            <b>You don&apos;t have to sit with this alone.</b>
+            <p style={{ margin: "4px 0 0", fontSize: 14.5 }}>
+              {care.name}
+              {care.relationship ? ` (${care.relationship})` : ""} is here for you. One tap and their phone rings.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <a href={`tel:${care.phone.replace(/[^0-9+]/g, "")}`} className="btn care-call">
+              📞 Call {care.name.split(" ")[0]}
+            </a>
+            <button onClick={() => setCare(null)} className="btn ghost small">Not now</button>
+          </div>
         </div>
       )}
 

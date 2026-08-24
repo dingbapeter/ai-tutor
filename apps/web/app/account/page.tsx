@@ -31,6 +31,7 @@ interface StudentRow {
   streakDays?: number;
   profile?: LearnerProfile | null;
   routine?: LearnerRoutine | null;
+  careContact?: { name: string; phone: string; relationship?: string } | null;
 }
 
 const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
@@ -64,6 +65,8 @@ export default function Account() {
   const [billingOn, setBillingOn] = useState(false);
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [routineBusy, setRoutineBusy] = useState<string | null>(null);
+  const [careEditing, setCareEditing] = useState<string | null>(null);
+  const [careForm, setCareForm] = useState<{ name: string; phone: string; relationship: string }>({ name: "", phone: "", relationship: "" });
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
@@ -208,6 +211,40 @@ export default function Account() {
     } finally {
       setRoutineBusy(null);
     }
+  }
+
+  async function saveCareContact(studentId: string) {
+    if (!token) return;
+    if (!careForm.name.trim() || !careForm.phone.trim()) {
+      setError("A care contact needs both a name and a phone number.");
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/care-contact`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: careForm.name.trim(),
+          phone: careForm.phone.trim(),
+          ...(careForm.relationship.trim() ? { relationship: careForm.relationship.trim() } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "could not save that contact");
+      setCareEditing(null);
+      await refresh(token);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save that contact");
+    }
+  }
+
+  async function removeCareContact(studentId: string) {
+    if (!token) return;
+    await fetch(`${API}/students/${studentId}/care-contact`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    await refresh(token);
   }
 
   async function viewTranscript(studentId: string) {
@@ -419,6 +456,52 @@ export default function Account() {
               ))}
             </div>
           )}
+
+          <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <b style={{ fontSize: 14.5 }}>Care contact</b>
+              {careEditing === s.id ? (
+                <button onClick={() => setCareEditing(null)} className="btn ghost small">Cancel</button>
+              ) : (
+                <span style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      setCareEditing(s.id);
+                      setCareForm({
+                        name: s.careContact?.name ?? "",
+                        phone: s.careContact?.phone ?? "",
+                        relationship: s.careContact?.relationship ?? "",
+                      });
+                    }}
+                    className="btn quiet small"
+                  >
+                    {s.careContact ? "Change" : "Add someone"}
+                  </button>
+                  {s.careContact && (
+                    <button onClick={() => removeCareContact(s.id)} className="btn ghost small">Remove</button>
+                  )}
+                </span>
+              )}
+            </div>
+
+            {careEditing === s.id ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                <input value={careForm.name} onChange={(e) => setCareForm((f) => ({ ...f, name: e.target.value }))}
+                  className="inp" style={{ flex: "1 1 130px" }} placeholder="Their name" />
+                <input value={careForm.phone} onChange={(e) => setCareForm((f) => ({ ...f, phone: e.target.value }))}
+                  className="inp" style={{ flex: "1 1 130px" }} placeholder="Phone number" type="tel" />
+                <input value={careForm.relationship} onChange={(e) => setCareForm((f) => ({ ...f, relationship: e.target.value }))}
+                  className="inp" style={{ flex: "1 1 110px" }} placeholder="Mum, uncle, coach…" />
+                <button onClick={() => saveCareContact(s.id)} className="btn">Save</button>
+              </div>
+            ) : (
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
+                {s.careContact
+                  ? `${s.careContact.name}${s.careContact.relationship ? ` (${s.careContact.relationship})` : ""} · ${s.careContact.phone}. If ${s.displayName} ever sounds like they're in real trouble, their tutor offers a one-tap call to this number. Dingba never dials on its own.`
+                  : `Name one trusted person. If ${s.displayName} ever sounds like they're in real trouble, their tutor will offer a one-tap call to them. Nothing is ever dialed automatically.`}
+              </p>
+            )}
+          </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", flexWrap: "wrap" }}>
             <label className="btn quiet small" style={{ cursor: "pointer" }}>

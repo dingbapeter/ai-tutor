@@ -109,14 +109,14 @@ const FORMATS: Record<string, string> = {
 function safeReply(categories: string[], studentName: string): string {
   if (categories.includes("self-harm") || categories.includes("abuse-disclosure")) {
     return (
-      `${studentName}, thank you for trusting me with that — it matters, and YOU matter. ` +
-      `I'm a tutor, so the best thing I can do is ask you to share this with a trusted adult — a parent, a teacher, or a counselor — today. ` +
-      `You deserve real support from people who care about you. I'm always happy to learn together whenever you're ready.`
+      `${studentName}, thank you for trusting me with that. It matters, and you matter. ` +
+      `I'm a tutor, so the most useful thing I can do is ask you to tell someone you trust today: a parent, a teacher, a counselor, someone close to you. ` +
+      `You deserve real support from people who care about you. I'll be right here whenever you want to learn together again.`
     );
   }
   return (
     `Let's keep our session a safe place for learning, ${studentName}. ` +
-    `I can't help with that — but I'd love to get back to what we were working on. Ready?`
+    `I can't help with that one, but I'd love to get back to what we were working on. Ready?`
   );
 }
 
@@ -173,7 +173,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       monthStart.setHours(0, 0, 0, 0);
       const used = await store.sumUsage({ apiKeyId: session.apiKeyId }, null, monthStart);
       if (used >= session.apiKeyQuota) {
-        return "monthly API quota exhausted — contact us to raise it";
+        return "monthly API quota exhausted, contact us to raise it";
       }
       return null;
     }
@@ -183,8 +183,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const used = await store.sumUsage(subject, kind, startOfToday());
     if (used >= cap) {
       return kind === "message"
-        ? `Daily message limit reached on the ${session.plan} plan — upgrade for more time with your tutor.`
-        : `Daily voice limit reached on the ${session.plan} plan — upgrade for more voice time with your tutor.`;
+        ? `Daily message limit reached on the ${session.plan} plan. Upgrade for more time with your tutor.`
+        : `Daily voice limit reached on the ${session.plan} plan. Upgrade for more voice time with your tutor.`;
     }
     return null;
   }
@@ -204,7 +204,23 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * or the tutor's safe reply when it must not reach the LLM. All flags are
    * logged; danger flags also alert the guardian immediately.
    */
-  async function gateStudentInput(session: LiveSession, text: string): Promise<string | null> {
+  /**
+   * The care offer: when real distress is detected, the learner is shown the
+   * trusted person they named in advance and can call them with one tap. The
+   * app never dials on its own; reaching out stays the learner's choice.
+   */
+  async function careOffer(session: LiveSession): Promise<{ name: string; phone: string; relationship?: string } | null> {
+    try {
+      return await store.getCareContact(session.studentId);
+    } catch {
+      return null; // a care lookup must never break the safety reply
+    }
+  }
+
+  async function gateStudentInput(
+    session: LiveSession,
+    text: string,
+  ): Promise<{ reply: string; severity: "concern" | "danger" } | null> {
     const verdict = await gateway.moderation.moderate(text, "student");
     if (!verdict.flagged) return null;
     await store.recordIncident({
@@ -224,11 +240,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           excerpt: text.slice(0, 300),
         }).catch((err) => app.log.error(err, "safety alert email failed"));
       }
-      return safeReply(verdict.categories, session.studentName);
+      return { reply: safeReply(verdict.categories, session.studentName), severity: "danger" };
     }
     // Concern-level: jailbreaks and off-color content are blocked from the
     // model too — the canned redirect is safer than trusting the persona.
-    return safeReply(verdict.categories, session.studentName);
+    return { reply: safeReply(verdict.categories, session.studentName), severity: "concern" };
   }
 
   /** Post-generation check on tutor output; logs (never retracts mid-stream). */
@@ -330,7 +346,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         createHash("sha256").update(req.body.token).digest("hex"),
         24 * 60 * 60 * 1000,
       );
-      if (!userId) return reply.code(400).send({ error: "that verification link is invalid or expired — request a new one" });
+      if (!userId) return reply.code(400).send({ error: "that verification link is invalid or expired, request a new one" });
       await store.markEmailVerified(userId);
       return { verified: true };
     },
@@ -390,7 +406,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const existing = await store.listStudentProfiles(user.userId);
       if (existing.length >= limitsFor(plan).familySeats) {
         return reply.code(402).send({
-          error: `The ${plan} plan includes ${limitsFor(plan).familySeats} student ${limitsFor(plan).familySeats === 1 ? "seat" : "seats"} — upgrade for a bigger family.`,
+          error: `The ${plan} plan includes ${limitsFor(plan).familySeats} student ${limitsFor(plan).familySeats === 1 ? "seat" : "seats"}. Upgrade for a bigger family.`,
           upgrade: true,
         });
       }
@@ -420,6 +436,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           streakDays: await store.getStreakDays(s.id),
           profile: await store.getProfile(s.id),
           routine: await store.getRoutine(s.id),
+          careContact: await store.getCareContact(s.id),
         })),
       ),
     };
@@ -513,6 +530,63 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return { routine };
     },
   );
+
+  /**
+   * The care contact: one trusted person, named in advance. Offered as a
+   * one-tap call when the safety layer sees real distress. Owner-gated, and
+   * removable at any time.
+   */
+  app.put<{ Params: { id: string }; Body: { name: string; phone: string; relationship?: string } }>(
+    "/students/:id/care-contact",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name", "phone"],
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 80 },
+            // Loose on format, strict on charset: international numbers vary.
+            phone: { type: "string", minLength: 5, maxLength: 32, pattern: "^[0-9+()\\-. ]+$" },
+            relationship: { type: "string", maxLength: 40 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      const contact = {
+        name: req.body.name.trim(),
+        phone: req.body.phone.trim(),
+        ...(req.body.relationship?.trim() ? { relationship: req.body.relationship.trim() } : {}),
+      };
+      await store.saveCareContact(req.params.id, contact);
+      return { contact };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/care-contact", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return { contact: await store.getCareContact(req.params.id) };
+  });
+
+  app.delete<{ Params: { id: string } }>("/students/:id/care-contact", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    await store.deleteCareContact(req.params.id);
+    return { removed: true };
+  });
 
   app.get<{ Params: { id: string } }>("/students/:id/routine", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -684,7 +758,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         monthStart.setHours(0, 0, 0, 0);
         const used = await store.sumUsage({ apiKeyId: key.id }, null, monthStart);
         if (used >= key.monthlyQuota) {
-          return reply.code(429).send({ error: "monthly API quota exhausted — contact us to raise it" });
+          return reply.code(429).send({ error: "monthly API quota exhausted, contact us to raise it" });
         }
         apiKeyId = key.id;
         ownerUserId = key.ownerUserId;
@@ -711,7 +785,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           const rec = guestSessionsByIp.get(req.ip);
           const count = rec?.day === day ? rec.count : 0;
           if (count >= GUEST_IP_CAP) {
-            return reply.code(429).send({ error: "daily guest limit for this network reached — create a free account to keep learning" });
+            return reply.code(429).send({ error: "daily guest limit for this network reached. Create a free account to keep learning" });
           }
           guestSessionsByIp.set(req.ip, { day, count: count + 1 });
           if (guestSessionsByIp.size > 50_000) guestSessionsByIp.clear();
@@ -826,14 +900,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           // A member friend: their own plan's allowance pays.
           const used = await store.sumUsage({ userId: p.userId }, "message", startOfToday());
           if (used >= limitsFor(p.plan).dailyMessages) {
-            return reply.code(402).send({ error: `Your daily allowance on the ${p.plan} plan is used up — upgrade for more class time.`, upgrade: true });
+            return reply.code(402).send({ error: `Your daily allowance on the ${p.plan} plan is used up. Upgrade for more class time.`, upgrade: true });
           }
           await store.recordUsage({ userId: p.userId, studentId: session.studentId, kind: "message" });
         } else {
           // A guest on a class pass: a taste, then the invitation to stay.
           if (p.guestMessagesLeft <= 0) {
             return reply.code(402).send({
-              error: `Your free class pass with ${session.studentName} is used up — join as a member to keep learning together.`,
+              error: `Your free class pass with ${session.studentName} is used up. Join as a member to keep learning together.`,
               upgrade: true,
             });
           }
@@ -852,9 +926,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       if (blocked) {
         session.busy = false;
         session.history.push({ role: "user", content: "[message withheld by safety filter]" });
-        session.history.push({ role: "assistant", content: blocked });
+        session.history.push({ role: "assistant", content: blocked.reply });
         await store.saveMessage(session.id, "user", "[message withheld by safety filter]");
-        await store.saveMessage(session.id, "assistant", blocked);
+        await store.saveMessage(session.id, "assistant", blocked.reply);
         // Same SSE shape as a normal reply so the client needs no special case.
         reply.raw.writeHead(200, {
           "content-type": "text/event-stream",
@@ -862,7 +936,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           connection: "keep-alive",
           "access-control-allow-origin": env.WEB_ORIGIN ?? "*",
         });
-        reply.raw.write(`data: ${JSON.stringify({ delta: blocked })}\n\n`);
+        reply.raw.write(`data: ${JSON.stringify({ delta: blocked.reply })}\n\n`);
+        if (blocked.severity === "danger") {
+          const care = await careOffer(session);
+          if (care) reply.raw.write(`data: ${JSON.stringify({ care })}\n\n`);
+        }
         reply.raw.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         reply.raw.end();
         return;
@@ -1026,8 +1104,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
         const blocked = await gateStudentInput(session, transcript);
         let replyText: string;
+        let care: Awaited<ReturnType<typeof careOffer>> = null;
         if (blocked) {
-          replyText = blocked;
+          replyText = blocked.reply;
+          if (blocked.severity === "danger") care = await careOffer(session);
           session.history.push({ role: "user", content: "[message withheld by safety filter]" });
           session.history.push({ role: "assistant", content: replyText });
           await store.saveMessage(session.id, "user", "[message withheld by safety filter]");
@@ -1056,6 +1136,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           reply: replyText,
           audio: Buffer.from(spoken.audio).toString("base64"),
           audioMime: spoken.mimeType,
+          ...(care ? { care } : {}),
         };
       } finally {
         session.busy = false;
@@ -1102,8 +1183,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // like any other student input before the tutor engages with it.
         const blocked = await gateStudentInput(session, seen);
         let replyText: string;
+        let care: Awaited<ReturnType<typeof careOffer>> = null;
         if (blocked) {
-          replyText = blocked;
+          replyText = blocked.reply;
+          if (blocked.severity === "danger") care = await careOffer(session);
           session.history.push({ role: "user", content: "[image withheld by safety filter]" });
           session.history.push({ role: "assistant", content: replyText });
           await store.saveMessage(session.id, "user", "[image withheld by safety filter]");
@@ -1125,7 +1208,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           auditTutorOutput(session, replyText).catch((err) => app.log.error(err));
         }
 
-        return { seen: blocked ? null : seen, reply: replyText };
+        return { seen: blocked ? null : seen, reply: replyText, ...(care ? { care } : {}) };
       } finally {
         session.busy = false;
       }
@@ -1299,7 +1382,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const seats = limitsFor(session.plan).classInvites;
     if (seats === 0) {
       return reply.code(402).send({
-        error: "Inviting friends to a live class is for members — upgrade to learn together.",
+        error: "Inviting friends to a live class is for members. Upgrade to learn together.",
         upgrade: true,
       });
     }
@@ -1512,7 +1595,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const session = live.get(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     if (!limitsFor(session.plan).examMode) {
-      return reply.code(402).send({ error: "Exam mode is a premium feature — upgrade to unlock timed mocks with a full post-mortem.", upgrade: true });
+      return reply.code(402).send({ error: "Exam mode is a premium feature. Upgrade to unlock timed mocks with a full post-mortem.", upgrade: true });
     }
     if (session.exam) return reply.code(409).send({ error: "an exam is already in progress" });
     const pack = loadPack(session.packId);
@@ -1665,7 +1748,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const current = await store.countOrgStudents(org.id);
       if (current + req.body.names.length > org.seats) {
         return reply.code(402).send({
-          error: `roster would exceed your ${org.seats} seats (${current} used) — contact us to add seats`,
+          error: `roster would exceed your ${org.seats} seats (${current} used). Contact us to add seats`,
           upgrade: true,
         });
       }
@@ -1795,7 +1878,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         createHash("sha256").update(req.body.token).digest("hex"),
         60 * 60 * 1000,
       );
-      if (!userId) return reply.code(400).send({ error: "that reset link is invalid or expired — request a new one" });
+      if (!userId) return reply.code(400).send({ error: "that reset link is invalid or expired, request a new one" });
       await store.setPassword(userId, await hashPassword(req.body.password));
       await store.revokeUserTokens(userId); // every old session dies with the old password
       return { reset: true };

@@ -100,6 +100,13 @@ export interface LearnerRoutine {
   notes: string;
 }
 
+/** One trusted person, named in advance, offered when distress is detected. */
+export interface CareContact {
+  name: string;
+  phone: string;
+  relationship?: string;
+}
+
 const PROFILE_LIST_CAP = 8;
 const PROFILE_ITEM_MAX_LEN = 160;
 
@@ -149,6 +156,11 @@ export interface Store {
   /** Uploaded timetable/curriculum, parsed. A new upload replaces the old. */
   getRoutine(studentId: string): Promise<LearnerRoutine | null>;
   saveRoutine(studentId: string, routine: LearnerRoutine): Promise<void>;
+
+  /** The trusted person offered on a one-tap call when distress is detected. */
+  getCareContact(studentId: string): Promise<CareContact | null>;
+  saveCareContact(studentId: string, contact: CareContact): Promise<void>;
+  deleteCareContact(studentId: string): Promise<void>;
 
   /** Mastery bookkeeping for spaced repetition & adaptive difficulty. */
   recordAttempt(studentId: string, skillId: string, correct: boolean): Promise<void>;

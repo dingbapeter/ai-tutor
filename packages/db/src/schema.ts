@@ -220,6 +220,19 @@ export const routines = pgTable("routines", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * The care contact: one trusted person a learner (or their guardian) names in
+ * advance. When the safety layer sees real distress, the app offers a one-tap
+ * call to this number. Never dialed automatically; the learner always chooses.
+ */
+export const careContacts = pgTable("care_contacts", {
+  studentId: uuid("student_id").primaryKey().references(() => students.id),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  relationship: text("relationship"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const memories = pgTable("memories", {
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id").notNull().references(() => students.id),

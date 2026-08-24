@@ -40,7 +40,7 @@ export async function sendPasswordReset(to: string, rawToken: string): Promise<"
       ``,
       `${base}/reset?token=${rawToken}`,
       ``,
-      `If this wasn't you, ignore this email — nothing changes.`,
+      `If this wasn't you, just ignore this email. Nothing changes.`,
     ].join("\n"),
   });
   return "sent";
@@ -105,7 +105,7 @@ export async function sendSafetyAlert(msg: SafetyAlertEmail): Promise<"sent" | "
   await transport.sendMail({
     from: process.env.SMTP_FROM ?? `"Dingba Safety" <tutor@${host.replace(/^mail\./, "")}>`,
     to: msg.to,
-    subject: `Please check in with ${msg.studentName} — something came up in today's session`,
+    subject: `Please check in with ${msg.studentName}: something came up in today's session`,
     text: [
       `Hello,`,
       ``,
@@ -138,16 +138,16 @@ export async function sendParentRecap(msg: RecapEmail): Promise<"sent" | "skippe
   await transport.sendMail({
     from: process.env.SMTP_FROM ?? `"Dingba" <tutor@${host.replace(/^mail\./, "")}>`,
     to: msg.to,
-    subject: `${msg.studentName}'s session with ${msg.tutorName} — today's recap`,
+    subject: `${msg.studentName}'s session with ${msg.tutorName}: today's recap`,
     text: [
       `Hello,`,
       ``,
-      `${msg.tutorName} here — ${msg.studentName} and I just finished a session. Here's how it went:`,
+      `${msg.tutorName} here. ${msg.studentName} and I just finished a session, here's how it went:`,
       ``,
       msg.recap,
       ``,
       `See you next session!`,
-      `— ${msg.tutorName}`,
+      `${msg.tutorName}`,
     ].join("\n"),
   });
   return "sent";

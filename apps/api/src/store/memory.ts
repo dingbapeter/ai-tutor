@@ -1,6 +1,7 @@
 import {
   mergeProfile,
   scheduleAttempt,
+  type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
   type MasteryState,
@@ -15,6 +16,7 @@ export class MemoryStore implements Store {
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
   private learnerProfiles = new Map<string, LearnerProfile>();
   private routines = new Map<string, LearnerRoutine>();
+  private careContacts = new Map<string, CareContact>();
   private mastery = new Map<string, Map<string, MasteryState>>();
   private sessions = new Map<
     string,
@@ -85,6 +87,18 @@ export class MemoryStore implements Store {
 
   async updateProfile(studentId: string, patch: Partial<LearnerProfile>) {
     this.learnerProfiles.set(studentId, mergeProfile(this.learnerProfiles.get(studentId) ?? null, patch));
+  }
+
+  async getCareContact(studentId: string) {
+    return this.careContacts.get(studentId) ?? null;
+  }
+
+  async saveCareContact(studentId: string, contact: CareContact) {
+    this.careContacts.set(studentId, contact);
+  }
+
+  async deleteCareContact(studentId: string) {
+    this.careContacts.delete(studentId);
   }
 
   async getRoutine(studentId: string) {
@@ -260,6 +274,7 @@ export class MemoryStore implements Store {
       this.profiles.delete(sid);
       this.learnerProfiles.delete(sid);
       this.routines.delete(sid);
+      this.careContacts.delete(sid);
       this.memories.delete(sid);
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);

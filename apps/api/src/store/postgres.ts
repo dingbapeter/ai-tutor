@@ -3,6 +3,7 @@ import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
 import {
   mergeProfile,
   scheduleAttempt,
+  type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
   type SessionRecap,
@@ -125,6 +126,44 @@ export class PostgresStore implements Store {
         target: schema.learnerProfiles.studentId,
         set: { profile: merged, updatedAt: new Date() },
       });
+  }
+
+  async getCareContact(studentId: string): Promise<CareContact | null> {
+    const [row] = await this.db
+      .select({
+        name: schema.careContacts.name,
+        phone: schema.careContacts.phone,
+        relationship: schema.careContacts.relationship,
+      })
+      .from(schema.careContacts)
+      .where(eq(schema.careContacts.studentId, studentId))
+      .limit(1);
+    return row ? { name: row.name, phone: row.phone, relationship: row.relationship ?? undefined } : null;
+  }
+
+  async saveCareContact(studentId: string, contact: CareContact) {
+    await this.db
+      .insert(schema.careContacts)
+      .values({
+        studentId,
+        name: contact.name,
+        phone: contact.phone,
+        relationship: contact.relationship ?? null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.careContacts.studentId,
+        set: {
+          name: contact.name,
+          phone: contact.phone,
+          relationship: contact.relationship ?? null,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async deleteCareContact(studentId: string) {
+    await this.db.delete(schema.careContacts).where(eq(schema.careContacts.studentId, studentId));
   }
 
   async getRoutine(studentId: string): Promise<LearnerRoutine | null> {
@@ -642,6 +681,7 @@ export class PostgresStore implements Store {
       await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
       await this.db.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
       await this.db.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
+      await this.db.delete(schema.careContacts).where(eq(schema.careContacts.studentId, s.id));
       await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
       await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
       await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));

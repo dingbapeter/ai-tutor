@@ -384,6 +384,110 @@ describe("platform basics", () => {
     expect((await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/finish` })).statusCode).toBe(404);
   });
 
+  it("offers the care contact on danger, and only on danger", async () => {
+    const isolatedStore = new MemoryStore();
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: isolatedStore,
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000" },
+    });
+
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "care@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Ife" } });
+    const studentId = kid.json().id as string;
+
+    const saved = await isolated.inject({
+      method: "PUT",
+      url: `/students/${studentId}/care-contact`,
+      headers: auth,
+      payload: { name: "Aunty Ngozi", phone: "+234 801 234 5678", relationship: "aunt" },
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "amara", packId: "math-ms" },
+    });
+    const sessionId = s.json().sessionId as string;
+
+    const events = (body: string) =>
+      [...body.matchAll(/data: (\{.*\})/g)].map((m) => JSON.parse(m[1]) as Record<string, unknown>);
+
+    // A normal learning message must never surface the contact.
+    const ordinary = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "Can you help me with fractions?" },
+    });
+    expect(events(ordinary.body).some((e) => e.care)).toBe(false);
+
+    // Real distress: the offer appears, with the number the guardian saved.
+    const distress = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "I want to kill myself" },
+    });
+    const offer = events(distress.body).find((e) => e.care)?.care as { name: string; phone: string } | undefined;
+    expect(offer?.name).toBe("Aunty Ngozi");
+    expect(offer?.phone).toBe("+234 801 234 5678");
+
+    // Removal sticks: no contact, no offer, and the safety reply still lands.
+    await isolated.inject({ method: "DELETE", url: `/students/${studentId}/care-contact`, headers: auth });
+    const after = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/message`,
+      payload: { text: "I want to kill myself" },
+    });
+    const evs = events(after.body);
+    expect(evs.some((e) => e.care)).toBe(false);
+    expect(evs.map((e) => e.delta).join("")).toContain("you matter");
+
+    // A stranger can neither read nor set someone else's care contact.
+    const stranger = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "snoop5@example.com", password: "password12", role: "parent" },
+    });
+    const strangerAuth = { authorization: `Bearer ${stranger.json().token}` };
+    expect((await isolated.inject({ url: `/students/${studentId}/care-contact`, headers: strangerAuth })).statusCode).toBe(403);
+    expect(
+      (
+        await isolated.inject({
+          method: "PUT",
+          url: `/students/${studentId}/care-contact`,
+          headers: strangerAuth,
+          payload: { name: "Bad Actor", phone: "+10000000000" },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    await isolated.close();
+  });
+
+  it("rejects a care contact with a junk phone number", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "carejunk@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await app.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Bee" } });
+    const bad = await app.inject({
+      method: "PUT",
+      url: `/students/${kid.json().id}/care-contact`,
+      headers: auth,
+      payload: { name: "Someone", phone: "call me maybe" },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it("serves rubric problems for conversation packs without leaking criteria", async () => {
     const res = await app.inject({ url: "/packs/visa-prep/problems" });
     expect(res.statusCode).toBe(200);
@@ -713,8 +817,9 @@ describe("session lifecycle", () => {
       .filter((e) => e.delta)
       .map((e) => e.delta)
       .join("");
-    // The canned safe reply, not an LLM response: caring, points to a trusted adult.
-    expect(reply).toContain("trusted adult");
+    // The canned safe reply, not an LLM response: caring, points to a real person.
+    expect(reply).toContain("you matter");
+    expect(reply).toContain("someone you trust");
     expect(reply).not.toContain("Good question"); // mock LLM must NOT have run
 
     // Incident recorded and visible on the student's safety record.

@@ -501,6 +501,28 @@ body[data-session="1"] .appbar { display: none; }
 
 .invite-code { font-size: 24px; font-weight: 800; letter-spacing: 4px; color: var(--brand); }
 
+/* ---------- the care offer ---------- */
+
+.care-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0 0;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 2px solid var(--brand);
+  box-shadow: var(--shadow-lift);
+}
+.care-card > div:first-child { min-width: 0; }
+.care-card p { color: var(--text-dim); }
+@media (max-width: 620px) {
+  .care-card { flex-direction: column; align-items: stretch; gap: 12px; }
+  .care-card .btn { flex: 1; justify-content: center; }
+}
+.btn.care-call { background: var(--ok); text-decoration: none; }
+.btn.care-call:hover { background: var(--ok); filter: brightness(1.08); }
+
 /* ---------- motion ---------- */
 
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
