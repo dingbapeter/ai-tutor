@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import "katex/dist/katex.min.css";
+import "./globals.css";
 import Boot from "./Boot";
+import Chrome from "./Chrome";
 
 export const metadata = {
   title: "Dingba",
@@ -12,14 +14,19 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#6C5CE7",
+  viewportFit: "cover" as const,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#6C5CE7" },
+    { media: "(prefers-color-scheme: dark)", color: "#131320" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif", background: "#f6f7fb", color: "#1a1a2e" }}>
+      <body>
         <Boot />
+        <Chrome />
         {children}
       </body>
     </html>

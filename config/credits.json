@@ -1,22 +1,113 @@
 {
   "note": "Every open project powering this platform, credited with joy. Served at /credits and shown in the app.",
   "credits": [
-    { "name": "llama.cpp", "by": "Georgi Gerganov & contributors", "license": "MIT", "role": "Runs our tutors' language models on our own servers", "url": "https://github.com/ggml-org/llama.cpp" },
-    { "name": "Qwen", "by": "Alibaba Cloud", "license": "Apache-2.0", "role": "Open-weights language models behind live tutoring", "url": "https://github.com/QwenLM" },
-    { "name": "Whisper / faster-whisper", "by": "OpenAI / SYSTRAN", "license": "MIT", "role": "Understands students' voices", "url": "https://github.com/SYSTRAN/faster-whisper" },
-    { "name": "Kokoro", "by": "hexgrad", "license": "Apache-2.0", "role": "Gives our tutors their voices", "url": "https://huggingface.co/hexgrad/Kokoro-82M" },
-    { "name": "Piper", "by": "Rhasspy", "license": "MIT", "role": "Fast fallback text-to-speech", "url": "https://github.com/rhasspy/piper" },
-    { "name": "SymPy", "by": "SymPy Development Team", "license": "BSD-3-Clause", "role": "Checks every math answer so the tutor is never confidently wrong", "url": "https://sympy.org" },
-    { "name": "KaTeX", "by": "Khan Academy", "license": "MIT", "role": "Renders beautiful math notation", "url": "https://katex.org" },
-    { "name": "Claude API", "by": "Anthropic", "license": "Commercial API", "role": "Premium safety moderation keeping sessions safe for kids", "url": "https://www.anthropic.com" },
-    { "name": "Fastify", "by": "Fastify team", "license": "MIT", "role": "Serves the platform API", "url": "https://fastify.dev" },
-    { "name": "Next.js & React", "by": "Vercel / Meta", "license": "MIT", "role": "The student and parent apps", "url": "https://nextjs.org" },
-    { "name": "PostgreSQL & Drizzle ORM", "by": "PostgreSQL Global Development Group / Drizzle Team", "license": "PostgreSQL / Apache-2.0", "role": "Remembers every student's learning journey", "url": "https://www.postgresql.org" },
-    { "name": "bcrypt.js", "by": "Daniel Wirtz", "license": "MIT", "role": "Protects family passwords", "url": "https://github.com/dcodeIO/bcrypt.js" }
+    {
+      "name": "llama.cpp",
+      "by": "Georgi Gerganov & contributors",
+      "license": "MIT",
+      "role": "Runs our tutors' language models on our own servers",
+      "url": "https://github.com/ggml-org/llama.cpp"
+    },
+    {
+      "name": "Qwen",
+      "by": "Alibaba Cloud",
+      "license": "Apache-2.0",
+      "role": "Open-weights language models behind live tutoring",
+      "url": "https://github.com/QwenLM"
+    },
+    {
+      "name": "Whisper / faster-whisper",
+      "by": "OpenAI / SYSTRAN",
+      "license": "MIT",
+      "role": "Understands students' voices",
+      "url": "https://github.com/SYSTRAN/faster-whisper"
+    },
+    {
+      "name": "Kokoro",
+      "by": "hexgrad",
+      "license": "Apache-2.0",
+      "role": "Gives our tutors their voices",
+      "url": "https://huggingface.co/hexgrad/Kokoro-82M"
+    },
+    {
+      "name": "Piper",
+      "by": "Rhasspy",
+      "license": "MIT",
+      "role": "Fast fallback text-to-speech",
+      "url": "https://github.com/rhasspy/piper"
+    },
+    {
+      "name": "SymPy",
+      "by": "SymPy Development Team",
+      "license": "BSD-3-Clause",
+      "role": "Checks every math answer so the tutor is never confidently wrong",
+      "url": "https://sympy.org"
+    },
+    {
+      "name": "KaTeX",
+      "by": "Khan Academy",
+      "license": "MIT",
+      "role": "Renders beautiful math notation",
+      "url": "https://katex.org"
+    },
+    {
+      "name": "Claude API",
+      "by": "Anthropic",
+      "license": "Commercial API",
+      "role": "Premium safety moderation keeping sessions safe for kids",
+      "url": "https://www.anthropic.com"
+    },
+    {
+      "name": "Fastify",
+      "by": "Fastify team",
+      "license": "MIT",
+      "role": "Serves the platform API",
+      "url": "https://fastify.dev"
+    },
+    {
+      "name": "Next.js & React",
+      "by": "Vercel / Meta",
+      "license": "MIT",
+      "role": "The student and parent apps",
+      "url": "https://nextjs.org"
+    },
+    {
+      "name": "PostgreSQL & Drizzle ORM",
+      "by": "PostgreSQL Global Development Group / Drizzle Team",
+      "license": "PostgreSQL / Apache-2.0",
+      "role": "Remembers every student's learning journey",
+      "url": "https://www.postgresql.org"
+    },
+    {
+      "name": "bcrypt.js",
+      "by": "Daniel Wirtz",
+      "license": "MIT",
+      "role": "Protects family passwords",
+      "url": "https://github.com/dcodeIO/bcrypt.js"
+    },
+    {
+      "name": "Plus Jakarta Sans",
+      "by": "Tokotype (Gumpita Rahayu)",
+      "license": "OFL-1.1",
+      "role": "The typeface Dingba speaks in, across the whole app",
+      "url": "https://github.com/tokotype/PlusJakartaSans"
+    }
   ],
   "planned": [
-    { "name": "LiveKit", "license": "Apache-2.0", "role": "Full-duplex live voice sessions (Phase 2)" },
-    { "name": "Excalidraw", "license": "MIT", "role": "Shared whiteboard (Phase 2)" },
-    { "name": "Siyavula / Illustrative Mathematics / PhET / African Storybook", "license": "CC BY", "role": "Openly-licensed curriculum content (attribution shown inside packs that use them)" }
+    {
+      "name": "LiveKit",
+      "license": "Apache-2.0",
+      "role": "Full-duplex live voice sessions (Phase 2)"
+    },
+    {
+      "name": "Excalidraw",
+      "license": "MIT",
+      "role": "Shared whiteboard (Phase 2)"
+    },
+    {
+      "name": "Siyavula / Illustrative Mathematics / PhET / African Storybook",
+      "license": "CC BY",
+      "role": "Openly-licensed curriculum content (attribution shown inside packs that use them)"
+    }
   ]
 }

@@ -15,9 +15,9 @@ import type {
  */
 
 const CANNED_TURNS = [
-  "Good question — before I answer, what do you already know about this? Walk me through your thinking so far.",
+  "Good question. Before I answer, what do you already know about this? Walk me through your thinking so far.",
   "You're closer than you think. Look at your last step again: what happens to the value on the right-hand side?",
-  "Almost! There's one small slip. Try that step once more, slowly — say each part out loud as you go.",
+  "Almost! There's one small slip. Try that step once more, slowly. Say each part out loud as you go.",
   "Exactly right. Now, why does that work? If you can explain it back to me, you own it.",
 ];
 

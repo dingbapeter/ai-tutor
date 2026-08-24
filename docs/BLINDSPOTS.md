@@ -50,12 +50,13 @@ F. ~~**Email verification** at signup~~ BUILT 2026-08-24: token email →
 G. **i18n** — English-only UI; scaffolding not started.
 H. **Share-a-recap; richer motivation loop** (goals, rewards) — product
    backlog, not risks.
-H2. **UI design pass** — founder verdict on first live deploy (2026-08-24):
-   "too simplistic". All sprints went to the engine; the web UI is
-   deliberately utilitarian inline-styled React. Needs a real design
-   system (typography, color, layout, motion, tutor-forward visual
-   identity) once the deploy stabilizes. Judge flows, not looks, until
-   then.
+H2. **App-shell rebuild** — founder verdict on first live deploy (2026-08-24):
+   "too simplistic"; upgraded to "feel like an app, not a website".
+   PARTIALLY DONE (same day): design system (indigo tokens, dark mode,
+   Plus Jakarta Sans, motion), app bar + wordmark, restyled home and
+   session screens, immersive session (app bar hides). STILL OLD STYLE:
+   account, credits, terms, privacy, reset, verify pages; no bottom tab
+   nav yet; screenshots verified light/dark/mobile/desktop locally.
 I. **Pedagogy eval harness** — needed before/after every deploy-model swap;
    design in HANDOFF next-work list.
 J. **Ongoing red-teaming** of safety — periodic, human-led, never "done".

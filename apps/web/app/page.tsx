@@ -109,6 +109,13 @@ export default function Home() {
 
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
 
+  // The app bar steps aside while a session is live; the tutor gets the screen.
+  useEffect(() => {
+    if (sessionId) document.body.dataset.session = "1";
+    else delete document.body.dataset.session;
+    return () => { delete document.body.dataset.session; };
+  }, [sessionId]);
+
   function playAudio(src: Blob | string) {
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
@@ -244,7 +251,7 @@ export default function Home() {
       setExamProblems(null);
       setMessages((m) => [
         ...m,
-        { role: "user", content: `✍️ Finished the mock exam.` },
+        { role: "user", content: `Finished the mock exam.` },
         { role: "assistant", content: `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.\n\n${json.postMortem}` },
       ]);
     } catch (e) {
@@ -283,7 +290,7 @@ export default function Home() {
       }
       if (res.status === 402) {
         const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? "limit reached — upgrade to continue");
+        throw new Error(j?.error ?? "You've reached today's limit. Upgrade to keep going.");
       }
       if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
       const reader = res.body.getReader();
@@ -300,7 +307,7 @@ export default function Home() {
           if (!data) continue;
           try {
             const evt = JSON.parse(data);
-            if (evt.error) throw new Error("the tutor had trouble replying — try again");
+            if (evt.error) throw new Error("Your tutor had trouble replying. Try that again.");
             if (evt.delta) {
               setMessages((m) => {
                 const copy = [...m];
@@ -343,7 +350,7 @@ export default function Home() {
       rec.start();
       setRecording(true);
     } catch {
-      setError("microphone unavailable — check permissions");
+      setError("We can't reach your microphone. Check permissions and try again.");
     }
   }
 
@@ -405,7 +412,7 @@ export default function Home() {
       setVerdicts((v) => ({ ...v, [p.index]: json.correct }));
       setMessages((m) => [
         ...m,
-        { role: "user", content: `✏️ ${p.prompt} — my answer: ${answer}` },
+        { role: "user", content: `My answer to "${p.prompt}": ${answer}` },
         { role: "assistant", content: json.feedback },
       ]);
     } catch (e) {
@@ -430,23 +437,16 @@ export default function Home() {
     }
   }
 
-  const card: React.CSSProperties = {
-    background: "#fff",
-    borderRadius: 12,
-    padding: 24,
-    boxShadow: "0 1px 4px rgba(20,30,60,.08)",
-  };
-
   if (recap) {
     return (
-      <main style={{ maxWidth: 640, margin: "48px auto", padding: 16 }}>
-        <div style={card}>
+      <main className="shell">
+        <div className="card fadeUp">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Avatar color={persona?.color} accent={persona?.accent} speaking={false} size={56} />
             <h2 style={{ margin: 0 }}>Session recap from {persona?.name}</h2>
           </div>
           <p style={{ whiteSpace: "pre-wrap" }}>{recap}</p>
-          <button onClick={() => { setRecap(null); setMessages([]); }} style={btn}>
+          <button className="btn big" onClick={() => { setRecap(null); setMessages([]); }}>
             Start another session
           </button>
         </div>
@@ -456,22 +456,23 @@ export default function Home() {
 
   if (!sessionId) {
     return (
-      <main style={{ maxWidth: 640, margin: "48px auto", padding: 16 }}>
-        <h1 style={{ textAlign: "center" }}>Meet your tutor</h1>
-        {error && <p style={errBox}>{error}</p>}
+      <main className="shell">
+        <div className="hero fadeUp">
+          <h1>What do you want to <span>learn</span> today?</h1>
+          <p>Ask anything. Learn anything. Your tutor remembers you.</p>
+        </div>
+        {error && <p className="err">{error}</p>}
         {personas.length === 0 && (
-          <p style={{ ...errBox, background: "#fff8e6", color: "#7a5a00" }}>
-            Waking the tutors up… if this persists, we&apos;re having a moment — try again shortly.
-          </p>
+          <p className="notice">Waking your tutors up. Give it a moment, then try again.</p>
         )}
-        <div style={card}>
+        <div className="card fadeUp">
           {family.length > 0 ? (
             <>
-              <label style={lbl}>Who&apos;s learning today?</label>
+              <label className="lbl">Who&apos;s learning today?</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {family.map((s) => (
                   <button key={s.id} onClick={() => setStudentId(s.id)}
-                    style={{ ...pill, ...(studentId === s.id ? pillOn : {}) }}>
+                    className={`pill${studentId === s.id ? " on" : ""}`}>
                     <b>{s.displayName}</b>
                   </button>
                 ))}
@@ -479,30 +480,30 @@ export default function Home() {
             </>
           ) : (
             <>
-              <label style={lbl}>Your name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} style={inp} placeholder="Ada" />
+              <label className="lbl">Your name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder="Ada" />
 
-              <label style={lbl}>Parent email (optional — for session recaps)</label>
-              <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} style={inp} placeholder="parent@example.com" type="email" />
+              <label className="lbl">Parent email (optional, for session recaps)</label>
+              <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className="inp" placeholder="parent@example.com" type="email" />
             </>
           )}
 
-          <label style={lbl}>Pick your tutor</label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label className="lbl">Pick your tutor</label>
+          <div className="grid2">
             {personas.map((p) => (
               <button key={p.id} onClick={() => setPersonaId(p.id)}
-                style={{ ...pill, ...(personaId === p.id ? pillOn : {}), display: "flex", gap: 10, alignItems: "center" }}>
+                className={`pill${personaId === p.id ? " on" : ""}`}>
                 <Avatar color={p.color} accent={p.accent} speaking={false} size={40} />
                 <span><b>{p.name}</b><br /><small>{p.style}</small></span>
               </button>
             ))}
           </div>
 
-          <label style={lbl}>What are we working on?</label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label className="lbl">What are we working on?</label>
+          <div className="grid2">
             {packs.map((p) => (
               <button key={p.id} onClick={() => setPackId(p.id)}
-                style={{ ...pill, ...(packId === p.id ? pillOn : {}) }}>
+                className={`pill${packId === p.id ? " on" : ""}`}>
                 <b>{p.title}</b>
               </button>
             ))}
@@ -511,104 +512,95 @@ export default function Home() {
           <button
             disabled={!personaId || !packId || (family.length > 0 && !studentId)}
             onClick={startSession}
-            style={{ ...btn, marginTop: 20 }}>
+            className="btn big"
+            style={{ marginTop: 22 }}>
             Start session
           </button>
-          <div style={{ marginTop: 14, borderTop: "1px solid #e7ebf4", paddingTop: 12 }}>
+          <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             {!joinOpen ? (
               <p style={{ textAlign: "center", margin: 0 }}>
-                <button onClick={() => setJoinOpen(true)}
-                  style={{ border: "none", background: "none", color: "#2b4c8c", cursor: "pointer", fontSize: 15 }}>
-                  🎟️ Have a class code? Join a friend&apos;s live class
+                <button onClick={() => setJoinOpen(true)} className="btn ghost small">
+                  Have a class code? Join a friend&apos;s live class
                 </button>
               </p>
             ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)}
-                  style={{ ...inp, flex: 1, minWidth: 110, margin: 0 }} placeholder="Class code" />
+                  className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Class code" />
                 {!token && (
                   <input value={joinName} onChange={(e) => setJoinName(e.target.value)}
-                    style={{ ...inp, flex: 1, minWidth: 110, margin: 0 }} placeholder="Your name" />
+                    className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Your name" />
                 )}
-                <button onClick={joinClass} style={btn}>Join class</button>
+                <button onClick={joinClass} className="btn">Join class</button>
               </div>
             )}
           </div>
-          <p style={{ textAlign: "center", marginBottom: 0 }}>
-            <a href="/account" style={{ color: "#68718a" }}>
-              {token ? "Family dashboard →" : "Parents: create an account for progress reports →"}
-            </a>
-            {" · "}
-            <a href="/credits" style={{ color: "#68718a" }}>Built on open work 💙</a>
-          </p>
         </div>
+        <p className="footlinks">
+          <a href="/account">
+            {token ? "Family dashboard" : "Parents: create an account for progress reports"}
+          </a>
+          {" · "}
+          <a href="/credits">Built on open work 💙</a>
+        </p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "16px auto", padding: 16, display: "flex", flexDirection: "column", height: "94vh" }}>
-      <style>{`
-        .avatar-eyes { animation: blink 4.2s infinite; transform-origin: 50px 46px; }
-        @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 96%, 98% { transform: scaleY(0.08); } }
-        .avatar-mouth-talking { animation: talk 0.28s infinite alternate; transform-origin: 50px 66px; }
-        @keyframes talk { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
-        .rec-pulse { animation: pulse 1s infinite alternate; }
-        @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
-      `}</style>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+    <main className="session">
+      <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} />
+          <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} size={52} />
           <div>
-            <h2 style={{ margin: 0 }}>{persona?.name}</h2>
-            <small style={{ color: "#68718a" }}>{speaking ? "speaking…" : busy ? "thinking…" : "listening"}</small>
+            <h2>{persona?.name}</h2>
+            <div className="status">{speaking ? "speaking" : busy ? "thinking" : "listening"}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="session-actions">
           {!participantId && (
             <>
-              <button onClick={inviteFriend} style={{ ...btn, background: "#5a678a" }}>Invite</button>
-              <button onClick={startExam} style={{ ...btn, background: "#5a678a" }}>Mock exam</button>
-              <button onClick={openPractice} style={{ ...btn, background: showPractice ? "#2b4c8c" : "#5a678a" }}>Practice</button>
-              <button onClick={endSession} style={{ ...btn, background: "#8a93a6" }}>End session</button>
+              <button onClick={inviteFriend} className="btn quiet small">Invite</button>
+              <button onClick={startExam} className="btn quiet small">Mock exam</button>
+              <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>
+              <button onClick={endSession} className="btn ghost small">End</button>
             </>
           )}
-          {participantId && <small style={{ color: "#68718a", alignSelf: "center" }}>in {hostName}&apos;s class</small>}
+          {participantId && <span className="status">in {hostName}&apos;s class</span>}
         </div>
       </div>
 
       {inviteCode && (
-        <div style={{ ...card, margin: "10px 0", textAlign: "center" }}>
-          🎟️ Friends join with code: <b style={{ fontSize: 22, letterSpacing: 3 }}>{inviteCode}</b>
-          <div><small style={{ color: "#68718a" }}>They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+        <div className="card tray" style={{ textAlign: "center" }}>
+          Friends join with code <span className="invite-code">{inviteCode}</span>
+          <div><small className="status">They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
         </div>
       )}
 
       {examProblems && (
-        <div style={{ ...card, margin: "10px 0", maxHeight: 260, overflowY: "auto" }}>
-          <b>✍️ Mock exam — answers are checked at the end, keep moving!</b>
+        <div className="card tray">
+          <b>Mock exam. Answers are checked at the end, keep moving.</b>
           {examProblems.map((p) => (
-            <div key={p.index} style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0" }}>
-              <span style={{ flex: 1 }}>{examSubmitted.has(p.index) ? "📩 " : ""}{p.prompt}</span>
+            <div key={p.index} className="row">
+              <span style={{ flex: 1 }}>{examSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
               <input value={examAnswers[p.index] ?? ""} disabled={examSubmitted.has(p.index)}
                 onChange={(e) => setExamAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                style={{ ...inp, width: 110, margin: 0 }} placeholder="answer" />
+                className="inp" placeholder="answer" />
               <button onClick={() => submitExamAnswer(p.index)} disabled={examSubmitted.has(p.index)}
-                style={{ ...btn, padding: "8px 12px" }}>Lock in</button>
+                className="btn quiet small">Lock in</button>
             </div>
           ))}
-          <button onClick={finishExam} disabled={busy} style={{ ...btn, marginTop: 8, background: "#2b4c8c" }}>
-            Finish exam & get my results
+          <button onClick={finishExam} disabled={busy} className="btn" style={{ marginTop: 8 }}>
+            Finish exam and get my results
           </button>
         </div>
       )}
 
       {showPractice && (
-        <div style={{ ...card, margin: "10px 0", maxHeight: 220, overflowY: "auto" }}>
+        <div className="card tray">
           {problems.length === 0 && <small>No practice problems in this pack yet.</small>}
           {problems.map((p) => (
-            <div key={p.index} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <div key={p.index} className="row">
               <span style={{ flex: 1 }}>
                 {verdicts[p.index] === true && "✅ "}
                 {verdicts[p.index] === false && "❌ "}
@@ -617,51 +609,40 @@ export default function Home() {
               <input
                 value={practiceAnswers[p.index] ?? ""}
                 onChange={(e) => setPracticeAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                style={{ ...inp, width: 110, margin: 0 }}
+                className="inp"
                 placeholder="answer"
               />
-              <button onClick={() => submitPractice(p)} disabled={busy} style={{ ...btn, padding: "8px 12px" }}>Check</button>
+              <button onClick={() => submitPractice(p)} disabled={busy} className="btn quiet small">Check</button>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ ...card, flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}>
+      <div className="chat" style={{ marginTop: 10 }}>
         {messages.map((m, i) => (
-          <div key={i} style={{
-            alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-            background: m.role === "user" ? "#2b4c8c" : "#eef1f8",
-            color: m.role === "user" ? "#fff" : "#1a1a2e",
-            borderRadius: 12, padding: "10px 14px", maxWidth: "82%", whiteSpace: "pre-wrap",
-          }}>
+          <div key={i} className={`msg ${m.role === "user" ? "user" : "tutor"}`}>
             {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
             {m.role === "assistant" && m.content && !m.content.startsWith("(") && (
-              <>
-                <button onClick={() => speakMessage(m.content)} title="Hear this"
-                  style={{ border: "none", background: "transparent", cursor: "pointer", marginLeft: 6, fontSize: 14 }}>
-                  🔊
-                </button>
-                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title="Copy"
-                  style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 14 }}>
-                  📋
-                </button>
-              </>
+              <span className="tools">
+                <button onClick={() => speakMessage(m.content)} title="Hear this">🔊</button>
+                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title="Copy">📋</button>
+              </span>
             )}
           </div>
         ))}
         <div ref={bottom} />
       </div>
 
-      <div style={{ display: "flex", gap: 6, margin: "10px 0 6px", flexWrap: "wrap" }}>
+      <div className="formats">
         {(["plain", "story", "comic", "song"] as Format[]).map((f) => (
           <button key={f} onClick={() => setFormat(f)}
-            style={{ ...chip, ...(format === f ? chipOn : {}) }}>
+            className={`chip${format === f ? " on" : ""}`}>
             {f === "plain" ? "normal" : `as a ${f}`}
           </button>
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="composer">
         {!participantId && <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
@@ -669,26 +650,17 @@ export default function Home() {
           onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
           onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
           disabled={busy}
-          className={recording ? "rec-pulse" : undefined}
+          className={`btn${recording ? " danger rec-pulse" : ""}`}
           title="Hold to talk"
-          style={{ ...btn, background: recording ? "#c0392b" : "#2b4c8c", minWidth: 52 }}>
+          style={{ minWidth: 52, padding: "12px 14px" }}>
           🎤
         </button>}
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          style={{ ...inp, flex: 1, margin: 0 }} placeholder={recording ? "listening…" : "Say something to your tutor…"} />
-        <button onClick={send} disabled={busy} style={btn}>Send</button>
+          className="inp" placeholder={recording ? "listening…" : "Say something to your tutor…"} />
+        <button onClick={send} disabled={busy} className="btn">Send</button>
       </div>
-      {error && <p style={errBox}>{error}</p>}
+      {error && <p className="err">{error}</p>}
     </main>
   );
 }
-
-const lbl: React.CSSProperties = { display: "block", margin: "16px 0 6px", fontWeight: 600 };
-const inp: React.CSSProperties = { width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccd3e0", fontSize: 15, boxSizing: "border-box" };
-const btn: React.CSSProperties = { padding: "10px 18px", borderRadius: 8, border: "none", background: "#2b4c8c", color: "#fff", fontSize: 15, cursor: "pointer" };
-const pill: React.CSSProperties = { padding: "10px 14px", borderRadius: 10, border: "1px solid #ccd3e0", background: "#fff", cursor: "pointer", textAlign: "left" };
-const pillOn: React.CSSProperties = { border: "2px solid #2b4c8c", background: "#eef1f8" };
-const chip: React.CSSProperties = { padding: "5px 12px", borderRadius: 999, border: "1px solid #ccd3e0", background: "#fff", cursor: "pointer", fontSize: 13 };
-const chipOn: React.CSSProperties = { border: "1px solid #2b4c8c", background: "#2b4c8c", color: "#fff" };
-const errBox: React.CSSProperties = { background: "#fdecec", color: "#9d2b2b", borderRadius: 8, padding: "10px 14px", margin: "8px 0" };
