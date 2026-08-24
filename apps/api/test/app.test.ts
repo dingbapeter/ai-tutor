@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { mergeProfile } from "../src/store/types.js";
+import { masteryStage, mergeProfile, scheduleAttempt } from "../src/store/types.js";
+import { buildSystemPrompt, loadPack, loadPersonas } from "../src/tutor/prompt.js";
 import {
   MockChatProvider,
   MockSttProvider,
@@ -74,6 +75,85 @@ describe("Dingba Brain merge", () => {
     expect(p.interests).toHaveLength(8); // capped, oldest dropped
     expect(p.interests).not.toContain("music");
     expect(p.goals).toEqual([]);
+  });
+});
+
+describe("adaptive engine", () => {
+  it("stretches intervals on recall and resets to due-now on a miss", () => {
+    const now = new Date("2026-08-24T12:00:00Z");
+    let s = scheduleAttempt(null, true, now);
+    expect(s.dueAt.getTime()).toBeGreaterThan(now.getTime()); // first success: not due today
+    const firstGap = s.dueAt.getTime() - now.getTime();
+
+    s = scheduleAttempt(s, true, now);
+    expect(s.dueAt.getTime() - now.getTime()).toBeGreaterThan(firstGap); // gap grows
+
+    const missed = scheduleAttempt(s, false, now);
+    expect(missed.dueAt.getTime()).toBeLessThanOrEqual(now.getTime()); // due immediately
+    expect(missed.stabilityDays).toBe(1);
+    expect(missed.level).toBeLessThan(s.level);
+  });
+
+  it("names the mastery ladder stages", () => {
+    const past = new Date(Date.now() - 1000);
+    const future = new Date(Date.now() + 86_400_000);
+    expect(masteryStage({ level: 0.1, attempts: 1, dueAt: future })).toBe("introduced");
+    expect(masteryStage({ level: 0.5, attempts: 2, dueAt: future })).toBe("practising");
+    expect(masteryStage({ level: 0.75, attempts: 3, dueAt: future })).toBe("proficient");
+    expect(masteryStage({ level: 0.9, attempts: 5, dueAt: future })).toBe("mastered");
+    expect(masteryStage({ level: 0.9, attempts: 5, dueAt: past })).toBe("needs reinforcement");
+  });
+
+  it("puts due skills in the warm-up block of the system prompt", () => {
+    const prompt = buildSystemPrompt({
+      persona: loadPersonas()[0],
+      pack: loadPack("math-ms"),
+      studentName: "Ada",
+      memoryLines: [],
+      warmupSkills: ["Equivalent fractions", "One-step equations"],
+    });
+    expect(prompt).toContain("Spaced review");
+    expect(prompt).toContain("Equivalent fractions");
+  });
+
+  it("serves the review queue: a missed skill is due, and only to its owner", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "review@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await app.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Nkechi" } });
+    const studentId = kid.json().id as string;
+
+    const s = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "amara", packId: "math-ms" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${s.json().sessionId}/practice`,
+      payload: { problemIndex: 0, answer: "999999" },
+    });
+
+    const review = await app.inject({ url: `/students/${studentId}/review`, headers: auth });
+    expect(review.statusCode).toBe(200);
+    const { due } = review.json() as { due: Array<{ skillId: string; title: string }> };
+    expect(due.length).toBeGreaterThan(0);
+    expect(due[0].title.length).toBeGreaterThan(0);
+
+    const stranger = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "snoop3@example.com", password: "password12", role: "parent" },
+    });
+    const denied = await app.inject({
+      url: `/students/${studentId}/review`,
+      headers: { authorization: `Bearer ${stranger.json().token}` },
+    });
+    expect(denied.statusCode).toBe(403);
   });
 });
 

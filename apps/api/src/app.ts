@@ -7,9 +7,10 @@ import {
   loadPack,
   loadPersonas,
   PACK_IDS,
+  skillTitle,
   UnknownPackError,
 } from "./tutor/prompt.js";
-import type { LearnerProfile, Store } from "./store/types.js";
+import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -399,12 +400,36 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         students.map(async (s) => ({
           ...s,
           sessions: await store.listSessionSummaries(s.id, 5),
-          mastery: await store.getMasterySnapshot(s.id),
+          mastery: (await store.getMasterySnapshot(s.id)).map((m) => ({
+            skillId: m.skillId,
+            title: skillTitle(m.skillId),
+            level: m.level,
+            stage: masteryStage(m),
+            due: m.dueAt != null && m.dueAt.getTime() <= Date.now(),
+          })),
           safety: await store.listIncidents(s.id, 10),
           streakDays: await store.getStreakDays(s.id),
           profile: await store.getProfile(s.id),
         })),
       ),
+    };
+  });
+
+  /** Spaced-review queue: what this student should warm up on next. */
+  app.get<{ Params: { id: string } }>("/students/:id/review", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    const due = await store.getDueSkills(req.params.id, 10);
+    return {
+      due: due.map((d) => ({
+        skillId: d.skillId,
+        title: skillTitle(d.skillId),
+        level: d.level,
+        dueAt: d.dueAt,
+      })),
     };
   });
 
@@ -417,7 +442,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
     return {
       profile: await store.getProfile(req.params.id),
-      mastery: await store.getMasterySnapshot(req.params.id),
+      mastery: (await store.getMasterySnapshot(req.params.id)).map((m) => ({
+        skillId: m.skillId,
+        title: skillTitle(m.skillId),
+        level: m.level,
+        stage: masteryStage(m),
+        due: m.dueAt != null && m.dueAt.getTime() <= Date.now(),
+      })),
     };
   });
 
@@ -587,6 +618,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
       const memoryLines = await store.getMemories(studentIdResolved);
       const learnerProfile = await store.getProfile(studentIdResolved);
+      // Spaced review: due skills from THIS pack surface as session warm-ups.
+      const due = await store.getDueSkills(studentIdResolved, 10);
+      const warmupSkills = due
+        .map((d) => pack.skills.find((s) => s.id === d.skillId)?.title)
+        .filter((t): t is string => Boolean(t))
+        .slice(0, 3);
       const sessionId = await store.createSession(studentIdResolved, personaId, packId);
 
       live.set(sessionId, {
@@ -597,7 +634,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         personaId,
         packId,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile }) },
+          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills }) },
         ],
         busy: false,
         practiceTotal: 0,

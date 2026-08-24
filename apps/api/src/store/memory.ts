@@ -1,11 +1,19 @@
-import { mergeProfile, type LearnerProfile, type SessionRecap, type Store, type UsageKind } from "./types.js";
+import {
+  mergeProfile,
+  scheduleAttempt,
+  type LearnerProfile,
+  type MasteryState,
+  type SessionRecap,
+  type Store,
+  type UsageKind,
+} from "./types.js";
 
 export class MemoryStore implements Store {
   readonly kind = "memory";
   private students = new Map<string, { id: string; parentEmail?: string }>();
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
   private learnerProfiles = new Map<string, LearnerProfile>();
-  private mastery = new Map<string, Map<string, { level: number; attempts: number }>>();
+  private mastery = new Map<string, Map<string, MasteryState>>();
   private sessions = new Map<
     string,
     { studentId: string; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
@@ -78,18 +86,29 @@ export class MemoryStore implements Store {
   }
 
   async recordAttempt(studentId: string, skillId: string, correct: boolean) {
-    const bySkill = this.mastery.get(studentId) ?? new Map();
-    const cur = bySkill.get(skillId) ?? { level: 0, attempts: 0 };
-    bySkill.set(skillId, {
-      level: 0.7 * cur.level + 0.3 * (correct ? 1 : 0),
-      attempts: cur.attempts + 1,
-    });
+    const bySkill = this.mastery.get(studentId) ?? new Map<string, MasteryState>();
+    bySkill.set(skillId, scheduleAttempt(bySkill.get(skillId) ?? null, correct));
     this.mastery.set(studentId, bySkill);
   }
 
   async getMasterySnapshot(studentId: string) {
-    const bySkill = this.mastery.get(studentId) ?? new Map<string, { level: number }>();
-    return [...bySkill.entries()].map(([skillId, v]) => ({ skillId, level: v.level }));
+    const bySkill = this.mastery.get(studentId) ?? new Map<string, MasteryState>();
+    return [...bySkill.entries()].map(([skillId, v]) => ({
+      skillId,
+      level: v.level,
+      attempts: v.attempts,
+      dueAt: v.dueAt,
+    }));
+  }
+
+  async getDueSkills(studentId: string, limit: number) {
+    const now = Date.now();
+    const bySkill = this.mastery.get(studentId) ?? new Map<string, MasteryState>();
+    return [...bySkill.entries()]
+      .filter(([, v]) => v.dueAt.getTime() <= now)
+      .sort((a, b) => a[1].dueAt.getTime() - b[1].dueAt.getTime())
+      .slice(0, limit)
+      .map(([skillId, v]) => ({ skillId, level: v.level, dueAt: v.dueAt }));
   }
 
   // ---- Accounts & auth ----

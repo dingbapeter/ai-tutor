@@ -108,6 +108,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Dingba app shell: design system (indigo tokens, dark mode, Plus Jakarta Sans), app bar, immersive session, all pages restyled | ✅ built; light/dark/mobile/desktop screenshots verified against the running stack |
 | Live tutor presence: tutor greets first (in character, safety-audited, deterministic fallback), voice-on-by-default replies, avatar idle presence | ✅ tested + live-verified (greeting in create response and history; real-model greeting quality checks at deploy) |
 | Dingba homepage (hero + universal ask box routing into sessions, Socratic example, subject grid, profile showcase, learn-your-way, journey, CTA); app lives at /learn | ✅ built per the founder's template; ask-flow routing + light/dark/mobile/desktop screenshots verified |
+| Adaptive engine v1: SM-2-family spaced scheduling (both stores), mastery ladder stages, session warm-ups on due skills, /students/:id/review, dashboard stage labels + due badges | ✅ tested (interval growth/reset, ladder thresholds, warm-up prompt block, owner-gated review queue) |
 | Dingba Brain v1: structured learner profile (goals/strengths/struggles/interests/preferences), merged after every session (verified practice outcomes + best-effort model extraction), injected into the system prompt, profile card on the dashboard | ✅ tested (merge semantics, deterministic build from wrong answers, owner-gated endpoint); model-extraction quality checks with the real model at deploy |
 | Billing: Stripe + Paystack checkout, signature-verified webhooks → plan flips, cancellation downgrade, /me/billing, upgrade buttons | ✅ tested (17 cases incl. real HMAC schemes, tamper + replay rejection); ⚠ needs live keys + a real checkout at deploy — /admin/plan still bridges |
 | Email verification at signup (token email, /verify page, resend, banner) | ✅ tested; email delivery goes live with SMTP at deploy |
@@ -139,8 +140,8 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       signature-verified webhooks flipping plans, cancellation downgrades,
       upgrade buttons (needs live keys at deploy); email verification
       (password reset shipped earlier in the blind-spot sprint)
-- [ ] Sprint 6b remainder: study plans & scheduling, WhatsApp nudges,
-      spaced-repetition warm-ups
+- [ ] Sprint 6b remainder: study plans & scheduling, WhatsApp nudges
+      (spaced-repetition warm-ups shipped with the adaptive engine)
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
 

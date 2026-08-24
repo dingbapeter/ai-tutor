@@ -1,6 +1,13 @@
 import { createDb, schema, type Db } from "@tutor/db";
 import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
-import { mergeProfile, type LearnerProfile, type SessionRecap, type Store, type UsageKind } from "./types.js";
+import {
+  mergeProfile,
+  scheduleAttempt,
+  type LearnerProfile,
+  type SessionRecap,
+  type Store,
+  type UsageKind,
+} from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
 
 export class PostgresStore implements Store {
@@ -131,37 +138,62 @@ export class PostgresStore implements Store {
       .limit(1);
     if (existing.length) {
       const cur = existing[0];
+      const next = scheduleAttempt(
+        {
+          level: cur.level,
+          attempts: cur.attempts,
+          correct: cur.correct,
+          stabilityDays: cur.stabilityDays,
+          dueAt: cur.dueAt ?? new Date(),
+        },
+        correct,
+      );
       await this.db
         .update(schema.mastery)
         .set({
-          level: 0.7 * cur.level + 0.3 * (correct ? 1 : 0),
-          attempts: cur.attempts + 1,
-          correct: cur.correct + (correct ? 1 : 0),
-          // Simple spacing placeholder until FSRS lands: double on success, reset on miss.
-          stabilityDays: correct ? cur.stabilityDays * 2 : 1,
-          dueAt: new Date(Date.now() + (correct ? cur.stabilityDays * 2 : 1) * 86_400_000),
+          level: next.level,
+          attempts: next.attempts,
+          correct: next.correct,
+          stabilityDays: next.stabilityDays,
+          dueAt: next.dueAt,
           updatedAt: new Date(),
         })
         .where(eq(schema.mastery.id, cur.id));
     } else {
+      const next = scheduleAttempt(null, correct);
       await this.db.insert(schema.mastery).values({
         studentId,
         skillId,
-        level: correct ? 0.3 : 0,
-        attempts: 1,
-        correct: correct ? 1 : 0,
-        stabilityDays: 1,
-        dueAt: new Date(Date.now() + 86_400_000),
+        level: next.level,
+        attempts: next.attempts,
+        correct: next.correct,
+        stabilityDays: next.stabilityDays,
+        dueAt: next.dueAt,
       });
     }
   }
 
   async getMasterySnapshot(studentId: string) {
     const rows = await this.db
-      .select({ skillId: schema.mastery.skillId, level: schema.mastery.level })
+      .select({
+        skillId: schema.mastery.skillId,
+        level: schema.mastery.level,
+        attempts: schema.mastery.attempts,
+        dueAt: schema.mastery.dueAt,
+      })
       .from(schema.mastery)
       .where(eq(schema.mastery.studentId, studentId));
     return rows;
+  }
+
+  async getDueSkills(studentId: string, limit: number) {
+    const rows = await this.db
+      .select({ skillId: schema.mastery.skillId, level: schema.mastery.level, dueAt: schema.mastery.dueAt })
+      .from(schema.mastery)
+      .where(and(eq(schema.mastery.studentId, studentId), sql`${schema.mastery.dueAt} <= now()`))
+      .orderBy(schema.mastery.dueAt)
+      .limit(limit);
+    return rows.filter((r): r is typeof r & { dueAt: Date } => r.dueAt != null);
   }
 
   // ---- Accounts & auth ----

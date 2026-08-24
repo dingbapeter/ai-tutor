@@ -20,7 +20,7 @@ interface StudentRow {
   id: string;
   displayName: string;
   sessions: SessionSummary[];
-  mastery: Array<{ skillId: string; level: number }>;
+  mastery: Array<{ skillId: string; title?: string; level: number; stage?: string; due?: boolean }>;
   safety: Array<{ direction: string; categories: string[]; severity: string; excerpt: string; createdAt: string }>;
   streakDays?: number;
   profile?: LearnerProfile | null;
@@ -413,8 +413,18 @@ export default function Account() {
             <>
               <h4 style={{ marginBottom: 6 }}>Skill progress</h4>
               {s.mastery.map((m) => (
-                <div key={m.skillId} style={{ marginBottom: 6 }}>
-                  <small>{m.skillId.split(".").slice(1).join(" · ").replace(/-/g, " ")}</small>
+                <div key={m.skillId} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                    <small>
+                      {m.title ?? m.skillId.split(".").slice(1).join(" · ").replace(/-/g, " ")}
+                      {m.due && (
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: "var(--brand-strong)", background: "var(--brand-soft)", borderRadius: 999, padding: "1px 8px" }}>
+                          due for review
+                        </span>
+                      )}
+                    </small>
+                    {m.stage && <small style={{ color: "var(--text-dim)" }}>{m.stage}</small>}
+                  </div>
                   <div style={{ background: "var(--surface-2)", borderRadius: 6, height: 10 }}>
                     <div style={{
                       width: `${Math.round(m.level * 100)}%`, height: "100%", borderRadius: 6,

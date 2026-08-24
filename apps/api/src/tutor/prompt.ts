@@ -58,6 +58,18 @@ export function loadPack(packId: string): CurriculumPack {
   return pack;
 }
 
+let skillTitleCache: Map<string, string> | null = null;
+/** Title for a skill id, looked up across every pack. */
+export function skillTitle(skillId: string): string {
+  if (!skillTitleCache) {
+    skillTitleCache = new Map();
+    for (const packId of PACK_IDS) {
+      for (const s of loadPack(packId).skills) skillTitleCache.set(s.id, s.title);
+    }
+  }
+  return skillTitleCache.get(skillId) ?? skillId;
+}
+
 /**
  * The Socratic contract lives here, layered under the persona's voice.
  * Memory lines come from the memories table — the compressed learner model,
@@ -84,12 +96,22 @@ function profileBlock(studentName: string, p: ProfileForPrompt | null): string {
   return `\n${studentName}'s learning profile (you built this over your sessions together — act on it, don't recite it):\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
 }
 
+/** Spaced-review warm-up: due skills the tutor should touch before new material. */
+function warmupBlock(skillTitles: string[]): string {
+  if (!skillTitles.length) return "";
+  return (
+    `\nSpaced review: these skills are due for a quick warm-up because memory fades on a schedule: ${skillTitles.join("; ")}. ` +
+    `Early in the session, ask ONE short recall question for each (under a minute apiece), celebrate what stuck, note what didn't, then move to today's topic. Weave it in naturally; never call it a test.\n`
+  );
+}
+
 export function buildSystemPrompt(opts: {
   persona: Persona;
   pack: CurriculumPack;
   studentName: string;
   memoryLines: string[];
   profile?: ProfileForPrompt | null;
+  warmupSkills?: string[];
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
   return [
@@ -107,6 +129,7 @@ export function buildSystemPrompt(opts: {
     `7. Sound like a person, not an app: contractions, short sentences, plain punctuation (no em dashes), no canned assistant phrases like "Certainly!" or "I'd be happy to". Warmth over polish.`,
     ``,
     profileBlock(studentName, opts.profile ?? null),
+    warmupBlock(opts.warmupSkills ?? []),
     memoryLines.length
       ? `What you remember about ${studentName}:\n${memoryLines.map((l) => `- ${l}`).join("\n")}`
       : `This is your FIRST session with ${studentName}. Two jobs before teaching anything: (1) one warm sentence to get to know them and what they want to work on; (2) a quick placement check — ask 2-3 short diagnostic questions of increasing difficulty in the subject, one at a time, to find their level. React encouragingly whatever they answer, then start teaching from where they actually are, not where the curriculum assumes.`,

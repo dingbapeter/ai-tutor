@@ -28,6 +28,65 @@ export const EMPTY_PROFILE: LearnerProfile = {
   preferences: [],
 };
 
+/**
+ * Adaptive engine v1: an SM-2-family scheduler (not full FSRS yet — the
+ * fields are ready for it). Correct recall stretches the interval, and
+ * stretches it further the stronger the mastery; a miss resets the skill
+ * to due-now so it resurfaces in the next session's warm-up.
+ */
+export interface MasteryState {
+  level: number; // 0..1 estimated mastery (EMA)
+  attempts: number;
+  correct: number;
+  stabilityDays: number;
+  dueAt: Date;
+}
+
+const MAX_STABILITY_DAYS = 120;
+const DAY_MS = 86_400_000;
+
+export function scheduleAttempt(cur: MasteryState | null, isCorrect: boolean, now = new Date()): MasteryState {
+  const level = 0.7 * (cur?.level ?? 0) + 0.3 * (isCorrect ? 1 : 0);
+  if (!isCorrect) {
+    // Missed: back to the front of the queue.
+    return {
+      level,
+      attempts: (cur?.attempts ?? 0) + 1,
+      correct: cur?.correct ?? 0,
+      stabilityDays: 1,
+      dueAt: now,
+    };
+  }
+  const growth = 1.6 + level; // stronger mastery earns longer gaps (1.6x..2.6x)
+  const stabilityDays = cur ? Math.min(MAX_STABILITY_DAYS, cur.stabilityDays * growth) : 2;
+  return {
+    level,
+    attempts: (cur?.attempts ?? 0) + 1,
+    correct: (cur?.correct ?? 0) + 1,
+    stabilityDays,
+    dueAt: new Date(now.getTime() + stabilityDays * DAY_MS),
+  };
+}
+
+export type MasteryStage =
+  | "introduced"
+  | "developing"
+  | "practising"
+  | "proficient"
+  | "mastered"
+  | "needs reinforcement";
+
+/** The vision's mastery ladder, computed from state — never stored. */
+export function masteryStage(s: { level: number; attempts: number; dueAt?: Date | null }, now = new Date()): MasteryStage {
+  const overdue = s.dueAt != null && s.dueAt.getTime() <= now.getTime();
+  if (s.level >= 0.7 && overdue) return "needs reinforcement";
+  if (s.level >= 0.85 && s.attempts >= 4) return "mastered";
+  if (s.level >= 0.7) return "proficient";
+  if (s.level >= 0.45) return "practising";
+  if (s.level >= 0.2) return "developing";
+  return "introduced";
+}
+
 const PROFILE_LIST_CAP = 8;
 const PROFILE_ITEM_MAX_LEN = 160;
 
@@ -76,7 +135,14 @@ export interface Store {
 
   /** Mastery bookkeeping for spaced repetition & adaptive difficulty. */
   recordAttempt(studentId: string, skillId: string, correct: boolean): Promise<void>;
-  getMasterySnapshot(studentId: string): Promise<Array<{ skillId: string; level: number }>>;
+  getMasterySnapshot(
+    studentId: string,
+  ): Promise<Array<{ skillId: string; level: number; attempts: number; dueAt: Date | null }>>;
+  /** Skills due (or overdue) for spaced review, most overdue first. */
+  getDueSkills(
+    studentId: string,
+    limit: number,
+  ): Promise<Array<{ skillId: string; level: number; dueAt: Date }>>;
 
   // ---- Accounts & auth (Sprint 4) ----
 

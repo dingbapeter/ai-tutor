@@ -30,8 +30,8 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 See the honesty table in `README.md` — it is the single source of truth and
 you MUST keep it updated. Summary: Sprints 1–6a complete + 6b core
 (billing, email verification) + Sprint 7 (rebrand, adult verticals, app
-shell, live presence) + Brain v1. 59 API + 7 gateway + 7 mathcheck tests
-pass. The stack was live-verified
+shell, live presence) + Brain v1 + homepage + adaptive engine v1.
+63 API + 7 gateway + 7 mathcheck tests pass. The stack was live-verified
 against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
 to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
 full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
@@ -93,8 +93,7 @@ infrastructure (Contabo, SMTP, etc.) is confirmed available.
 2. ~~Sprint 6b core~~ BUILT 2026-08-24: Stripe/Paystack billing (checkout,
    signature-verified webhooks → plan flips, cancellation downgrade) and
    email verification. Needs live keys + a real checkout at deploy.
-   Remaining 6b: study plans & scheduling, WhatsApp nudges,
-   spaced-repetition warm-ups.
+   Remaining 6b: study plans & scheduling, WhatsApp nudges.
 3. Deploy per `deploy/DEPLOY.md` (7B model minimum — 0.5B was only a
    protocol test; pedagogy quality demands the bigger model).
 4. Phase 2: LiveKit full-duplex voice, whiteboard, homework camera, avatar
