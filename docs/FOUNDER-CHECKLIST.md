@@ -1,0 +1,228 @@
+# Founder checklist: every variable, every pending action
+
+Written 2026-08-24. This is the complete list of what only you can do. The
+code side is done and pushed; everything below needs your accounts, your
+servers, your money, or your judgment.
+
+Order matters: Part 1 makes the deploy real, Part 2 makes it good, Part 3 is
+before real children use it, Part 4 is the horizon.
+
+---
+
+## Part 1: make the deploy real (an evening's work)
+
+### 1.1 Postgres on Railway — nothing persists without this
+
+Right now every redeploy wipes accounts, learner profiles, mastery
+schedules, routines and care contacts. This is the single highest-value hour
+you can spend.
+
+1. Railway project → **New** → **Database** → **PostgreSQL**.
+2. Copy the connection string it gives you.
+3. On the **api** service → Variables → `DATABASE_URL=<that string>`.
+4. Run every migration once, in order:
+   ```bash
+   for f in packages/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+   ```
+   There are 10 (0000 through 0009). They are idempotent, safe to re-run.
+5. Confirm: `https://<api-domain>/health` should now say `"store":"postgres"`
+   instead of `"memory"`.
+
+### 1.2 The variables, api service
+
+Copy-paste block. Values you must fill are marked `<>`.
+
+```bash
+# --- Core ---
+DATABASE_URL=<from Railway Postgres>
+WEB_ORIGIN=https://<your web domain>
+PORT=4000
+
+# --- The AI stack on Contabo (see 1.4) ---
+AI_CHAT_PROVIDER=llamacpp
+AI_STT_PROVIDER=whisper
+AI_TTS_PROVIDER=kokoro
+AI_VISION_PROVIDER=llamacpp
+LLAMACPP_URL=http://<contabo-ip>:8080
+WHISPER_URL=http://<contabo-ip>:8081
+TTS_URL=http://<contabo-ip>:8082
+PIPER_TTS_URL=http://<contabo-ip>:8083   # unlocks 43 more speaking languages
+MATHCHECK_URL=http://<contabo-ip>:8090
+
+# --- Email, your existing mailcow ---
+SMTP_HOST=<mail.yourdomain>
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=tutor@dingba.ai
+SMTP_PASS=<mailbox password>
+SMTP_FROM="Dingba" <tutor@dingba.ai>
+
+# --- Safety classifier (the one sanctioned paid API) ---
+AI_MODERATION_PROVIDER=anthropic
+ANTHROPIC_API_KEY=<your key>
+
+# --- Push notifications (generate: npx web-push generate-vapid-keys) ---
+VAPID_PUBLIC_KEY=<generated>
+VAPID_PRIVATE_KEY=<generated>
+VAPID_SUBJECT=mailto:you@dingba.ai
+
+# --- Ops ---
+ADMIN_KEY=<long random string, for /admin endpoints>
+ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>
+```
+
+Optional tuning, defaults are sensible: `RATE_LIMIT_MAX=120`,
+`AUTH_RATE_LIMIT=10`, `GUEST_IP_CAP=8`.
+
+### 1.3 The variables, web service
+
+```bash
+NEXT_PUBLIC_API_URL=https://<your api domain>
+PORT=3000
+```
+
+**This one bites people:** Next.js bakes `NEXT_PUBLIC_API_URL` in at BUILD
+time. Set it before the web service builds, and redeploy web after any change.
+
+### 1.4 Contabo: the AI stack
+
+```bash
+git clone https://github.com/dingbapeter/ai-tutor && cd ai-tutor
+mkdir -p deploy/models
+
+# The brain. 7B minimum: the 0.5B we tested with was a protocol test only,
+# pedagogy quality needs the bigger model.
+curl -L -o deploy/models/chat.gguf \
+  https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
+
+docker compose -f deploy/docker-compose.contabo.yml up -d
+curl localhost:8080/health && curl localhost:8081/health && curl localhost:8090/health
+```
+
+Then **firewall ports 8080-8090 to Railway's egress only**. These services
+have no auth of their own; open to the internet means anyone can use your GPU.
+
+Add Piper as a second TTS container on 8083 to turn on Swahili, Arabic,
+Urdu, Telugu, Vietnamese and 38 more. Voices route automatically by id.
+
+### 1.5 DNS: point dingba.ai
+
+- api service → Settings → Networking → Custom Domain → `api.dingba.ai`
+- web service → Custom Domain → `dingba.ai` and `www.dingba.ai`
+- Railway shows the CNAME records; add them at your registrar.
+- Then update `WEB_ORIGIN` and `NEXT_PUBLIC_API_URL` to the real domains and
+  redeploy both.
+
+### 1.6 Email deliverability (before any parent email goes out)
+
+On mailcow for dingba.ai: **SPF**, **DKIM**, **DMARC** records. Without
+these, recap emails and safety alerts land in spam, which for a safety alert
+is a real failure. Send yourself a test recap and check it arrives in the
+inbox, not the junk folder.
+
+### 1.7 Backups
+
+`deploy/backup.sh` exists and rotates 14 days. It needs its cron entry:
+```bash
+0 3 * * * /path/to/ai-tutor/deploy/backup.sh >> /var/log/dingba-backup.log 2>&1
+```
+Then **restore once into a scratch database** to prove the backup works. An
+untested backup is not a backup.
+
+---
+
+## Part 2: make it good (the week after)
+
+### 2.1 Billing, when you want money
+
+```bash
+BILLING_PROVIDER=stripe          # or paystack for Nigeria
+STRIPE_SECRET_KEY=<sk_live_...>
+STRIPE_WEBHOOK_SECRET=<whsec_...>
+STRIPE_PRICE_PLUS=<price_...>
+STRIPE_PRICE_PREMIUM=<price_...>
+# or:
+PAYSTACK_SECRET_KEY=<sk_live_...>
+PAYSTACK_PLAN_PLUS=<plan code>
+PAYSTACK_PLAN_PREMIUM=<plan code>
+```
+Create the products/prices in the dashboard first, point the webhook at
+`https://api.dingba.ai/billing/webhook`, then **run one real checkout with a
+real card** and confirm the plan flips on the account page. Paystack is the
+right default for Nigerian cards.
+
+### 2.2 Real-device testing (register item A)
+
+Nothing substitutes for this. On an actual iPhone and an actual budget
+Android:
+- hold-to-talk voice: does it record, does it play back
+- the care call button: does it open the dialer
+- camera capture in Show Dingba
+- install to home screen, then use it offline
+- layouts at 360px width
+
+### 2.3 Observability (register item D)
+
+PostHog and GlitchTip, both self-hosted on Contabo, both MIT. Until they
+exist, `ERROR_WEBHOOK_URL` is your only alarm. Retention is the metric that
+decides everything about this business, and you cannot see it yet.
+
+### 2.4 Load testing (register item B)
+
+Before any launch push. Expect to add a request queue in front of llama.cpp;
+one 7B model serving many concurrent sessions will be the first bottleneck.
+
+---
+
+## Part 3: before real children use it
+
+### 3.1 Legal review (register item E) — do not skip
+
+`/terms` and `/privacy` are **drafts** and marked as such in the UI. A lawyer
+must review before launch, specifically:
+- children's data (COPPA-class, and Nigeria's NDPA)
+- the AI-disclosure requirements now live in several markets
+- the care-call feature: you are storing a third party's phone number
+
+### 3.2 Red-teaming the safety layer (register item J)
+
+Sit down with the app and genuinely try to make the tutor say something it
+shouldn't. Then have someone who is not you do it. This is never "done", and
+it is the thing that ends companies in this category.
+
+### 3.3 Pedagogy eval harness (register item I)
+
+Before and after every model swap: a fixed set of student messages, and a
+human judging whether the tutor taught well. Without it you will swap a model
+and silently ship worse teaching.
+
+---
+
+## Part 4: the horizon (your calls to make)
+
+| Decision | Why it needs you |
+|---|---|
+| **Video interface code** | You built it. Send the archive or repo name and it gets wired onto the live-class layer with LiveKit. |
+| **Nigerian-language voices** | The plan is in `docs/LANGUAGES.md`: train on CC-BY-SA NaijaVoices with Piper's MIT pipeline, roughly a day per language on the GPU box. Needs your go-ahead and the GPU. |
+| **NCAIR email** | Their Hausa ASR has no licence attached. A Nigerian company asking a Nigerian government body for a licence grant is a short email with a good chance. |
+| **Commissioned character art** | The caricature cast is original and owned, but it is SVG. A real illustrator swaps into one file. |
+| **The two marketing lines** | I reworded "knows better than all your human teachers combined" and "100x better than their classmates" because they are unverifiable claims about children's education. Your call: say the word and they go back. |
+| **GPU box** | Gates full-duplex voice, cartoon panels, voice-tone attunement, and the Nigerian voices. The single biggest capability unlock left. |
+| **Launch market** | You said local test first. That decides which languages get voices first and which curriculum packs get built next. |
+
+---
+
+## What is already done, for your peace of mind
+
+Pushed, tested, CI-green: 72 API + 9 gateway + 7 mathcheck tests.
+
+Sessions with a tutor who greets you first and speaks. Cross-session memory.
+The Dingba Brain (goals, strengths, struggles, interests). Adaptive spaced
+repetition with a mastery ladder. Diagnostic level checks. Verified maths.
+Show Dingba (photos). Routine upload (timetables). Attunement. The care call.
+91 languages, 52 speaking. Safety gate, incident log, guardian alerts.
+Accounts, family profiles, parent dashboard, org accounts, API keys, exam
+mode, live classes, metering, entitlements, billing wiring, PWA, push
+notifications, password reset, email verification, GDPR deletion.
+
+The gap between this list and a live product is the list above, not more code.

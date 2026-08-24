@@ -79,6 +79,9 @@ Mock providers let everything run with zero models installed.
 
 ## Next work, in order
 
+**⭐ Founder's own pending work (every env var, every action only they can
+take): `docs/FOUNDER-CHECKLIST.md`.**
+
 **⭐ READ `docs/VISION-DINGBA.md` FIRST** — the founder's 2026-08-24 product
 vision (the Dingba Brain, universal input, vision/voice tutor, adaptive
 engine, diagnostic assessment) + homepage design template. It names the
