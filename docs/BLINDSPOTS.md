@@ -43,7 +43,10 @@ C. **Single-instance session state** — one server only until sticky sessions
 D. **Observability deploy** — PostHog + GlitchTip on Contabo (chosen, not
    installed); the webhook hook covers errors until then.
 E. **Legal review** — the drafted ToS/Privacy need a lawyer before launch.
-F. **Email verification** at signup (reset flow exists; verification next).
+F. ~~**Email verification** at signup~~ BUILT 2026-08-24: token email →
+   `/verify` page, resend button, dashboard banner; soft-gate (unverified
+   accounts still work — recaps/alerts just aren't trusted until confirmed).
+   Live SMTP send happens at deploy.
 G. **i18n** — English-only UI; scaffolding not started.
 H. **Share-a-recap; richer motivation loop** (goals, rewards) — product
    backlog, not risks.

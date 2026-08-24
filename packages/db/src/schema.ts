@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   /** Entitlement plan (see config/plans.json). Billing sets this later. */
   plan: text("plan").notNull().default("free"),
   orgId: uuid("org_id"),
+  emailVerified: boolean("email_verified").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -62,6 +63,31 @@ export const passwordResets = pgTable("password_resets", {
   userId: uuid("user_id").notNull().references(() => users.id),
   used: boolean("used").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Email-verification tokens (same sha256/single-use pattern, 24h validity). */
+export const emailVerifications = pgTable("email_verifications", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Billing subscriptions (Sprint 6b). One row per provider subscription;
+ * webhooks upsert here and flip users.plan. customer/subscription refs let
+ * cancellation events (which carry no email) find their way back to the user.
+ */
+export const billingSubscriptions = pgTable("billing_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  provider: text("provider", { enum: ["stripe", "paystack", "mock"] }).notNull(),
+  customerRef: text("customer_ref").notNull(),
+  subscriptionRef: text("subscription_ref").notNull(),
+  plan: text("plan").notNull(),
+  status: text("status", { enum: ["active", "canceled"] }).notNull().default("active"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 /** Metering: every billable action, attributable to a user/student/API key. */

@@ -36,6 +36,10 @@ export default function Account() {
   const [transcript, setTranscript] = useState<{ studentId: string; messages: Array<{ role: string; content: string; createdAt: string }> } | null>(null);
   const [pushState, setPushState] = useState<"unknown" | "on" | "off" | "unsupported">("unknown");
   const [forgotSent, setForgotSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(true);
+  const [verifySent, setVerifySent] = useState(false);
+  const [billingOn, setBillingOn] = useState(false);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
@@ -57,9 +61,15 @@ export default function Account() {
       const dash = await res.json();
       setStudents(dash.students);
       const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
-      if (me.ok) setMeEmail((await me.json()).email);
+      if (me.ok) {
+        const meJson = await me.json();
+        setMeEmail(meJson.email);
+        setEmailVerified(meJson.emailVerified !== false);
+      }
       const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${t}` } });
       if (u.ok) setUsage(await u.json());
+      const b = await fetch(`${API}/billing/status`);
+      if (b.ok) setBillingOn((await b.json()).configured === true);
     } catch {
       setError("could not load dashboard");
     }
@@ -98,6 +108,24 @@ export default function Account() {
       refresh(token);
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not add student");
+    }
+  }
+
+  async function upgrade(plan: "plus" | "premium") {
+    if (!token) return;
+    setUpgrading(plan);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/billing/checkout`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ plan }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "checkout unavailable");
+      window.location.href = (await res.json()).url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "checkout unavailable");
+      setUpgrading(null);
     }
   }
 
@@ -248,6 +276,28 @@ export default function Account() {
       </div>
       {error && <p style={errBox}>{error}</p>}
 
+      {!emailVerified && (
+        <p style={{ background: "#fff8e6", color: "#7a5a00", borderRadius: 8, padding: "10px 14px" }}>
+          📧 Please confirm your email so recaps and safety alerts reach you — check your inbox.{" "}
+          {verifySent ? (
+            <b>Sent!</b>
+          ) : (
+            <button
+              onClick={async () => {
+                await fetch(`${API}/auth/resend-verification`, {
+                  method: "POST",
+                  headers: { authorization: `Bearer ${token}` },
+                }).catch(() => {});
+                setVerifySent(true);
+              }}
+              style={{ border: "none", background: "none", color: "#7a5a00", textDecoration: "underline", cursor: "pointer", padding: 0 }}
+            >
+              Resend the link
+            </button>
+          )}
+        </p>
+      )}
+
       {usage && (
         <div style={{ ...card, marginBottom: 16, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
           <b style={{ textTransform: "capitalize" }}>{usage.plan} plan</b>
@@ -261,6 +311,20 @@ export default function Account() {
             <button onClick={enableNotifications} style={{ ...btn, padding: "6px 12px", fontSize: 13 }}>
               🔔 Enable study reminders
             </button>
+          )}
+          {billingOn && usage.plan !== "premium" && (
+            <span>
+              {usage.plan === "free" && (
+                <button disabled={upgrading !== null} onClick={() => upgrade("plus")}
+                  style={{ ...btn, padding: "6px 12px", fontSize: 13, marginRight: 8 }}>
+                  {upgrading === "plus" ? "Opening checkout…" : "⭐ Upgrade to Plus"}
+                </button>
+              )}
+              <button disabled={upgrading !== null} onClick={() => upgrade("premium")}
+                style={{ ...btn, padding: "6px 12px", fontSize: 13, background: "#6b4c8c" }}>
+                {upgrading === "premium" ? "Opening checkout…" : "👑 Go Premium"}
+              </button>
+            </span>
           )}
         </div>
       )}

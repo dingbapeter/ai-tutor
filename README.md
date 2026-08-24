@@ -104,8 +104,9 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Terms & Privacy pages + registration consent | ✅ drafted (needs counsel before launch) |
 | Rolling 24h allowances, per-IP guest cap, error webhook, backup script | ✅ tested / in place |
 | GitHub Actions CI (typecheck + 37 API + 7 gateway + 7 mathcheck tests on every push/PR) | ✅ run green on GitHub (2026-08-24) |
-| Billing (Stripe/Paystack) | ❌ Sprint 6b (needs deploy + env) — /admin/plan bridges until then |
-| Payments, parent dashboard, WhatsApp | ❌ later sprints |
+| Billing: Stripe + Paystack checkout, signature-verified webhooks → plan flips, cancellation downgrade, /me/billing, upgrade buttons | ✅ tested (17 cases incl. real HMAC schemes, tamper + replay rejection); ⚠ needs live keys + a real checkout at deploy — /admin/plan still bridges |
+| Email verification at signup (token email, /verify page, resend, banner) | ✅ tested; email delivery goes live with SMTP at deploy |
+| WhatsApp, study plans & scheduling | ❌ later sprints |
 
 ## Roadmap
 
@@ -129,8 +130,12 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       (seats, roster, teacher dashboard), scoped B2B API keys with monthly
       quotas, exam mode (timed mocks + post-mortem, premium-gated),
       premium-brain routing, /me/usage, /admin/plan bridge
-- [ ] Sprint 6b (needs deploy/env): payments (Stripe/Paystack), password reset,
-      study plans & scheduling, WhatsApp nudges, spaced-repetition warm-ups
+- [x] Sprint 6b core (2026-08-24): billing — Stripe/Paystack checkout,
+      signature-verified webhooks flipping plans, cancellation downgrades,
+      upgrade buttons (needs live keys at deploy); email verification
+      (password reset shipped earlier in the blind-spot sprint)
+- [ ] Sprint 6b remainder: study plans & scheduling, WhatsApp nudges,
+      spaced-repetition warm-ups
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
 

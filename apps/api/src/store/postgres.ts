@@ -433,6 +433,105 @@ export class PostgresStore implements Store {
     await this.db.insert(schema.passwordResets).values({ userId, tokenHash });
   }
 
+  // ---- Billing & email verification ----
+
+  async createEmailVerification(userId: string, tokenHash: string) {
+    await this.db.insert(schema.emailVerifications).values({ userId, tokenHash });
+  }
+
+  async consumeEmailVerification(tokenHash: string, maxAgeMs: number) {
+    const rows = await this.db
+      .update(schema.emailVerifications)
+      .set({ used: true })
+      .where(
+        and(
+          eq(schema.emailVerifications.tokenHash, tokenHash),
+          eq(schema.emailVerifications.used, false),
+          gte(schema.emailVerifications.createdAt, new Date(Date.now() - maxAgeMs)),
+        ),
+      )
+      .returning({ userId: schema.emailVerifications.userId });
+    return rows[0]?.userId ?? null;
+  }
+
+  async markEmailVerified(userId: string) {
+    await this.db.update(schema.users).set({ emailVerified: true }).where(eq(schema.users.id, userId));
+  }
+
+  async isEmailVerified(userId: string) {
+    const rows = await this.db
+      .select({ v: schema.users.emailVerified })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return rows[0]?.v ?? false;
+  }
+
+  async recordSubscription(sub: {
+    userId: string;
+    provider: string;
+    customerRef: string;
+    subscriptionRef: string;
+    plan: string;
+    status: "active" | "canceled";
+  }) {
+    const existing = await this.db
+      .select({ id: schema.billingSubscriptions.id })
+      .from(schema.billingSubscriptions)
+      .where(
+        and(
+          eq(schema.billingSubscriptions.provider, sub.provider as "stripe" | "paystack" | "mock"),
+          eq(schema.billingSubscriptions.subscriptionRef, sub.subscriptionRef),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) {
+      await this.db
+        .update(schema.billingSubscriptions)
+        .set({ plan: sub.plan, status: sub.status, customerRef: sub.customerRef, updatedAt: new Date() })
+        .where(eq(schema.billingSubscriptions.id, existing[0].id));
+    } else {
+      await this.db.insert(schema.billingSubscriptions).values({
+        userId: sub.userId,
+        provider: sub.provider as "stripe" | "paystack" | "mock",
+        customerRef: sub.customerRef,
+        subscriptionRef: sub.subscriptionRef,
+        plan: sub.plan,
+        status: sub.status,
+      });
+    }
+  }
+
+  async getSubscription(userId: string) {
+    const rows = await this.db
+      .select({
+        provider: schema.billingSubscriptions.provider,
+        plan: schema.billingSubscriptions.plan,
+        status: schema.billingSubscriptions.status,
+        subscriptionRef: schema.billingSubscriptions.subscriptionRef,
+        updatedAt: schema.billingSubscriptions.updatedAt,
+      })
+      .from(schema.billingSubscriptions)
+      .where(eq(schema.billingSubscriptions.userId, userId));
+    rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const s = rows[0];
+    return s ? { provider: s.provider, plan: s.plan, status: s.status, subscriptionRef: s.subscriptionRef } : null;
+  }
+
+  async findSubscriptionByRef(provider: string, ref: { customerRef?: string; subscriptionRef?: string }) {
+    const conds = [eq(schema.billingSubscriptions.provider, provider as "stripe" | "paystack" | "mock")];
+    if (ref.subscriptionRef) conds.push(eq(schema.billingSubscriptions.subscriptionRef, ref.subscriptionRef));
+    else if (ref.customerRef) conds.push(eq(schema.billingSubscriptions.customerRef, ref.customerRef));
+    else return null;
+    const rows = await this.db
+      .select({ userId: schema.billingSubscriptions.userId, email: schema.users.email })
+      .from(schema.billingSubscriptions)
+      .innerJoin(schema.users, eq(schema.users.id, schema.billingSubscriptions.userId))
+      .where(and(...conds))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async consumePasswordReset(tokenHash: string, maxAgeMs: number) {
     const rows = await this.db
       .update(schema.passwordResets)
@@ -477,6 +576,8 @@ export class PostgresStore implements Store {
     await this.db.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
     await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
     await this.db.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
+    await this.db.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
+    await this.db.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
     await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
     await this.db.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
     await this.db.delete(schema.users).where(eq(schema.users.id, userId));

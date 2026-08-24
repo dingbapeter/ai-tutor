@@ -11,8 +11,9 @@ import {
 } from "./tutor/prompt.js";
 import type { Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
-import { sendParentRecap, sendSafetyAlert } from "./email.js";
+import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
+import { registerBilling } from "./billing.js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -291,9 +292,47 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       if (!account) return reply.code(409).send({ error: "that email is already registered" });
       const token = mintToken();
       await store.saveToken(token.hash, account.userId);
+      // Email verification: fire-and-forget so signup never blocks on SMTP.
+      const rawVerify = randomBytes(24).toString("hex");
+      await store.createEmailVerification(account.userId, createHash("sha256").update(rawVerify).digest("hex"));
+      sendVerifyEmail(email, rawVerify).catch((err) => app.log.error(err, "verify email failed"));
       return { token: token.raw, role: role ?? "parent", studentId: account.studentId ?? null };
     },
   );
+
+  app.post<{ Body: { token: string } }>(
+    "/auth/verify",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["token"],
+          additionalProperties: false,
+          properties: { token: { type: "string", minLength: 32, maxLength: 128 } },
+        },
+      },
+      config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } },
+    },
+    async (req, reply) => {
+      const userId = await store.consumeEmailVerification(
+        createHash("sha256").update(req.body.token).digest("hex"),
+        24 * 60 * 60 * 1000,
+      );
+      if (!userId) return reply.code(400).send({ error: "that verification link is invalid or expired — request a new one" });
+      await store.markEmailVerified(userId);
+      return { verified: true };
+    },
+  );
+
+  app.post("/auth/resend-verification", { config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 5), timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (await store.isEmailVerified(user.userId)) return { alreadyVerified: true };
+    const raw = randomBytes(24).toString("hex");
+    await store.createEmailVerification(user.userId, createHash("sha256").update(raw).digest("hex"));
+    sendVerifyEmail(user.email, raw).catch((err) => app.log.error(err, "verify email failed"));
+    return { sent: true };
+  });
 
   app.post<{ Body: { email: string; password: string } }>(
     "/auth/login",
@@ -315,6 +354,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     return {
       email: user.email,
       role: user.role,
+      emailVerified: await store.isEmailVerified(user.userId),
       students: await store.listStudentProfiles(user.userId),
     };
   });
@@ -1462,6 +1502,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       monthTotal: await store.sumUsage({ userId: user.userId }, null, monthStart),
     };
   });
+
+  // ---- Billing (Sprint 6b) ----
+  await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
 
   return app;
 }

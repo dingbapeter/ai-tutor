@@ -126,6 +126,33 @@ export interface Store {
   /** Consecutive days (ending today or yesterday) with at least one session. */
   getStreakDays(studentId: string): Promise<number>;
 
+  // ---- Billing & email verification (Sprint 6b) ----
+
+  /** Same sha256/single-use pattern as password resets, 24h validity. */
+  createEmailVerification(userId: string, tokenHash: string): Promise<void>;
+  consumeEmailVerification(tokenHash: string, maxAgeMs: number): Promise<string | null>;
+  markEmailVerified(userId: string): Promise<void>;
+  isEmailVerified(userId: string): Promise<boolean>;
+
+  /** Upsert by (provider, subscriptionRef); webhooks are retried, so idempotent. */
+  recordSubscription(sub: {
+    userId: string;
+    provider: string;
+    customerRef: string;
+    subscriptionRef: string;
+    plan: string;
+    status: "active" | "canceled";
+  }): Promise<void>;
+  /** Latest subscription for the account page. */
+  getSubscription(
+    userId: string,
+  ): Promise<{ provider: string; plan: string; status: string; subscriptionRef: string } | null>;
+  /** Cancellation events carry only provider refs — map them back to the user. */
+  findSubscriptionByRef(
+    provider: string,
+    ref: { customerRef?: string; subscriptionRef?: string },
+  ): Promise<{ userId: string; email: string } | null>;
+
   createApiKey(
     ownerUserId: string,
     name: string,

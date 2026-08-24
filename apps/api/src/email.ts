@@ -46,6 +46,40 @@ export async function sendPasswordReset(to: string, rawToken: string): Promise<"
   return "sent";
 }
 
+/** Email-verification link via mailcow SMTP (logged no-op without SMTP_HOST). */
+export async function sendVerifyEmail(to: string, rawToken: string): Promise<"sent" | "skipped"> {
+  const host = process.env.SMTP_HOST;
+  const base = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  if (!host) {
+    console.log(`[email] SMTP not configured — would send verification to ${to}`);
+    return "skipped";
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"AI Tutor" <tutor@${host.replace(/^mail\./, "")}>`,
+    to,
+    subject: "Confirm your email",
+    text: [
+      `Welcome!`,
+      ``,
+      `Please confirm this email address so session recaps and safety alerts`,
+      `reach the right inbox. The link is valid for 24 hours:`,
+      ``,
+      `${base}/verify?token=${rawToken}`,
+      ``,
+      `If you didn't create this account, ignore this email.`,
+    ].join("\n"),
+  });
+  return "sent";
+}
+
 export interface SafetyAlertEmail {
   to: string;
   studentName: string;

@@ -27,8 +27,9 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 ## State: what is DONE and VERIFIED
 
 See the honesty table in `README.md` — it is the single source of truth and
-you MUST keep it updated. Summary: Sprints 1–6a complete. 37 API tests +
-7 gateway tests + 7 mathcheck pytest tests pass. The stack was live-verified
+you MUST keep it updated. Summary: Sprints 1–6a complete + 6b core
+(billing, email verification). 54 API tests + 7 gateway tests + 7 mathcheck
+pytest tests pass. The stack was live-verified
 against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
 to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
 full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
@@ -63,7 +64,7 @@ full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
 pnpm monorepo. `packages/ai-gateway` = provider abstraction (chat/planner/
 premiumChat/stt/tts/vision/moderation) — config-driven via env, NOTHING
 outside it may know which engine runs. `packages/db` = drizzle schema +
-SQL migrations 0000–0003 (apply in order). `apps/api` = Fastify: sessions
+SQL migrations 0000–0005 (apply in order). `apps/api` = Fastify: sessions
 (SSE streaming), voice turns, practice with SymPy verdicts + misconception
 diagnosis, exam mode, auth (bcrypt + hashed tokens), family/org accounts,
 entitlements (config/plans.json), usage metering, API keys, live-class
@@ -78,9 +79,11 @@ Mock providers let everything run with zero models installed.
 1. ~~Push (step zero), then set up CI~~ DONE 2026-08-24: GitHub Actions
    (`.github/workflows/ci.yml`) runs typecheck + all three test suites on
    every push and PR.
-2. Sprint 6b when founder provides env: Stripe/Paystack billing (metering
-   and entitlements are already wired for it), password reset + email
-   verification via mailcow.
+2. ~~Sprint 6b core~~ BUILT 2026-08-24: Stripe/Paystack billing (checkout,
+   signature-verified webhooks → plan flips, cancellation downgrade) and
+   email verification. Needs live keys + a real checkout at deploy.
+   Remaining 6b: study plans & scheduling, WhatsApp nudges,
+   spaced-repetition warm-ups.
 3. Deploy per `deploy/DEPLOY.md` (7B model minimum — 0.5B was only a
    protocol test; pedagogy quality demands the bigger model).
 4. Phase 2: LiveKit full-duplex voice, whiteboard, homework camera, avatar

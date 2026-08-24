@@ -58,9 +58,9 @@ workspace files from there.
 | api | `apps/api/Dockerfile` (root context) | 4000 |
 | web | `apps/web/Dockerfile` (root context; set `NEXT_PUBLIC_API_URL=https://<api-domain>` as a service variable — Railway passes variables as build args) | 3000 |
 
-Add a Railway **Postgres** plugin, then run the migration once:
+Add a Railway **Postgres** plugin, then run the migrations once, in order:
 ```bash
-psql $DATABASE_URL -f packages/db/migrations/0000_init.sql
+for f in packages/db/migrations/*.sql; do psql $DATABASE_URL -f "$f"; done
 ```
 
 ### api environment
@@ -81,6 +81,11 @@ SMTP_PORT=587
 SMTP_USER=tutor@<your-domain>
 SMTP_PASS=<mailbox password>
 SMTP_FROM="AI Tutor" <tutor@<your-domain>>
+# billing (Sprint 6b) — pick ONE provider; register the webhook as
+# https://<api-domain>/billing/webhook in its dashboard first
+BILLING_PROVIDER=paystack            # or stripe
+PAYSTACK_SECRET_KEY=...              # + PAYSTACK_PLAN_PLUS / PAYSTACK_PLAN_PREMIUM
+# STRIPE_SECRET_KEY=... STRIPE_WEBHOOK_SECRET=... STRIPE_PRICE_PLUS=... STRIPE_PRICE_PREMIUM=...
 ```
 
 ## 3. Smoke test after deploy

@@ -16,6 +16,12 @@ export class MemoryStore implements Store {
   private tokens = new Map<string, { userId: string; createdAt: Date }>(); // tokenHash -> record
   private pushSubs = new Map<string, { userId: string; endpoint: string; p256dh: string; auth: string }>();
   private resets = new Map<string, { userId: string; used: boolean; createdAt: Date }>();
+  private verifications = new Map<string, { userId: string; used: boolean; createdAt: Date }>();
+  private verifiedUsers = new Set<string>();
+  private subscriptions = new Map<
+    string, // `${provider}::${subscriptionRef}`
+    { userId: string; provider: string; customerRef: string; subscriptionRef: string; plan: string; status: "active" | "canceled"; updatedAt: Date }
+  >();
   private sessionMessages = new Map<string, Array<{ role: string; content: string; createdAt: Date }>>();
   private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string }>();
 
@@ -140,6 +146,61 @@ export class MemoryStore implements Store {
     this.resets.set(tokenHash, { userId, used: false, createdAt: new Date() });
   }
 
+  // ---- Billing & email verification ----
+
+  async createEmailVerification(userId: string, tokenHash: string) {
+    this.verifications.set(tokenHash, { userId, used: false, createdAt: new Date() });
+  }
+
+  async consumeEmailVerification(tokenHash: string, maxAgeMs: number) {
+    const v = this.verifications.get(tokenHash);
+    if (!v || v.used || Date.now() - v.createdAt.getTime() > maxAgeMs) return null;
+    v.used = true;
+    return v.userId;
+  }
+
+  async markEmailVerified(userId: string) {
+    this.verifiedUsers.add(userId);
+  }
+
+  async isEmailVerified(userId: string) {
+    return this.verifiedUsers.has(userId);
+  }
+
+  async recordSubscription(sub: {
+    userId: string;
+    provider: string;
+    customerRef: string;
+    subscriptionRef: string;
+    plan: string;
+    status: "active" | "canceled";
+  }) {
+    this.subscriptions.set(`${sub.provider}::${sub.subscriptionRef}`, { ...sub, updatedAt: new Date() });
+  }
+
+  async getSubscription(userId: string) {
+    const mine = [...this.subscriptions.values()]
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const s = mine[0];
+    return s ? { provider: s.provider, plan: s.plan, status: s.status, subscriptionRef: s.subscriptionRef } : null;
+  }
+
+  async findSubscriptionByRef(provider: string, ref: { customerRef?: string; subscriptionRef?: string }) {
+    for (const s of this.subscriptions.values()) {
+      if (s.provider !== provider) continue;
+      if (
+        (ref.subscriptionRef && s.subscriptionRef === ref.subscriptionRef) ||
+        (ref.customerRef && s.customerRef === ref.customerRef)
+      ) {
+        for (const [email, a] of this.accounts) {
+          if (a.userId === s.userId) return { userId: s.userId, email };
+        }
+      }
+    }
+    return null;
+  }
+
   async consumePasswordReset(tokenHash: string, maxAgeMs: number) {
     const r = this.resets.get(tokenHash);
     if (!r || r.used || Date.now() - r.createdAt.getTime() > maxAgeMs) return null;
@@ -175,6 +236,9 @@ export class MemoryStore implements Store {
     for (const [hash, k] of this.apiKeys) if (k.ownerUserId === userId) this.apiKeys.delete(hash);
     for (const [endpoint, s] of this.pushSubs) if (s.userId === userId) this.pushSubs.delete(endpoint);
     for (const [hash, r] of this.resets) if (r.userId === userId) this.resets.delete(hash);
+    for (const [hash, v] of this.verifications) if (v.userId === userId) this.verifications.delete(hash);
+    for (const [key, s] of this.subscriptions) if (s.userId === userId) this.subscriptions.delete(key);
+    this.verifiedUsers.delete(userId);
     await this.revokeUserTokens(userId);
     this.plans.delete(userId);
     for (const [id, o] of this.orgs) if (o.ownerUserId === userId) this.orgs.delete(id);
