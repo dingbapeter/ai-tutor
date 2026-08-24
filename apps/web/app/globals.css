@@ -248,11 +248,68 @@ body[data-session="1"] .appbar { display: none; }
 .home h2 { font-size: clamp(24px, 4.4vw, 32px); font-weight: 800; margin: 0 0 6px; text-align: center; }
 .home .sub { color: var(--text-dim); text-align: center; margin: 0 auto 24px; max-width: 560px; }
 
-.home-hero { text-align: center; padding: 54px 0 10px; }
-.hero-duo { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
-.hero-duo > div:first-child { max-width: 540px; }
-.hero-cast { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
-@media (max-width: 640px) { .hero-cast svg { width: 128px; height: 154px; } }
+.home-hero { padding: 44px 0 10px; }
+.hero-duo { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
+.hero-copy { flex: 1 1 440px; max-width: 560px; text-align: left; }
+.hero-copy h1 { text-align: left; }
+.hero-copy .lede { text-align: left; margin-bottom: 20px; }
+.hero-cast { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; position: relative; z-index: 1; }
+
+/* The character's stage: soft floating shapes behind the bust. */
+.cast-stage { position: relative; flex: 0 1 auto; display: flex; justify-content: center; }
+.blob { position: absolute; border-radius: 50%; background: var(--brand); opacity: 0.12; filter: blur(2px); animation: drift 7s ease-in-out infinite; }
+.blob.b1 { width: 68px; height: 68px; top: -6px; left: -22px; }
+.blob.b2 { width: 34px; height: 34px; top: 60px; right: -26px; animation-delay: 1.6s; }
+.blob.b3 { width: 22px; height: 22px; bottom: 30px; left: -34px; animation-delay: 3.1s; }
+@keyframes drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+
+@media (max-width: 760px) {
+  .hero-duo { flex-direction: column-reverse; align-items: center; }
+  .hero-copy { text-align: center; }
+  .hero-copy h1, .hero-copy .lede { text-align: center; }
+  .hero-copy .try-chips { justify-content: center !important; }
+  .hero-cast svg { width: 250px; height: 300px; }
+  .cast-stage span.hero-cast, .cast-stage { margin-bottom: -8px; }
+}
+
+/* The big ask panel: template-style tall box with controls inside. */
+.askbox.big {
+  flex-direction: column;
+  align-items: stretch;
+  border-radius: 22px;
+  padding: 18px 18px 12px 22px;
+  max-width: 560px;
+  margin: 0 0 16px;
+  gap: 14px;
+}
+.askbox.big input { font-size: 18px; padding: 4px 0 14px; }
+.askbox-actions { display: flex; align-items: center; gap: 4px; }
+.ask-ico {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.ask-ico:hover { color: var(--brand); background: var(--brand-soft); }
+.send-orb {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+.send-orb:hover { background: var(--brand-strong); }
+.send-orb:active { transform: scale(0.94); }
 .home-hero h1 { font-size: clamp(34px, 7vw, 54px); font-weight: 800; margin: 0 0 10px; letter-spacing: -0.03em; }
 .home-hero h1 span { color: var(--brand); }
 .home-hero .lede { color: var(--text-dim); font-size: clamp(16px, 2.6vw, 19px); margin: 0 0 26px; }

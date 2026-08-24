@@ -33,6 +33,17 @@ const PROFILE_DEMO = [
   ["Chemistry", 71],
 ] as const;
 
+function Icon({ d, label }: { d: string; label: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label={label}>
+      <path d={d} />
+    </svg>
+  );
+}
+const MIC = "M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 0 14 0 M12 18v3";
+const CLIP = "M21 12.5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 8.3";
+const CAM = "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z";
+
 export default function HomePage() {
   const [ask, setAsk] = useState("");
 
@@ -45,28 +56,53 @@ export default function HomePage() {
     <div className="home">
       <section className="home-hero fadeUp">
         <div className="hero-duo">
-          <div>
-            <h1>Meet your personal <span>AI</span> tutor.</h1>
-            <p className="lede">Ask anything. Learn anything. A tutor that knows you and remembers every session.</p>
+          <div className="hero-copy">
+            <h1>Meet your<br />personal <span>AI</span> tutor.</h1>
+            <p className="lede">Ask anything. Upload anything. Learn anything.</p>
+
+            <div className="askbox big">
+              <input
+                value={ask}
+                onChange={(e) => setAsk(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && startLearning()}
+                placeholder="What do you want to learn today?"
+                aria-label="What do you want to learn today?"
+              />
+              <div className="askbox-actions">
+                <button className="ask-ico" title="Talk it out with your tutor" onClick={() => startLearning()}>
+                  <Icon d={MIC} label="voice" />
+                </button>
+                <button className="ask-ico" title="Upload your work in the session" onClick={() => startLearning()}>
+                  <Icon d={CLIP} label="upload" />
+                </button>
+                <button className="ask-ico" title="Show your tutor a photo in the session" onClick={() => startLearning()}>
+                  <Icon d={CAM} label="camera" />
+                </button>
+                <span style={{ flex: 1 }} />
+                <button className="send-orb" title="Start learning" onClick={() => startLearning()} aria-label="Start learning">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 19V5 M5 12l7-7 7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="try-chips" style={{ justifyContent: "flex-start" }}>
+              <span style={{ color: "var(--text-dim)", fontSize: 13.5, fontWeight: 700, alignSelf: "center" }}>Try:</span>
+              {TRY_THESE.map((t) => (
+                <button key={t} className="chip" onClick={() => startLearning(t)}>{t}</button>
+              ))}
+            </div>
           </div>
-          <div className="hero-cast">
-            <RandomCaricature size={170} slot={0} />
+
+          <div className="cast-stage">
+            <span className="blob b1" aria-hidden />
+            <span className="blob b2" aria-hidden />
+            <span className="blob b3" aria-hidden />
+            <div className="hero-cast">
+              <RandomCaricature size={360} slot={0} bust />
+            </div>
           </div>
-        </div>
-        <div className="askbox">
-          <input
-            value={ask}
-            onChange={(e) => setAsk(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && startLearning()}
-            placeholder="What do you want to learn today?"
-            aria-label="What do you want to learn today?"
-          />
-          <button className="btn" onClick={() => startLearning()}>Start</button>
-        </div>
-        <div className="try-chips">
-          {TRY_THESE.map((t) => (
-            <button key={t} className="chip" onClick={() => startLearning(t)}>{t}</button>
-          ))}
         </div>
       </section>
 

@@ -27,7 +27,8 @@ function Base({
   return (
     <svg width={size} height={size * 1.2} viewBox="0 0 200 240" aria-hidden>
       <ellipse cx="100" cy="228" rx="62" ry="9" fill="currentColor" opacity="0.08" />
-      {/* torso */}
+      {/* neck, then torso over it, then head over both */}
+      <rect x="86" y="120" width="28" height="52" rx="10" fill={skin} />
       <path d="M 52 232 Q 52 160 100 160 Q 148 160 148 232 Z" fill={shirt} />
       {/* head, deliberately oversized: caricature proportions */}
       <circle cx="100" cy="88" r="56" fill={skin} />
@@ -67,8 +68,9 @@ export const CARICATURES: Character[] = [
       >
         {/* hoodie details */}
         <path d="M 62 176 Q 100 196 138 176 L 138 186 Q 100 206 62 186 Z" fill="#fff" opacity="0.9" />
-        <circle cx="92" cy="206" r="4" fill="#fff" opacity="0.9" />
-        <circle cx="108" cy="206" r="4" fill="#fff" opacity="0.9" />
+        <text x="100" y="222" textAnchor="middle" fontSize="15" fontWeight="800" fill="#fff" fontFamily="inherit" letterSpacing="1">
+          DINGBA
+        </text>
         {/* the book under the arm */}
         <rect x="126" y="196" width="48" height="34" rx="4" fill="#43389f" transform="rotate(-8 150 213)" />
         <rect x="130" y="200" width="40" height="5" rx="2.5" fill="#fff" opacity="0.85" transform="rotate(-8 150 213)" />
@@ -190,12 +192,19 @@ export const CARICATURES: Character[] = [
  * Picks a character at random per visit. The first paint is deterministic
  * (no hydration mismatch); the shuffle lands right after mount. `slot`
  * offsets the pick so several slots on one page show different characters.
+ * `bust` crops to head-and-shoulders and renders large, hero-style.
  */
-export function RandomCaricature({ size = 180, slot = 0 }: { size?: number; slot?: number }) {
+export function RandomCaricature({ size = 180, slot = 0, bust = false }: { size?: number; slot?: number; bust?: boolean }) {
   const [pick, setPick] = useState(slot % CARICATURES.length);
   useEffect(() => {
     setPick((Math.floor(Math.random() * CARICATURES.length) + slot) % CARICATURES.length);
   }, [slot]);
   const c = CARICATURES[pick];
-  return <span title={c.label}>{c.svg(size)}</span>;
+  if (!bust) return <span title={c.label}>{c.svg(size)}</span>;
+  // Bust crop: the figure drawn large, container clipping below the chest.
+  return (
+    <span title={c.label} style={{ display: "inline-block", height: size * 1.14, overflow: "hidden" }}>
+      {c.svg(size)}
+    </span>
+  );
 }
