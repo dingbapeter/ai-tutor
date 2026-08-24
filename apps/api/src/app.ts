@@ -121,11 +121,28 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
   const PLANS = plans ?? loadPlans();
   const limitsFor = (plan: string): PlanLimits => PLANS[plan] ?? PLANS.free;
-  const startOfToday = () => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
+  // "Daily" allowances use a rolling 24h window: fair in every timezone,
+  // instead of resetting at the server's midnight.
+  const startOfToday = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  // Optional error reporting: any webhook-compatible sink (GlitchTip, Slack,
+  // Discord). Fire-and-forget; absence of the env var disables it.
+  app.addHook("onError", async (req, _reply, error) => {
+    if (!env.ERROR_WEBHOOK_URL) return;
+    fetch(env.ERROR_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        text: `API error: ${req.method} ${req.url} — ${error.message}`,
+        content: `API error: ${req.method} ${req.url} — ${error.message}`,
+      }),
+    }).catch(() => {});
+  });
+
+  // Guest abuse guard: rotating names for fresh free allowances is capped
+  // per IP per day (accounts are the legitimate path past it).
+  const guestSessionsByIp = new Map<string, { day: string; count: number }>();
+  const GUEST_IP_CAP = Number(env.GUEST_IP_CAP ?? 8);
 
   /** Pick the brain for a session: premium plans get the premium provider. */
   const chatFor = (session: LiveSession) =>
@@ -262,7 +279,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student" } }>(
     "/auth/register",
-    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } } },
     async (req, reply) => {
       const { email, password, displayName, role } = req.body;
       const account = await store.createAccount(
@@ -280,7 +297,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   app.post<{ Body: { email: string; password: string } }>(
     "/auth/login",
-    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } } },
     async (req, reply) => {
       const account = await store.getAccountByEmail(req.body.email);
       const ok = account && (await verifyPassword(req.body.password, account.passwordHash));
@@ -342,6 +359,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           sessions: await store.listSessionSummaries(s.id, 5),
           mastery: await store.getMasterySnapshot(s.id),
           safety: await store.listIncidents(s.id, 10),
+          streakDays: await store.getStreakDays(s.id),
         })),
       ),
     };
@@ -493,6 +511,16 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         ownerUserId = user.userId;
         plan = await store.getUserPlan(user.userId);
       } else if (req.body.studentName) {
+        if (!apiKeyId) {
+          const day = new Date().toISOString().slice(0, 10);
+          const rec = guestSessionsByIp.get(req.ip);
+          const count = rec?.day === day ? rec.count : 0;
+          if (count >= GUEST_IP_CAP) {
+            return reply.code(429).send({ error: "daily guest limit for this network reached — create a free account to keep learning" });
+          }
+          guestSessionsByIp.set(req.ip, { day, count: count + 1 });
+          if (guestSessionsByIp.size > 50_000) guestSessionsByIp.clear();
+        }
         const student = await store.ensureStudent(req.body.studentName.trim(), req.body.parentEmail);
         studentIdResolved = student.id;
         studentName = req.body.studentName.trim();
@@ -1206,6 +1234,188 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     if (!user) return reply.code(401).send({ error: "sign in required" });
     const ok = await store.revokeApiKey(user.userId, req.params.id);
     return ok ? { revoked: true } : reply.code(404).send({ error: "no such key" });
+  });
+
+  // ---- Auth lifecycle: logout, password reset ----
+
+  app.post("/auth/logout", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    await store.revokeUserTokens(user.userId); // logs out everywhere
+    return { loggedOut: true };
+  });
+
+  app.post<{ Body: { email: string } }>(
+    "/auth/forgot",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["email"],
+          additionalProperties: false,
+          properties: { email: { type: "string", format: "email", maxLength: 254 } },
+        },
+      },
+      config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 5), timeWindow: "1 minute" } },
+    },
+    async (req) => {
+      const account = await store.getAccountByEmail(req.body.email);
+      if (account) {
+        const raw = randomBytes(24).toString("hex");
+        await store.createPasswordReset(account.userId, createHash("sha256").update(raw).digest("hex"));
+        const { sendPasswordReset } = await import("./email.js");
+        sendPasswordReset(req.body.email, raw).catch((err) => app.log.error(err, "reset email failed"));
+      }
+      // Identical response either way — no account probing.
+      return { sent: true };
+    },
+  );
+
+  app.post<{ Body: { token: string; password: string } }>(
+    "/auth/reset",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["token", "password"],
+          additionalProperties: false,
+          properties: {
+            token: { type: "string", minLength: 32, maxLength: 128 },
+            password: { type: "string", minLength: 8, maxLength: 128 },
+          },
+        },
+      },
+      config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } },
+    },
+    async (req, reply) => {
+      const userId = await store.consumePasswordReset(
+        createHash("sha256").update(req.body.token).digest("hex"),
+        60 * 60 * 1000,
+      );
+      if (!userId) return reply.code(400).send({ error: "that reset link is invalid or expired — request a new one" });
+      await store.setPassword(userId, await hashPassword(req.body.password));
+      await store.revokeUserTokens(userId); // every old session dies with the old password
+      return { reset: true };
+    },
+  );
+
+  /** GDPR/COPPA erasure: the account and every trace of its students. */
+  app.delete<{ Body: { confirm: string } }>(
+    "/me",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["confirm"],
+          additionalProperties: false,
+          properties: { confirm: { type: "string", enum: ["DELETE"] } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      await store.deleteAccount(user.userId);
+      return { deleted: true };
+    },
+  );
+
+  // ---- Web push notifications ----
+
+  app.get("/push/vapid", async (_req, reply) => {
+    if (!env.VAPID_PUBLIC_KEY) return reply.code(501).send({ error: "push not configured" });
+    return { publicKey: env.VAPID_PUBLIC_KEY };
+  });
+
+  app.post<{ Body: { endpoint: string; keys: { p256dh: string; auth: string } } }>(
+    "/push/subscribe",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["endpoint", "keys"],
+          properties: {
+            endpoint: { type: "string", maxLength: 1000 },
+            keys: {
+              type: "object",
+              required: ["p256dh", "auth"],
+              properties: { p256dh: { type: "string", maxLength: 300 }, auth: { type: "string", maxLength: 100 } },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      await store.savePushSubscription(user.userId, {
+        endpoint: req.body.endpoint,
+        p256dh: req.body.keys.p256dh,
+        auth: req.body.keys.auth,
+      });
+      return { subscribed: true };
+    },
+  );
+
+  /** Admin-triggered nudge (deploy cron hits this daily; body optional email filter). */
+  app.post<{ Body: { email: string; title?: string; message?: string } }>(
+    "/admin/nudge",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["email"],
+          additionalProperties: false,
+          properties: {
+            email: { type: "string", format: "email" },
+            title: { type: "string", maxLength: 80 },
+            message: { type: "string", maxLength: 300 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+      if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+      if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+        return reply.code(501).send({ error: "push not configured" });
+      }
+      const account = await store.getAccountByEmail(req.body.email);
+      if (!account) return reply.code(404).send({ error: "no such account" });
+      const subs = await store.listPushSubscriptions(account.userId);
+      const webpush = (await import("web-push")).default;
+      webpush.setVapidDetails(
+        env.VAPID_SUBJECT ?? "mailto:tutor@example.com",
+        env.VAPID_PUBLIC_KEY,
+        env.VAPID_PRIVATE_KEY,
+      );
+      let sent = 0;
+      for (const sub of subs) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            JSON.stringify({
+              title: req.body.title ?? "Your tutor is ready 📚",
+              body: req.body.message ?? "A few minutes of practice today keeps the streak alive!",
+            }),
+          );
+          sent += 1;
+        } catch {
+          await store.deletePushSubscription(sub.endpoint); // stale device
+        }
+      }
+      return { sent, of: subs.length };
+    },
+  );
+
+  /** Guardian transcript view: the recent conversation for a student you own. */
+  app.get<{ Params: { id: string } }>("/students/:id/transcript", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return { messages: await store.listRecentMessages(req.params.id, 40) };
   });
 
   // ---- Admin (pre-billing): set a user's plan manually ----

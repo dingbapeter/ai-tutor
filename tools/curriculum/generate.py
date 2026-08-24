@@ -31,7 +31,11 @@ def verified(equation: str, variable: str, answer) -> None:
     )
 
     t = standard_transformations + (implicit_multiplication_application,)
-    eq = Eq(parse_expr(lhs, transformations=t), parse_expr(rhs, transformations=t))
+    # Mirror the runtime mathcheck service: ^ means power, not XOR.
+    eq = Eq(
+        parse_expr(lhs.replace("^", "**"), transformations=t),
+        parse_expr(rhs.replace("^", "**"), transformations=t),
+    )
     var = symbols(variable)
     a = Rational(str(answer))
     assert simplify(eq.lhs.subs(var, a) - eq.rhs.subs(var, a)) == 0, f"BAD PROBLEM: {equation} != {answer}"
@@ -159,6 +163,89 @@ def negatives_operations(n: int, skill: str):
     return out
 
 
+def percent_of(n: int, skill: str):
+    out = []
+    while len(out) < n:
+        pct = rng.choice([10, 20, 25, 50, 75, 5, 40, 60])
+        base = rng.choice([20, 40, 60, 80, 120, 200, 150, 300])
+        if (pct * base) % 100 != 0:
+            continue  # whole-number answers only at this level
+        ans = pct * base // 100
+        eq = f"x = {pct}*{base}/100"
+        verified(eq, "x", ans)
+        out.append({
+            "skillId": skill,
+            "prompt": f"What is {pct}% of {base}?",
+            "answer": str(ans),
+            "check": {"type": "solve", "equation": eq, "variable": "x"},
+            "misconceptions": [
+                {"answer": str(base - pct), "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."},
+            ],
+        })
+    return out
+
+
+def order_of_operations(n: int, skill: str):
+    out = []
+    for _ in range(n):
+        a, b, c = rng.randint(2, 9), rng.randint(2, 9), rng.randint(2, 6)
+        ans = a + b * c
+        eq = f"x = {a} + {b}*{c}"
+        verified(eq, "x", ans)
+        wrong = (a + b) * c
+        out.append({
+            "skillId": skill,
+            "prompt": f"Calculate: {a} + {b} × {c}",
+            "answer": str(ans),
+            "check": {"type": "solve", "equation": eq, "variable": "x"},
+            "misconceptions": [
+                {"answer": str(wrong), "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."},
+            ],
+        })
+    return out
+
+
+def ratio_share(n: int, skill: str):
+    out = []
+    for _ in range(n):
+        r1, r2 = rng.choice([(1, 2), (1, 3), (2, 3), (3, 4), (2, 5), (3, 5)])
+        unit = rng.randint(2, 9)
+        total = (r1 + r2) * unit
+        share1 = r1 * unit
+        eq = f"x = {total}*{r1}/{r1 + r2}"
+        verified(eq, "x", share1)
+        out.append({
+            "skillId": skill,
+            "prompt": f"Share {total} sweets between two friends in the ratio {r1}:{r2}. How many does the first friend get?",
+            "answer": str(share1),
+            "check": {"type": "solve", "equation": eq, "variable": "x"},
+            "misconceptions": [
+                {"answer": str(total // 2) if total // 2 != share1 else str(total), "diagnosis": f"That's an equal split — a {r1}:{r2} ratio means {r1 + r2} equal parts first, then {r1} of them."},
+            ],
+        })
+    return out
+
+
+def exponents_basic(n: int, skill: str):
+    out = []
+    for _ in range(n):
+        base = rng.randint(2, 6)
+        power = rng.choice([2, 3])
+        ans = base**power
+        eq = f"x = {base}^{power}"
+        verified(eq, "x", ans)
+        out.append({
+            "skillId": skill,
+            "prompt": f"What is {base}{'²' if power == 2 else '³'} ({base} to the power of {power})?",
+            "answer": str(ans),
+            "check": {"type": "solve", "equation": eq, "variable": "x"},
+            "misconceptions": [
+                {"answer": str(base * power), "diagnosis": f"That's {base} × {power} — a power means multiplying {base} by ITSELF {power} times."},
+            ],
+        })
+    return out
+
+
 def sat_linear(n: int, skill: str):
     out = []
     for _ in range(n):
@@ -196,12 +283,32 @@ def write_pack(pack_id: str, problems: list) -> None:
     print(f"{pack_id}: {len(problems)} problems, all sympy-verified")
 
 
+def ensure_skills(pack_id: str, skills: list) -> None:
+    path = ROOT / "curriculum" / pack_id / "pack.json"
+    pack = json.loads(path.read_text())
+    have = {s["id"] for s in pack["skills"]}
+    for s in skills:
+        if s["id"] not in have:
+            pack["skills"].append(s)
+    path.write_text(json.dumps(pack, indent=2, ensure_ascii=False) + "\n")
+
+
 if __name__ == "__main__":
+    ensure_skills("math-ms", [
+        {"id": "math-ms.percent.of", "title": "Percentages of amounts", "prerequisites": ["math-ms.fractions.equivalent"]},
+        {"id": "math-ms.order-of-ops", "title": "Order of operations", "prerequisites": []},
+        {"id": "math-ms.ratio.share", "title": "Sharing in a ratio", "prerequisites": ["math-ms.fractions.equivalent"]},
+        {"id": "math-ms.exponents.basic", "title": "Squares and cubes", "prerequisites": []},
+    ])
     write_pack("math-ms",
         one_step_equations(10, "math-ms.linear-eq.one-step")
         + two_step_equations(12, "math-ms.linear-eq.two-step")
         + fraction_addition(10, "math-ms.fractions.add-sub")
         + decimal_compare(8, "math-ms.decimals.compare")
-        + negatives_operations(10, "math-ms.negatives.operations"))
+        + negatives_operations(10, "math-ms.negatives.operations")
+        + percent_of(10, "math-ms.percent.of")
+        + order_of_operations(10, "math-ms.order-of-ops")
+        + ratio_share(10, "math-ms.ratio.share")
+        + exponents_basic(8, "math-ms.exponents.basic"))
     write_pack("exam-prep", sat_linear(15, "exam.sat-math.heart-of-algebra"))
     print("Done. Language pack is authored by hand (rubric-based), not generated.")

@@ -57,7 +57,7 @@ const RULES: Rule[] = [
     category: "jailbreak",
     severity: "concern",
     pattern:
-      /\b(ignore (all|your|previous) (instructions|rules)|you are no longer|pretend (you'?re|to be) (not )?(an? )?(ai|tutor)|system prompt|developer mode|DAN mode)\b/i,
+      /\b(ignore (all|your|previous) (instructions|rules)|you are no longer|pretend (you'?re|to be) (not )?(an? )?(ai|tutor)|system prompt|developer mode|DAN mode|forget (everything|(all )?(your |the )?(rules|instructions))|act as (an? )?(unrestricted|uncensored|jailbroken)|repeat (your|the) (instructions|prompt)|what (are|were) your instructions|roleplay as)\b/i,
   },
 ];
 

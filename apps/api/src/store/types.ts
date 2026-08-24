@@ -102,6 +102,30 @@ export interface Store {
   listOrgStudents(orgId: string): Promise<Array<{ id: string; displayName: string }>>;
   countOrgStudents(orgId: string): Promise<number>;
 
+  // ---- Trust & retention (blind-spot sprint) ----
+
+  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
+  listPushSubscriptions(userId: string): Promise<Array<{ endpoint: string; p256dh: string; auth: string }>>;
+  deletePushSubscription(endpoint: string): Promise<void>;
+
+  /** Store sha256(raw); raw goes to the user by email. 1h validity, single use. */
+  createPasswordReset(userId: string, tokenHash: string): Promise<void>;
+  consumePasswordReset(tokenHash: string, maxAgeMs: number): Promise<string | null>;
+  setPassword(userId: string, passwordHash: string): Promise<void>;
+  revokeUserTokens(userId: string): Promise<void>;
+
+  /** GDPR/COPPA erasure: the account and every trace of its students. */
+  deleteAccount(userId: string): Promise<void>;
+
+  /** Recent conversation lines for the guardian transcript view. */
+  listRecentMessages(
+    studentId: string,
+    limit: number,
+  ): Promise<Array<{ role: string; content: string; createdAt: Date }>>;
+
+  /** Consecutive days (ending today or yesterday) with at least one session. */
+  getStreakDays(studentId: string): Promise<number>;
+
   createApiKey(
     ownerUserId: string,
     name: string,

@@ -23,144 +23,212 @@
   "problems": [
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 2(x − 1) = 2, what is the value of x?",
-      "answer": "2",
+      "prompt": "If 3(x − 2) = 24, what is the value of x?",
+      "answer": "10",
       "check": {
         "type": "solve",
-        "equation": "2*(x - 1) = 2",
+        "equation": "3*(x - 2) = 24",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
-          "answer": "1",
-          "diagnosis": "Divided by 2 but forgot to add 1 back."
+          "answer": "8",
+          "diagnosis": "Divided by 3 but forgot to add 2 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 4(x − 6) = 24, what is the value of x?",
-      "answer": "12",
-      "check": {
-        "type": "solve",
-        "equation": "4*(x - 6) = 24",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "6",
-          "diagnosis": "Divided by 4 but forgot to add 6 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 3(x − 5) = 18, what is the value of x?",
+      "prompt": "If 7(x − 7) = 28, what is the value of x?",
       "answer": "11",
       "check": {
         "type": "solve",
-        "equation": "3*(x - 5) = 18",
+        "equation": "7*(x - 7) = 28",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
-          "answer": "6",
-          "diagnosis": "Divided by 3 but forgot to add 5 back."
+          "answer": "4",
+          "diagnosis": "Divided by 7 but forgot to add 7 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 4(x − 5) = 28, what is the value of x?",
+      "prompt": "If 6(x − 1) = 66, what is the value of x?",
       "answer": "12",
       "check": {
         "type": "solve",
-        "equation": "4*(x - 5) = 28",
+        "equation": "6*(x - 1) = 66",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
-          "answer": "7",
-          "diagnosis": "Divided by 4 but forgot to add 5 back."
+          "answer": "11",
+          "diagnosis": "Divided by 6 but forgot to add 1 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 5(x − 3) = 45, what is the value of x?",
-      "answer": "12",
+      "prompt": "If 6(x − 6) = 18, what is the value of x?",
+      "answer": "9",
       "check": {
         "type": "solve",
-        "equation": "5*(x - 3) = 45",
+        "equation": "6*(x - 6) = 18",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "Divided by 6 but forgot to add 6 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 4(x − 1) = 36, what is the value of x?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x - 1) = 36",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
           "answer": "9",
-          "diagnosis": "Divided by 5 but forgot to add 3 back."
+          "diagnosis": "Divided by 4 but forgot to add 1 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 7(x − 4) = 14, what is the value of x?",
-      "answer": "6",
+      "prompt": "If 6(x − 3) = 6, what is the value of x?",
+      "answer": "4",
       "check": {
         "type": "solve",
-        "equation": "7*(x - 4) = 14",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "2",
-          "diagnosis": "Divided by 7 but forgot to add 4 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 5(x − 9) = 5, what is the value of x?",
-      "answer": "10",
-      "check": {
-        "type": "solve",
-        "equation": "5*(x - 9) = 5",
+        "equation": "6*(x - 3) = 6",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
           "answer": "1",
+          "diagnosis": "Divided by 6 but forgot to add 3 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x − 7) = 6, what is the value of x?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x - 7) = 6",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "Divided by 3 but forgot to add 7 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 5(x − 9) = 15, what is the value of x?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x - 9) = 15",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "3",
           "diagnosis": "Divided by 5 but forgot to add 9 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 8(x − 1) = 80, what is the value of x?",
-      "answer": "11",
+      "prompt": "If 2(x − 3) = 4, what is the value of x?",
+      "answer": "5",
       "check": {
         "type": "solve",
-        "equation": "8*(x - 1) = 80",
+        "equation": "2*(x - 3) = 4",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
-          "answer": "10",
-          "diagnosis": "Divided by 8 but forgot to add 1 back."
+          "answer": "2",
+          "diagnosis": "Divided by 2 but forgot to add 3 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 5(x − 7) = 5, what is the value of x?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x - 7) = 5",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "Divided by 5 but forgot to add 7 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 7(x − 2) = 49, what is the value of x?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "7*(x - 2) = 49",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "7",
+          "diagnosis": "Divided by 7 but forgot to add 2 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 2(x − 6) = 4, what is the value of x?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "2*(x - 6) = 4",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "Divided by 2 but forgot to add 6 back."
         }
       ]
     }
   ],
   "generated": {
     "tool": "tools/curriculum/generate.py",
-    "count": 8,
+    "count": 12,
     "verified": "sympy-at-build"
   }
 }

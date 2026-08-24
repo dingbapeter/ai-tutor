@@ -12,6 +12,40 @@ export interface RecapEmail {
   recap: string;
 }
 
+/** Password reset link via mailcow SMTP (logged no-op without SMTP_HOST). */
+export async function sendPasswordReset(to: string, rawToken: string): Promise<"sent" | "skipped"> {
+  const host = process.env.SMTP_HOST;
+  const base = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  if (!host) {
+    console.log(`[email] SMTP not configured — would send password reset to ${to}`);
+    return "skipped";
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"AI Tutor" <tutor@${host.replace(/^mail\./, "")}>`,
+    to,
+    subject: "Reset your password",
+    text: [
+      `Hello,`,
+      ``,
+      `Someone (hopefully you) asked to reset the password for this account.`,
+      `Reset it here within the next hour:`,
+      ``,
+      `${base}/reset?token=${rawToken}`,
+      ``,
+      `If this wasn't you, ignore this email — nothing changes.`,
+    ].join("\n"),
+  });
+  return "sent";
+}
+
 export interface SafetyAlertEmail {
   to: string;
   studentName: string;

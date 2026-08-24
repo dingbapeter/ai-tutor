@@ -39,6 +39,30 @@
       "prerequisites": [
         "math-ms.linear-eq.one-step"
       ]
+    },
+    {
+      "id": "math-ms.percent.of",
+      "title": "Percentages of amounts",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
+    },
+    {
+      "id": "math-ms.order-of-ops",
+      "title": "Order of operations",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.ratio.share",
+      "title": "Sharing in a ratio",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
+    },
+    {
+      "id": "math-ms.exponents.basic",
+      "title": "Squares and cubes",
+      "prerequisites": []
     }
   ],
   "problems": [
@@ -869,11 +893,619 @@
         "variable": "x"
       },
       "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 10% of 20?",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x = 10*20/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "10",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 10% of 200?",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x = 10*200/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "190",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 25% of 300?",
+      "answer": "75",
+      "check": {
+        "type": "solve",
+        "equation": "x = 25*300/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "275",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 60% of 80?",
+      "answer": "48",
+      "check": {
+        "type": "solve",
+        "equation": "x = 60*80/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "20",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 50% of 120?",
+      "answer": "60",
+      "check": {
+        "type": "solve",
+        "equation": "x = 50*120/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "70",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 5% of 60?",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5*60/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "55",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 5% of 120?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5*120/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "115",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 40% of 60?",
+      "answer": "24",
+      "check": {
+        "type": "solve",
+        "equation": "x = 40*60/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "20",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 60% of 200?",
+      "answer": "120",
+      "check": {
+        "type": "solve",
+        "equation": "x = 60*200/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "140",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 50% of 120?",
+      "answer": "60",
+      "check": {
+        "type": "solve",
+        "equation": "x = 50*120/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "70",
+          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 9 + 5 × 4",
+      "answer": "29",
+      "check": {
+        "type": "solve",
+        "equation": "x = 9 + 5*4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "56",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 9 × 4",
+      "answer": "38",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 9*4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "44",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 8 × 5",
+      "answer": "42",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 8*5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "50",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 4 + 5 × 3",
+      "answer": "19",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4 + 5*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "27",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 6 + 3 × 2",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6 + 3*2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 5 + 5 × 2",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5 + 5*2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "20",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 4 × 4",
+      "answer": "18",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 4*4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "24",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 8 × 4",
+      "answer": "34",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 8*4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "40",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 3 + 8 × 6",
+      "answer": "51",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3 + 8*6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "66",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 4 + 7 × 2",
+      "answer": "18",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4 + 7*2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "22",
+          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 24 sweets between two friends in the ratio 3:5. How many does the first friend get?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "x = 24*3/8",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 28 sweets between two friends in the ratio 1:3. How many does the first friend get?",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "x = 28*1/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "14",
+          "diagnosis": "That's an equal split — a 1:3 ratio means 4 equal parts first, then 1 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 6 sweets between two friends in the ratio 1:2. How many does the first friend get?",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6*1/3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "That's an equal split — a 1:2 ratio means 3 equal parts first, then 1 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 25 sweets between two friends in the ratio 2:3. How many does the first friend get?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "x = 25*2/5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's an equal split — a 2:3 ratio means 5 equal parts first, then 2 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 35 sweets between two friends in the ratio 2:5. How many does the first friend get?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "x = 35*2/7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "17",
+          "diagnosis": "That's an equal split — a 2:5 ratio means 7 equal parts first, then 2 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 56 sweets between two friends in the ratio 3:5. How many does the first friend get?",
+      "answer": "21",
+      "check": {
+        "type": "solve",
+        "equation": "x = 56*3/8",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "28",
+          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 28 sweets between two friends in the ratio 3:4. How many does the first friend get?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "x = 28*3/7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "14",
+          "diagnosis": "That's an equal split — a 3:4 ratio means 7 equal parts first, then 3 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 14 sweets between two friends in the ratio 3:4. How many does the first friend get?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 14*3/7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "7",
+          "diagnosis": "That's an equal split — a 3:4 ratio means 7 equal parts first, then 3 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 9 sweets between two friends in the ratio 1:2. How many does the first friend get?",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "x = 9*1/3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "That's an equal split — a 1:2 ratio means 3 equal parts first, then 1 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 16 sweets between two friends in the ratio 3:5. How many does the first friend get?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 16*3/8",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "8",
+          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6³ (6 to the power of 3)?",
+      "answer": "216",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "That's 6 × 3 — a power means multiplying 6 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6² (6 to the power of 2)?",
+      "answer": "36",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6² (6 to the power of 2)?",
+      "answer": "36",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 5² (5 to the power of 2)?",
+      "answer": "25",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "10",
+          "diagnosis": "That's 5 × 2 — a power means multiplying 5 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 3² (3 to the power of 2)?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "That's 3 × 2 — a power means multiplying 3 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6² (6 to the power of 2)?",
+      "answer": "36",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 4³ (4 to the power of 3)?",
+      "answer": "64",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's 4 × 3 — a power means multiplying 4 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 2³ (2 to the power of 3)?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "That's 2 × 3 — a power means multiplying 2 by ITSELF 3 times."
+        }
+      ]
     }
   ],
   "generated": {
     "tool": "tools/curriculum/generate.py",
-    "count": 50,
+    "count": 88,
     "verified": "sympy-at-build"
   }
 }

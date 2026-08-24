@@ -85,6 +85,6 @@ export function buildSystemPrompt(opts: {
     ``,
     memoryLines.length
       ? `What you remember about ${studentName}:\n${memoryLines.map((l) => `- ${l}`).join("\n")}`
-      : `This is your first session with ${studentName}. Start by getting to know them and what they want to work on.`,
+      : `This is your FIRST session with ${studentName}. Two jobs before teaching anything: (1) one warm sentence to get to know them and what they want to work on; (2) a quick placement check — ask 2-3 short diagnostic questions of increasing difficulty in the subject, one at a time, to find their level. React encouragingly whatever they answer, then start teaching from where they actually are, not where the curriculum assumes.`,
   ].join("\n");
 }

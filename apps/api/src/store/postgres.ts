@@ -204,7 +204,13 @@ export class PostgresStore implements Store {
       .select({ userId: schema.users.id, email: schema.users.email, role: schema.users.role })
       .from(schema.authTokens)
       .innerJoin(schema.users, eq(schema.authTokens.userId, schema.users.id))
-      .where(eq(schema.authTokens.tokenHash, tokenHash))
+      .where(
+        and(
+          eq(schema.authTokens.tokenHash, tokenHash),
+          // 30-day expiry: a stolen or forgotten token doesn't live forever.
+          gte(schema.authTokens.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+        ),
+      )
       .limit(1);
     if (!rows.length) return null;
     await this.db
@@ -397,6 +403,114 @@ export class PostgresStore implements Store {
       .from(schema.students)
       .where(eq(schema.students.orgId, orgId));
     return Number(rows[0]?.n ?? 0);
+  }
+
+  // ---- Trust & retention ----
+
+  async savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }) {
+    await this.db
+      .insert(schema.pushSubscriptions)
+      .values({ userId, ...sub })
+      .onConflictDoUpdate({ target: schema.pushSubscriptions.endpoint, set: { userId, p256dh: sub.p256dh, auth: sub.auth } });
+  }
+
+  async listPushSubscriptions(userId: string) {
+    return this.db
+      .select({
+        endpoint: schema.pushSubscriptions.endpoint,
+        p256dh: schema.pushSubscriptions.p256dh,
+        auth: schema.pushSubscriptions.auth,
+      })
+      .from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.userId, userId));
+  }
+
+  async deletePushSubscription(endpoint: string) {
+    await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, endpoint));
+  }
+
+  async createPasswordReset(userId: string, tokenHash: string) {
+    await this.db.insert(schema.passwordResets).values({ userId, tokenHash });
+  }
+
+  async consumePasswordReset(tokenHash: string, maxAgeMs: number) {
+    const rows = await this.db
+      .update(schema.passwordResets)
+      .set({ used: true })
+      .where(
+        and(
+          eq(schema.passwordResets.tokenHash, tokenHash),
+          eq(schema.passwordResets.used, false),
+          gte(schema.passwordResets.createdAt, new Date(Date.now() - maxAgeMs)),
+        ),
+      )
+      .returning({ userId: schema.passwordResets.userId });
+    return rows[0]?.userId ?? null;
+  }
+
+  async setPassword(userId: string, passwordHash: string) {
+    await this.db.update(schema.users).set({ passwordHash }).where(eq(schema.users.id, userId));
+  }
+
+  async revokeUserTokens(userId: string) {
+    await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
+  }
+
+  async deleteAccount(userId: string) {
+    const students = await this.listStudentProfiles(userId);
+    for (const s of students) {
+      const sessions = await this.db
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.studentId, s.id));
+      for (const sess of sessions) {
+        await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sess.id));
+      }
+      await this.db.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
+      await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
+      await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
+      await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
+      await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
+      await this.db.delete(schema.students).where(eq(schema.students.id, s.id));
+    }
+    await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
+    await this.db.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
+    await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+    await this.db.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
+    await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
+    await this.db.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+    await this.db.delete(schema.users).where(eq(schema.users.id, userId));
+  }
+
+  async listRecentMessages(studentId: string, limit: number) {
+    const rows = await this.db
+      .select({
+        role: schema.messages.role,
+        content: schema.messages.content,
+        createdAt: schema.messages.createdAt,
+      })
+      .from(schema.messages)
+      .innerJoin(schema.sessions, eq(schema.messages.sessionId, schema.sessions.id))
+      .where(eq(schema.sessions.studentId, studentId))
+      .orderBy(desc(schema.messages.createdAt))
+      .limit(limit);
+    return rows.reverse();
+  }
+
+  async getStreakDays(studentId: string) {
+    const rows = await this.db
+      .select({ startedAt: schema.sessions.startedAt })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId));
+    const days = new Set(rows.map((r) => r.startedAt.toISOString().slice(0, 10)));
+    let streak = 0;
+    const cursor = new Date();
+    if (!days.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1);
+    while (days.has(cursor.toISOString().slice(0, 10))) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
   }
 
   async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[], monthlyQuota = 10_000) {

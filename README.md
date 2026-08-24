@@ -98,6 +98,11 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Exam mode UI (start, lock-in answers, finish → score + post-mortem in chat) | ✅ built; web build verified |
 | Usage meter on the account page (plan, today's messages/voice vs limits) | ✅ built + live-verified |
 | API-key quota enforced mid-session (not just at creation); live-session TTL sweep | ✅ regression-tested / in place |
+| PWA (manifest, icons, offline shell) + web push notifications (VAPID) | ✅ built; VAPID keys + real-device check at deploy |
+| Password reset, logout-everywhere, 30-day token expiry, account deletion (GDPR path) | ✅ tested |
+| Guardian transcript view, study streaks, placement-check onboarding, copy button | ✅ tested / built |
+| Terms & Privacy pages + registration consent | ✅ drafted (needs counsel before launch) |
+| Rolling 24h allowances, per-IP guest cap, error webhook, backup script | ✅ tested / in place |
 | Billing (Stripe/Paystack) | ❌ Sprint 6b (needs deploy + env) — /admin/plan bridges until then |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 

@@ -263,15 +263,28 @@ export default function Home() {
     setBusy(true);
 
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/message`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          text,
-          ...(format !== "plain" ? { format } : {}),
-          ...(participantId ? { participantId } : {}),
-        }),
-      });
+      const attempt = () =>
+        fetch(`${API}/sessions/${sessionId}/message`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text,
+            ...(format !== "plain" ? { format } : {}),
+            ...(participantId ? { participantId } : {}),
+          }),
+        });
+      // One retry on network failure — flaky connections shouldn't eat a turn.
+      let res: Response;
+      try {
+        res = await attempt();
+      } catch {
+        await new Promise((r) => setTimeout(r, 1200));
+        res = await attempt();
+      }
+      if (res.status === 402) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.error ?? "limit reached — upgrade to continue");
+      }
       if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -313,7 +326,11 @@ export default function Home() {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      // iOS Safari records audio/mp4, not webm — pick the first supported type.
+      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find(
+        (t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(t),
+      );
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
       rec.onstop = async () => {
@@ -442,6 +459,11 @@ export default function Home() {
       <main style={{ maxWidth: 640, margin: "48px auto", padding: 16 }}>
         <h1 style={{ textAlign: "center" }}>Meet your tutor</h1>
         {error && <p style={errBox}>{error}</p>}
+        {personas.length === 0 && (
+          <p style={{ ...errBox, background: "#fff8e6", color: "#7a5a00" }}>
+            Waking the tutors up… if this persists, we&apos;re having a moment — try again shortly.
+          </p>
+        )}
         <div style={card}>
           {family.length > 0 ? (
             <>
@@ -614,10 +636,16 @@ export default function Home() {
           }}>
             {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
             {m.role === "assistant" && m.content && !m.content.startsWith("(") && (
-              <button onClick={() => speakMessage(m.content)} title="Hear this"
-                style={{ border: "none", background: "transparent", cursor: "pointer", marginLeft: 6, fontSize: 14 }}>
-                🔊
-              </button>
+              <>
+                <button onClick={() => speakMessage(m.content)} title="Hear this"
+                  style={{ border: "none", background: "transparent", cursor: "pointer", marginLeft: 6, fontSize: 14 }}>
+                  🔊
+                </button>
+                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title="Copy"
+                  style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 14 }}>
+                  📋
+                </button>
+              </>
             )}
           </div>
         ))}

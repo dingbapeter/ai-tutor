@@ -13,7 +13,10 @@ export class MemoryStore implements Store {
     string,
     { userId: string; passwordHash: string; role: "parent" | "student"; displayName: string }
   >();
-  private tokens = new Map<string, string>(); // tokenHash -> userId
+  private tokens = new Map<string, { userId: string; createdAt: Date }>(); // tokenHash -> record
+  private pushSubs = new Map<string, { userId: string; endpoint: string; p256dh: string; auth: string }>();
+  private resets = new Map<string, { userId: string; used: boolean; createdAt: Date }>();
+  private sessionMessages = new Map<string, Array<{ role: string; content: string; createdAt: Date }>>();
   private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string }>();
 
   async ensureStudent(name: string, parentEmail?: string) {
@@ -34,8 +37,10 @@ export class MemoryStore implements Store {
     return id;
   }
 
-  async saveMessage() {
-    // Live history is held by the session loop; nothing to persist in-memory.
+  async saveMessage(sessionId: string, role: "user" | "assistant", content: string) {
+    const list = this.sessionMessages.get(sessionId) ?? [];
+    list.push({ role, content, createdAt: new Date() });
+    this.sessionMessages.set(sessionId, list);
   }
 
   async endSession(sessionId: string, recap: SessionRecap) {
@@ -98,16 +103,106 @@ export class MemoryStore implements Store {
   }
 
   async saveToken(tokenHash: string, userId: string) {
-    this.tokens.set(tokenHash, userId);
+    this.tokens.set(tokenHash, { userId, createdAt: new Date() });
   }
 
   async resolveToken(tokenHash: string) {
-    const userId = this.tokens.get(tokenHash);
-    if (!userId) return null;
+    const rec = this.tokens.get(tokenHash);
+    if (!rec) return null;
+    // 30-day expiry: a stolen or forgotten token doesn't live forever.
+    if (Date.now() - rec.createdAt.getTime() > 30 * 24 * 60 * 60 * 1000) {
+      this.tokens.delete(tokenHash);
+      return null;
+    }
     for (const [email, a] of this.accounts) {
-      if (a.userId === userId) return { userId, email, role: a.role };
+      if (a.userId === rec.userId) return { userId: rec.userId, email, role: a.role };
     }
     return null;
+  }
+
+  // ---- Trust & retention ----
+
+  async savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }) {
+    this.pushSubs.set(sub.endpoint, { userId, ...sub });
+  }
+
+  async listPushSubscriptions(userId: string) {
+    return [...this.pushSubs.values()]
+      .filter((s) => s.userId === userId)
+      .map(({ endpoint, p256dh, auth }) => ({ endpoint, p256dh, auth }));
+  }
+
+  async deletePushSubscription(endpoint: string) {
+    this.pushSubs.delete(endpoint);
+  }
+
+  async createPasswordReset(userId: string, tokenHash: string) {
+    this.resets.set(tokenHash, { userId, used: false, createdAt: new Date() });
+  }
+
+  async consumePasswordReset(tokenHash: string, maxAgeMs: number) {
+    const r = this.resets.get(tokenHash);
+    if (!r || r.used || Date.now() - r.createdAt.getTime() > maxAgeMs) return null;
+    r.used = true;
+    return r.userId;
+  }
+
+  async setPassword(userId: string, passwordHash: string) {
+    for (const a of this.accounts.values()) if (a.userId === userId) a.passwordHash = passwordHash;
+  }
+
+  async revokeUserTokens(userId: string) {
+    for (const [hash, rec] of this.tokens) if (rec.userId === userId) this.tokens.delete(hash);
+  }
+
+  async deleteAccount(userId: string) {
+    const studentIds = [...this.profiles.values()].filter((p) => p.ownerUserId === userId).map((p) => p.id);
+    for (const sid of studentIds) {
+      this.profiles.delete(sid);
+      this.memories.delete(sid);
+      this.mastery.delete(sid);
+      this.orgStudents.delete(sid);
+      for (const [id, s] of this.sessions) {
+        if (s.studentId === sid) {
+          this.sessions.delete(id);
+          this.sessionMessages.delete(id);
+        }
+      }
+      this.incidents = this.incidents.filter((i) => i.studentId !== sid);
+      this.usage = this.usage.filter((u) => u.studentId !== sid);
+    }
+    this.usage = this.usage.filter((u) => u.userId !== userId);
+    for (const [hash, k] of this.apiKeys) if (k.ownerUserId === userId) this.apiKeys.delete(hash);
+    for (const [endpoint, s] of this.pushSubs) if (s.userId === userId) this.pushSubs.delete(endpoint);
+    for (const [hash, r] of this.resets) if (r.userId === userId) this.resets.delete(hash);
+    await this.revokeUserTokens(userId);
+    this.plans.delete(userId);
+    for (const [id, o] of this.orgs) if (o.ownerUserId === userId) this.orgs.delete(id);
+    for (const [email, a] of this.accounts) if (a.userId === userId) this.accounts.delete(email);
+  }
+
+  async listRecentMessages(studentId: string, limit: number) {
+    const out: Array<{ role: string; content: string; createdAt: Date }> = [];
+    for (const [sessionId, s] of this.sessions) {
+      if (s.studentId === studentId) out.push(...(this.sessionMessages.get(sessionId) ?? []));
+    }
+    return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit).reverse();
+  }
+
+  async getStreakDays(studentId: string) {
+    const days = new Set(
+      [...this.sessions.values()]
+        .filter((s) => s.studentId === studentId)
+        .map((s) => s.startedAt.toISOString().slice(0, 10)),
+    );
+    let streak = 0;
+    const cursor = new Date();
+    if (!days.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1);
+    while (days.has(cursor.toISOString().slice(0, 10))) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
   }
 
   async addStudentProfile(parentUserId: string, displayName: string) {
