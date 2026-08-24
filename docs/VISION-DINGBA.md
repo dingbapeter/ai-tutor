@@ -20,6 +20,43 @@ the product around one very strong idea." Per house rule 7 this triggers the
 Dingba across web UI, email senders, PWA manifest, README, personas config
 (tutor characters keep their own names; Dingba is the platform/brain).
 
+## Founder directives (2026-08-24, session 2 — "the identity build")
+
+Three standing directives, given as we resumed building:
+
+1. **All of life's learning, not just school.** Dingba serves the schoolchild
+   AND: the man rehearsing his U.S. visa interview, the woman preparing for
+   CFA or ACCA, the new hire fighting imposter syndrome who needs a
+   companion-coach, the retiree learning a language. Every field of learning
+   is in scope. The engine was always subject-agnostic (curriculum packs);
+   the product surface (personas, subjects, copy) must now say so too.
+   Homepage section 8 ("Your entire learning life") was already pointing
+   here — it is now the headline positioning, not a footnote.
+2. **Safety boundary, restated for adults.** "All fields of learning" has one
+   carve-out: no instruction in causing harm — weapons, explosives,
+   dangerous synthesis, and the like. The moderation gate is not a
+   kids-only feature; it runs for every learner at every age tier, with
+   age-appropriate policies (child policy = strictest; adult policy still
+   refuses harmful-capability tutoring). Never weaken; extend (house rule 5).
+3. **An app, not a website.** The product must feel like a native app:
+   installed PWA, app shell with persistent navigation, instant transitions,
+   gestures/motion, offline grace, mobile-first layouts. The web is the
+   distribution channel; the experience standard is the app store.
+   (Register item H2 graduates from "design pass" to "app-shell rebuild".)
+
+4. **No AI tells in the product.** Nothing user-facing should read as
+   machine-written. Concretely: no em dashes in UI copy, marketing copy,
+   emails, or canned messages; no assistant-isms ("Certainly!", "I'd be
+   happy to", "As an AI"); no boilerplate hedging; contractions welcome;
+   short human sentences. The tutor characters speak like people. This is
+   a copy standard for every user-facing surface (internal docs and code
+   comments are exempt). Also steer the chat system prompts so model
+   output follows the same voice.
+
+Founder's bar for the whole effort: "the best thing I will ever build — it
+carries my name." Premium, sovereign-level quality is the acceptance
+criterion for every sprint from here.
+
 ## The one strong idea
 
 > **Dingba should not be an AI chatbot that happens to tutor.
