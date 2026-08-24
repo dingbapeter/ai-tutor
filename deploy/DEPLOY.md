@@ -80,7 +80,7 @@ SMTP_HOST=<mailcow host>
 SMTP_PORT=587
 SMTP_USER=tutor@<your-domain>
 SMTP_PASS=<mailbox password>
-SMTP_FROM="AI Tutor" <tutor@<your-domain>>
+SMTP_FROM="Dingba" <tutor@dingba.ai>
 # billing (Sprint 6b) — pick ONE provider; register the webhook as
 # https://<api-domain>/billing/webhook in its dashboard first
 BILLING_PROVIDER=paystack            # or stripe

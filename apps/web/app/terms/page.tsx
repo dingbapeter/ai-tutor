@@ -7,8 +7,8 @@ export default function Terms() {
       </p>
       <h3>The service</h3>
       <p>
-        We provide an AI tutoring companion. The tutor is artificial intelligence, not a human —
-        we say so plainly, always. It is designed for learning support and does not replace school,
+        Dingba is an AI tutoring companion. Your tutor is artificial intelligence, not a human,
+        and we say so plainly, always. It is built for learning support and does not replace school,
         professional advice, or human judgment.
       </p>
       <h3>Accounts and children</h3>

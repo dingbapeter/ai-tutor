@@ -29,7 +29,7 @@ export async function sendPasswordReset(to: string, rawToken: string): Promise<"
       : undefined,
   });
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? `"AI Tutor" <tutor@${host.replace(/^mail\./, "")}>`,
+    from: process.env.SMTP_FROM ?? `"Dingba" <tutor@${host.replace(/^mail\./, "")}>`,
     to,
     subject: "Reset your password",
     text: [
@@ -63,7 +63,7 @@ export async function sendVerifyEmail(to: string, rawToken: string): Promise<"se
       : undefined,
   });
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? `"AI Tutor" <tutor@${host.replace(/^mail\./, "")}>`,
+    from: process.env.SMTP_FROM ?? `"Dingba" <tutor@${host.replace(/^mail\./, "")}>`,
     to,
     subject: "Confirm your email",
     text: [
@@ -103,7 +103,7 @@ export async function sendSafetyAlert(msg: SafetyAlertEmail): Promise<"sent" | "
       : undefined,
   });
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? `"AI Tutor Safety" <tutor@${host.replace(/^mail\./, "")}>`,
+    from: process.env.SMTP_FROM ?? `"Dingba Safety" <tutor@${host.replace(/^mail\./, "")}>`,
     to: msg.to,
     subject: `Please check in with ${msg.studentName} — something came up in today's session`,
     text: [
@@ -136,7 +136,7 @@ export async function sendParentRecap(msg: RecapEmail): Promise<"sent" | "skippe
       : undefined,
   });
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? `"AI Tutor" <tutor@${host.replace(/^mail\./, "")}>`,
+    from: process.env.SMTP_FROM ?? `"Dingba" <tutor@${host.replace(/^mail\./, "")}>`,
     to: msg.to,
     subject: `${msg.studentName}'s session with ${msg.tutorName} — today's recap`,
     text: [

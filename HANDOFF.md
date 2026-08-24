@@ -16,7 +16,8 @@ a push in the same step; never accumulate unpushed work; NEVER force-push.
 
 ## What this is
 
-An affordable personal AI tutor platform — persistent tutor characters
+**Dingba (dingba.ai) — Your Personal A.I Tutor.** An affordable personal AI
+tutor platform for all of life's learning — persistent tutor characters
 (Amara/Kofi/Juno) with live sessions, voice, cross-session memory, verified
 math, family accounts, safety layer, and business wiring. Self-hosted AI
 stack, near-zero API spend by design. Competitor context, licensing rules,
@@ -52,10 +53,11 @@ full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
    message. Never weaken it; extend it. Kids' product = COPPA-class care.
 6. **Never put model names/identifiers in commits, code, or docs pushed to
    the repo** beyond what already exists.
-7. **The name: DINGBA.AI — settled 2026-08-24** (founder's vision doc:
-   "now that DINGBA.AI is settled"). The single rebrand commit is queued as
-   step 1 of the vision work (`docs/VISION-DINGBA.md`); until that commit
-   lands the code keeps the "AI Tutor" placeholder.
+7. **The name: DINGBA.AI — settled 2026-08-24, rebrand landed.** Domain
+   dingba.ai is founder-owned; tagline "Your Personal A.I Tutor". Brand
+   accent: indigo #6C5CE7. Tutor characters keep their own names; Dingba
+   is the platform and the brain. User-facing copy follows the no-AI-tells
+   rule in `docs/VISION-DINGBA.md` (no em dashes, no assistant-isms).
 8. **Commit style**: imperative summary + honest body listing what was
    verified vs pending. Small, complete sprints.
 

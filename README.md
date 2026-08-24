@@ -1,6 +1,6 @@
-# AI Tutor
+# Dingba — Your Personal A.I Tutor
 
-Affordable personal AI tutor platform — a persistent tutor **character** that runs live one-on-one sessions. Self-hosted AI stack, zero API spend by design.
+**dingba.ai** — an affordable personal AI tutor for all of life's learning: a persistent tutor **character** that runs live one-on-one sessions, remembers you, and grows with you. Self-hosted AI stack, zero API spend by design.
 
 ## Architecture
 
