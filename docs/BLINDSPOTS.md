@@ -47,6 +47,12 @@ F. **Email verification** at signup (reset flow exists; verification next).
 G. **i18n** — English-only UI; scaffolding not started.
 H. **Share-a-recap; richer motivation loop** (goals, rewards) — product
    backlog, not risks.
+H2. **UI design pass** — founder verdict on first live deploy (2026-08-24):
+   "too simplistic". All sprints went to the engine; the web UI is
+   deliberately utilitarian inline-styled React. Needs a real design
+   system (typography, color, layout, motion, tutor-forward visual
+   identity) once the deploy stabilizes. Judge flows, not looks, until
+   then.
 I. **Pedagogy eval harness** — needed before/after every deploy-model swap;
    design in HANDOFF next-work list.
 J. **Ongoing red-teaming** of safety — periodic, human-led, never "done".
