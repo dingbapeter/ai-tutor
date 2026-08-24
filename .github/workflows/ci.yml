@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  node:
+    name: Typecheck + gateway/API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # reads pnpm version from package.json "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ai-gateway ships types/main from dist/, so it must be built before
+      # dependents can typecheck or run tests against it.
+      - name: Build ai-gateway
+        run: pnpm --filter @tutor/ai-gateway build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test (gateway + API)
+        run: pnpm test
+
+  mathcheck:
+    name: SymPy mathcheck tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/mathcheck/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r services/mathcheck/requirements.txt pytest httpx
+
+      - name: Test
+        run: python -m pytest services/mathcheck
