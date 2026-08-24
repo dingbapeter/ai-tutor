@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LlamaCppChatProvider } from "../src/providers/llamacpp.js";
 import { WhisperSttProvider } from "../src/providers/whisper.js";
 import { KokoroTtsProvider } from "../src/providers/kokoro.js";
+import { RoutingTtsProvider } from "../src/providers/tts-router.js";
 import { createGatewayFromEnv } from "../src/config.js";
 
 /**
@@ -109,5 +110,47 @@ describe("createGatewayFromEnv", () => {
 
   it("rejects unknown providers loudly", () => {
     expect(() => createGatewayFromEnv({ AI_CHAT_PROVIDER: "gpt-99" })).toThrow(/Unknown chat provider/);
+  });
+});
+
+describe("multi-engine TTS routing", () => {
+  it("sends Piper-shaped voice ids to Piper and Kokoro-shaped ids to Kokoro", async () => {
+    const calls: string[] = [];
+    const fake = (name: string) => ({
+      name,
+      async speak(_t: string, voiceId: string) {
+        calls.push(`${name}:${voiceId}`);
+        return { audio: new Uint8Array(), mimeType: "audio/mpeg" };
+      },
+    });
+    const router = new RoutingTtsProvider(
+      { kokoro: fake("kokoro"), piper: fake("piper") },
+      fake("fallback"),
+    );
+
+    await router.speak("hello", "af_heart"); // Kokoro speaker handle
+    await router.speak("jambo", "sw_CD-lanfrica-medium"); // Piper locale-voice
+    await router.speak("hola", "ef_dora");
+    await router.speak("guten tag", "de_DE-thorsten-high");
+    expect(calls).toEqual([
+      "kokoro:af_heart",
+      "piper:sw_CD-lanfrica-medium",
+      "kokoro:ef_dora",
+      "piper:de_DE-thorsten-high",
+    ]);
+  });
+
+  it("falls back rather than failing when an engine is not configured", async () => {
+    const calls: string[] = [];
+    const fake = (name: string) => ({
+      name,
+      async speak(_t: string, v: string) {
+        calls.push(`${name}:${v}`);
+        return { audio: new Uint8Array(), mimeType: "audio/mpeg" };
+      },
+    });
+    const router = new RoutingTtsProvider({ kokoro: fake("kokoro") }, fake("fallback"));
+    await router.speak("jambo", "sw_CD-lanfrica-medium"); // no Piper wired
+    expect(calls).toEqual(["fallback:sw_CD-lanfrica-medium"]);
   });
 });

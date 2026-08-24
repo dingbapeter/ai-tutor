@@ -109,7 +109,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Live tutor presence: tutor greets first (in character, safety-audited, deterministic fallback), voice-on-by-default replies, avatar idle presence | ✅ tested + live-verified (greeting in create response and history; real-model greeting quality checks at deploy) |
 | Dingba homepage (hero + universal ask box routing into sessions, Socratic example, subject grid, profile showcase, learn-your-way, journey, CTA); app lives at /learn | ✅ built per the founder's template; ask-flow routing + light/dark/mobile/desktop screenshots verified |
 | Homepage caricature cast: five original in-house SVG characters (schoolkid, exam candidate, professional, visa traveler, lifelong learner), randomly shuffled per visit across three slots | ✅ built + screenshot-verified; swappable for commissioned art later |
-| Speaks your language: 23 languages selectable per session (tutor teaches in it, Whisper transcribes in it, TTS picks that language's voice per persona); 9 have voices today, 14 teach and understand while their voice is pending | ✅ tested + live-verified (`/languages`, Spanish session, honest degrade on Yorùbá). Real multilingual output quality rides the deploy model |
+| Speaks your language: **91 languages** selectable per session, **52 with real voices today** (Kokoro Apache-2.0 + Piper MIT, routed automatically by voice id inside the gateway); the other 39 teach, read and listen while their voice is trained | ✅ tested + live-verified (`/languages`, Spanish session, honest degrade on Yorùbá, engine routing unit-tested). Licences verified against the registries: see `docs/LANGUAGES.md` |
 | Rotating homepage headlines: 12 founder-written lines, one per visit, with brand-highlighted words | ✅ built + screenshot-verified across variants |
 | Attunement: the tutor notices a learner sounding off (short/flat answers, self-criticism, giving up, mood mismatch), stops teaching, asks one real question, and lets the answer steer the session | ✅ built into the tutor contract (rule 8); works on typed text and voice transcripts. Real-model behavior gets judged at deploy |
 | Care call: one trusted contact named in advance; on danger-severity distress the app offers a one-tap `tel:` call to that person, never dialing on its own; guardian-managed, removable, GDPR-wiped | ✅ tested + live-verified in a real browser (dial link `tel:+234…` confirmed) |
@@ -152,6 +152,9 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       (spaced-repetition warm-ups shipped with the adaptive engine)
 - [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
       camera, image generation for cartoon panels (IDEAS.md #001 full version)
+
+Language coverage, licence verdicts, and the Nigerian-language voice plan:
+`docs/LANGUAGES.md`.
 
 See `deploy/DEPLOY.md` for the Railway + Contabo deployment guide and
 `IDEAS.md` for the founder idea parking lot.

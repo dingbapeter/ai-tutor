@@ -8,6 +8,7 @@ import {
 import { LlamaCppChatProvider, LlamaCppVisionProvider } from "./providers/llamacpp.js";
 import { WhisperSttProvider } from "./providers/whisper.js";
 import { KokoroTtsProvider } from "./providers/kokoro.js";
+import { RoutingTtsProvider } from "./providers/tts-router.js";
 import { RulesModerationProvider } from "./providers/moderation-rules.js";
 import { AnthropicModerationProvider } from "./providers/moderation-anthropic.js";
 
@@ -47,11 +48,20 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
   };
 
   const tts = () => {
+    // Both engines can run side by side: set TTS_URL for Kokoro and
+    // PIPER_TTS_URL for Piper, and voices route themselves by id shape.
+    const piperUrl = env.PIPER_TTS_URL;
     switch (env.AI_TTS_PROVIDER ?? "mock") {
-      case "kokoro":
-        return new KokoroTtsProvider(ttsUrl, "kokoro");
+      case "kokoro": {
+        const kokoro = new KokoroTtsProvider(ttsUrl, "kokoro");
+        if (!piperUrl) return kokoro;
+        return new RoutingTtsProvider(
+          { kokoro, piper: new KokoroTtsProvider(piperUrl, "piper", "piper") },
+          kokoro,
+        );
+      }
       case "piper":
-        return new KokoroTtsProvider(ttsUrl, "piper", "piper");
+        return new KokoroTtsProvider(piperUrl ?? ttsUrl, "piper", "piper");
       case "mock":
         return new MockTtsProvider();
       default:

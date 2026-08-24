@@ -1,56 +1,955 @@
 {
-  "note": "Every language Dingba can teach in. Understanding (typed and spoken) and thinking work for all of these: the chat model is multilingual and Whisper transcribes ~99 languages. The 'voices' map is what the tutor can SPEAK aloud today, keyed by persona voice profile. A language with voices:null still teaches fully in text and still understands speech; it simply reads its replies in the fallback voice until a voice for it is installed. Kokoro voice ids (Apache-2.0) are listed where Kokoro covers the language; Piper (MIT) voices are named for languages Kokoro does not cover and are installed on the TTS box at deploy.",
+  "note": "Every language Dingba teaches in. Understanding (typed and spoken) and teaching in text work for all of them: the chat model is multilingual and Whisper transcribes ~99. 'voices' is what the tutor can SPEAK today, keyed by persona voice profile, so adding a language is one entry rather than five persona edits. engine kokoro = Kokoro-82M (Apache-2.0); engine piper = Piper (MIT) voices installed on the TTS box at deploy; engine pending = teaches and listens now, voice in training (see docs/LANGUAGES.md). Licences verified 2026-08-24, and the rulebook in docs/RESEARCH.md governs every addition: no CC-BY-NC weights, ever.",
   "fallbackVoiceLanguage": "en",
   "languages": [
     {
-      "code": "en", "name": "English", "native": "English", "engine": "kokoro",
-      "voices": { "warm-female": "af_heart", "firm-male": "am_michael", "bright-female": "af_bella", "clear-female": "af_sarah", "steady-male": "am_adam" }
+      "code": "en",
+      "name": "English",
+      "native": "English",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "af_heart",
+        "firm-male": "am_michael",
+        "bright-female": "af_bella",
+        "clear-female": "af_sarah",
+        "steady-male": "am_adam"
+      }
     },
     {
-      "code": "en-GB", "name": "English (British)", "native": "English (UK)", "engine": "kokoro",
-      "voices": { "warm-female": "bf_emma", "firm-male": "bm_george", "bright-female": "bf_isabella", "clear-female": "bf_alice", "steady-male": "bm_lewis" }
+      "code": "en-GB",
+      "name": "English (British)",
+      "native": "English (UK)",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "bf_emma",
+        "firm-male": "bm_george",
+        "bright-female": "bf_isabella",
+        "clear-female": "bf_alice",
+        "steady-male": "bm_lewis"
+      }
     },
     {
-      "code": "es", "name": "Spanish", "native": "Español", "engine": "kokoro",
-      "voices": { "warm-female": "ef_dora", "firm-male": "em_alex", "bright-female": "ef_dora", "clear-female": "ef_dora", "steady-male": "em_alex" }
+      "code": "es",
+      "name": "Spanish",
+      "native": "Español",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "ef_dora",
+        "firm-male": "em_alex",
+        "bright-female": "ef_dora",
+        "clear-female": "ef_dora",
+        "steady-male": "em_alex"
+      }
     },
     {
-      "code": "fr", "name": "French", "native": "Français", "engine": "kokoro",
-      "voices": { "warm-female": "ff_siwis", "firm-male": "ff_siwis", "bright-female": "ff_siwis", "clear-female": "ff_siwis", "steady-male": "ff_siwis" }
+      "code": "fr",
+      "name": "French",
+      "native": "Français",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "ff_siwis",
+        "firm-male": "ff_siwis",
+        "bright-female": "ff_siwis",
+        "clear-female": "ff_siwis",
+        "steady-male": "ff_siwis"
+      }
     },
     {
-      "code": "hi", "name": "Hindi", "native": "हिन्दी", "engine": "kokoro",
-      "voices": { "warm-female": "hf_alpha", "firm-male": "hm_omega", "bright-female": "hf_beta", "clear-female": "hf_alpha", "steady-male": "hm_psi" }
+      "code": "hi",
+      "name": "Hindi",
+      "native": "हिन्दी",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "hf_alpha",
+        "firm-male": "hm_omega",
+        "bright-female": "hf_beta",
+        "clear-female": "hf_alpha",
+        "steady-male": "hm_psi"
+      }
     },
     {
-      "code": "it", "name": "Italian", "native": "Italiano", "engine": "kokoro",
-      "voices": { "warm-female": "if_sara", "firm-male": "im_nicola", "bright-female": "if_sara", "clear-female": "if_sara", "steady-male": "im_nicola" }
+      "code": "it",
+      "name": "Italian",
+      "native": "Italiano",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "if_sara",
+        "firm-male": "im_nicola",
+        "bright-female": "if_sara",
+        "clear-female": "if_sara",
+        "steady-male": "im_nicola"
+      }
     },
     {
-      "code": "pt", "name": "Portuguese", "native": "Português", "engine": "kokoro",
-      "voices": { "warm-female": "pf_dora", "firm-male": "pm_alex", "bright-female": "pf_dora", "clear-female": "pf_dora", "steady-male": "pm_alex" }
+      "code": "pt",
+      "name": "Portuguese",
+      "native": "Português",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "pf_dora",
+        "firm-male": "pm_alex",
+        "bright-female": "pf_dora",
+        "clear-female": "pf_dora",
+        "steady-male": "pm_alex"
+      }
     },
     {
-      "code": "zh", "name": "Chinese (Mandarin)", "native": "中文", "engine": "kokoro",
-      "voices": { "warm-female": "zf_xiaoxiao", "firm-male": "zm_yunjian", "bright-female": "zf_xiaoyi", "clear-female": "zf_xiaobei", "steady-male": "zm_yunxi" }
+      "code": "zh",
+      "name": "Chinese (Mandarin)",
+      "native": "中文",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "zf_xiaoxiao",
+        "firm-male": "zm_yunjian",
+        "bright-female": "zf_xiaoyi",
+        "clear-female": "zf_xiaobei",
+        "steady-male": "zm_yunxi"
+      }
     },
     {
-      "code": "ja", "name": "Japanese", "native": "日本語", "engine": "kokoro",
-      "voices": { "warm-female": "jf_alpha", "firm-male": "jm_kumo", "bright-female": "jf_nezumi", "clear-female": "jf_alpha", "steady-male": "jm_kumo" }
+      "code": "ja",
+      "name": "Japanese",
+      "native": "日本語",
+      "engine": "kokoro",
+      "voices": {
+        "warm-female": "jf_alpha",
+        "firm-male": "jm_kumo",
+        "bright-female": "jf_nezumi",
+        "clear-female": "jf_alpha",
+        "steady-male": "jm_kumo"
+      }
     },
-    { "code": "sw", "name": "Swahili", "native": "Kiswahili", "engine": "piper", "voices": null },
-    { "code": "ar", "name": "Arabic", "native": "العربية", "engine": "piper", "voices": null },
-    { "code": "de", "name": "German", "native": "Deutsch", "engine": "piper", "voices": null },
-    { "code": "tr", "name": "Turkish", "native": "Türkçe", "engine": "piper", "voices": null },
-    { "code": "vi", "name": "Vietnamese", "native": "Tiếng Việt", "engine": "piper", "voices": null },
-    { "code": "ru", "name": "Russian", "native": "Русский", "engine": "piper", "voices": null },
-    { "code": "uk", "name": "Ukrainian", "native": "Українська", "engine": "piper", "voices": null },
-    { "code": "nl", "name": "Dutch", "native": "Nederlands", "engine": "piper", "voices": null },
-    { "code": "pl", "name": "Polish", "native": "Polski", "engine": "piper", "voices": null },
-    { "code": "yo", "name": "Yoruba", "native": "Yorùbá", "engine": "none", "voices": null },
-    { "code": "ig", "name": "Igbo", "native": "Asụsụ Igbo", "engine": "none", "voices": null },
-    { "code": "ha", "name": "Hausa", "native": "Harshen Hausa", "engine": "none", "voices": null },
-    { "code": "am", "name": "Amharic", "native": "አማርኛ", "engine": "none", "voices": null },
-    { "code": "zu", "name": "Zulu", "native": "isiZulu", "engine": "none", "voices": null }
+    {
+      "code": "ar",
+      "name": "Arabic",
+      "native": "العربية",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ar_JO-kareem-medium",
+        "firm-male": "ar_JO-kareem-low",
+        "bright-female": "ar_JO-kareem-medium",
+        "clear-female": "ar_JO-kareem-low",
+        "steady-male": "ar_JO-kareem-medium"
+      }
+    },
+    {
+      "code": "bg",
+      "name": "Bulgarian",
+      "native": "Български",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "bg_BG-dimitar-medium",
+        "firm-male": "bg_BG-dimitar-medium",
+        "bright-female": "bg_BG-dimitar-medium",
+        "clear-female": "bg_BG-dimitar-medium",
+        "steady-male": "bg_BG-dimitar-medium"
+      }
+    },
+    {
+      "code": "bn",
+      "name": "Bengali",
+      "native": "বাংলা",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "bn_BD-google-medium",
+        "firm-male": "bn_BD-google-medium",
+        "bright-female": "bn_BD-google-medium",
+        "clear-female": "bn_BD-google-medium",
+        "steady-male": "bn_BD-google-medium"
+      }
+    },
+    {
+      "code": "ca",
+      "name": "Catalan",
+      "native": "Català",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ca_ES-upc_ona-medium",
+        "firm-male": "ca_ES-upc_ona-x_low",
+        "bright-female": "ca_ES-upc_pau-x_low",
+        "clear-female": "ca_ES-upc_ona-medium",
+        "steady-male": "ca_ES-upc_ona-x_low"
+      }
+    },
+    {
+      "code": "cs",
+      "name": "Czech",
+      "native": "Čeština",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "cs_CZ-jirka-medium",
+        "firm-male": "cs_CZ-kasandra-medium",
+        "bright-female": "cs_CZ-jirka-low",
+        "clear-female": "cs_CZ-jirka-medium",
+        "steady-male": "cs_CZ-kasandra-medium"
+      }
+    },
+    {
+      "code": "cy",
+      "name": "Welsh",
+      "native": "Cymraeg",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "cy_GB-bu_tts-medium",
+        "firm-male": "cy_GB-gwryw_gogleddol-medium",
+        "bright-female": "cy_GB-bu_tts-medium",
+        "clear-female": "cy_GB-gwryw_gogleddol-medium",
+        "steady-male": "cy_GB-bu_tts-medium"
+      }
+    },
+    {
+      "code": "da",
+      "name": "Danish",
+      "native": "Dansk",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "da_DK-talesyntese-medium",
+        "firm-male": "da_DK-talesyntese-medium",
+        "bright-female": "da_DK-talesyntese-medium",
+        "clear-female": "da_DK-talesyntese-medium",
+        "steady-male": "da_DK-talesyntese-medium"
+      }
+    },
+    {
+      "code": "de",
+      "name": "German",
+      "native": "Deutsch",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "de_DE-thorsten-high",
+        "firm-male": "de_DE-mls-medium",
+        "bright-female": "de_DE-thorsten-medium",
+        "clear-female": "de_DE-thorsten_emotional-medium",
+        "steady-male": "de_DE-karlsson-low"
+      }
+    },
+    {
+      "code": "el",
+      "name": "Greek",
+      "native": "Ελληνικά",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "el_GR-joy-medium",
+        "firm-male": "el_GR-rapunzelina-medium",
+        "bright-female": "el_GR-rapunzelina-low",
+        "clear-female": "el_GR-joy-medium",
+        "steady-male": "el_GR-rapunzelina-medium"
+      }
+    },
+    {
+      "code": "et",
+      "name": "Estonian",
+      "native": "Eesti",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "et_EE-news-medium",
+        "firm-male": "et_EE-news-medium",
+        "bright-female": "et_EE-news-medium",
+        "clear-female": "et_EE-news-medium",
+        "steady-male": "et_EE-news-medium"
+      }
+    },
+    {
+      "code": "eu",
+      "name": "Basque",
+      "native": "Euskara",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "eu_ES-antton-medium",
+        "firm-male": "eu_ES-maider-medium",
+        "bright-female": "eu_ES-antton-medium",
+        "clear-female": "eu_ES-maider-medium",
+        "steady-male": "eu_ES-antton-medium"
+      }
+    },
+    {
+      "code": "fa",
+      "name": "Farsi",
+      "native": "فارسی",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "fa_IR-amir-medium",
+        "firm-male": "fa_IR-ganji-medium",
+        "bright-female": "fa_IR-ganji_adabi-medium",
+        "clear-female": "fa_IR-gyro-medium",
+        "steady-male": "fa_IR-reza_ibrahim-medium"
+      }
+    },
+    {
+      "code": "fi",
+      "name": "Finnish",
+      "native": "Suomi",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "fi_FI-harri-medium",
+        "firm-male": "fi_FI-harri-low",
+        "bright-female": "fi_FI-harri-medium",
+        "clear-female": "fi_FI-harri-low",
+        "steady-male": "fi_FI-harri-medium"
+      }
+    },
+    {
+      "code": "he",
+      "name": "Hebrew",
+      "native": "עברית",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "he_IL-saspeech-medium",
+        "firm-male": "he_IL-saspeech-medium",
+        "bright-female": "he_IL-saspeech-medium",
+        "clear-female": "he_IL-saspeech-medium",
+        "steady-male": "he_IL-saspeech-medium"
+      }
+    },
+    {
+      "code": "hu",
+      "name": "Hungarian",
+      "native": "Magyar",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "hu_HU-anna-medium",
+        "firm-male": "hu_HU-berta-medium",
+        "bright-female": "hu_HU-imre-medium",
+        "clear-female": "hu_HU-anna-medium",
+        "steady-male": "hu_HU-berta-medium"
+      }
+    },
+    {
+      "code": "hy",
+      "name": "Armenian",
+      "native": "Հայերեն",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "hy_AM-gor-medium",
+        "firm-male": "hy_AM-gor-medium",
+        "bright-female": "hy_AM-gor-medium",
+        "clear-female": "hy_AM-gor-medium",
+        "steady-male": "hy_AM-gor-medium"
+      }
+    },
+    {
+      "code": "id",
+      "name": "Indonesian",
+      "native": "Bahasa Indonesia",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "id_ID-news_tts-medium",
+        "firm-male": "id_ID-news_tts-medium",
+        "bright-female": "id_ID-news_tts-medium",
+        "clear-female": "id_ID-news_tts-medium",
+        "steady-male": "id_ID-news_tts-medium"
+      }
+    },
+    {
+      "code": "is",
+      "name": "Icelandic",
+      "native": "Íslenska",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "is_IS-bui-medium",
+        "firm-male": "is_IS-salka-medium",
+        "bright-female": "is_IS-steinn-medium",
+        "clear-female": "is_IS-ugla-medium",
+        "steady-male": "is_IS-bui-medium"
+      }
+    },
+    {
+      "code": "ka",
+      "name": "Georgian",
+      "native": "ქართული",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ka_GE-natia-medium",
+        "firm-male": "ka_GE-natia-medium",
+        "bright-female": "ka_GE-natia-medium",
+        "clear-female": "ka_GE-natia-medium",
+        "steady-male": "ka_GE-natia-medium"
+      }
+    },
+    {
+      "code": "kk",
+      "name": "Kazakh",
+      "native": "Қазақша",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "kk_KZ-issai-high",
+        "firm-male": "kk_KZ-iseke-x_low",
+        "bright-female": "kk_KZ-raya-x_low",
+        "clear-female": "kk_KZ-issai-high",
+        "steady-male": "kk_KZ-iseke-x_low"
+      }
+    },
+    {
+      "code": "ko",
+      "name": "Korean",
+      "native": "한국어",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ko_KR-kss-medium",
+        "firm-male": "ko_KR-kss-medium",
+        "bright-female": "ko_KR-kss-medium",
+        "clear-female": "ko_KR-kss-medium",
+        "steady-male": "ko_KR-kss-medium"
+      }
+    },
+    {
+      "code": "ku",
+      "name": "Kurmanji Kurdish",
+      "native": "Kurmancî",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ku_TR-berfin_renas-medium",
+        "firm-male": "ku_TR-berfin_renas-medium",
+        "bright-female": "ku_TR-berfin_renas-medium",
+        "clear-female": "ku_TR-berfin_renas-medium",
+        "steady-male": "ku_TR-berfin_renas-medium"
+      }
+    },
+    {
+      "code": "lb",
+      "name": "Luxembourgish",
+      "native": "Lëtzebuergesch",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "lb_LU-marylux-medium",
+        "firm-male": "lb_LU-marylux-medium",
+        "bright-female": "lb_LU-marylux-medium",
+        "clear-female": "lb_LU-marylux-medium",
+        "steady-male": "lb_LU-marylux-medium"
+      }
+    },
+    {
+      "code": "lv",
+      "name": "Latvian",
+      "native": "Latviešu",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "lv_LV-aivars-medium",
+        "firm-male": "lv_LV-aivars-medium",
+        "bright-female": "lv_LV-aivars-medium",
+        "clear-female": "lv_LV-aivars-medium",
+        "steady-male": "lv_LV-aivars-medium"
+      }
+    },
+    {
+      "code": "ml",
+      "name": "Malayalam",
+      "native": "മലയാളം",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ml_IN-arjun-medium",
+        "firm-male": "ml_IN-meera-medium",
+        "bright-female": "ml_IN-arjun-medium",
+        "clear-female": "ml_IN-meera-medium",
+        "steady-male": "ml_IN-arjun-medium"
+      }
+    },
+    {
+      "code": "mr",
+      "name": "Marathi",
+      "native": "मराठी",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "mr_IN-google-medium",
+        "firm-male": "mr_IN-google-medium",
+        "bright-female": "mr_IN-google-medium",
+        "clear-female": "mr_IN-google-medium",
+        "steady-male": "mr_IN-google-medium"
+      }
+    },
+    {
+      "code": "ne",
+      "name": "Nepali",
+      "native": "नेपाली",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ne_NP-chitwan-medium",
+        "firm-male": "ne_NP-google-medium",
+        "bright-female": "ne_NP-google-x_low",
+        "clear-female": "ne_NP-chitwan-medium",
+        "steady-male": "ne_NP-google-medium"
+      }
+    },
+    {
+      "code": "nl",
+      "name": "Dutch",
+      "native": "Nederlands",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "nl_BE-nathalie-medium",
+        "firm-male": "nl_BE-rdh-medium",
+        "bright-female": "nl_NL-alex-medium",
+        "clear-female": "nl_NL-mls-medium",
+        "steady-male": "nl_NL-pim-medium"
+      }
+    },
+    {
+      "code": "no",
+      "name": "Norwegian",
+      "native": "Norsk",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "no_NO-nvcc-medium",
+        "firm-male": "no_NO-talesyntese-medium",
+        "bright-female": "no_NO-nvcc-medium",
+        "clear-female": "no_NO-talesyntese-medium",
+        "steady-male": "no_NO-nvcc-medium"
+      }
+    },
+    {
+      "code": "pl",
+      "name": "Polish",
+      "native": "Polski",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "pl_PL-bass-high",
+        "firm-male": "pl_PL-darkman-medium",
+        "bright-female": "pl_PL-gosia-medium",
+        "clear-female": "pl_PL-mc_speech-medium",
+        "steady-male": "pl_PL-mls_6892-low"
+      }
+    },
+    {
+      "code": "ro",
+      "name": "Romanian",
+      "native": "Română",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ro_RO-mihai-medium",
+        "firm-male": "ro_RO-mihai-medium",
+        "bright-female": "ro_RO-mihai-medium",
+        "clear-female": "ro_RO-mihai-medium",
+        "steady-male": "ro_RO-mihai-medium"
+      }
+    },
+    {
+      "code": "ru",
+      "name": "Russian",
+      "native": "Русский",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ru_RU-denis-medium",
+        "firm-male": "ru_RU-dmitri-medium",
+        "bright-female": "ru_RU-irina-medium",
+        "clear-female": "ru_RU-ruslan-medium",
+        "steady-male": "ru_RU-denis-medium"
+      }
+    },
+    {
+      "code": "sk",
+      "name": "Slovak",
+      "native": "Slovenčina",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sk_SK-lili-medium",
+        "firm-male": "sk_SK-lili-medium",
+        "bright-female": "sk_SK-lili-medium",
+        "clear-female": "sk_SK-lili-medium",
+        "steady-male": "sk_SK-lili-medium"
+      }
+    },
+    {
+      "code": "sl",
+      "name": "Slovenian",
+      "native": "Slovenščina",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sl_SI-artur-medium",
+        "firm-male": "sl_SI-artur-medium",
+        "bright-female": "sl_SI-artur-medium",
+        "clear-female": "sl_SI-artur-medium",
+        "steady-male": "sl_SI-artur-medium"
+      }
+    },
+    {
+      "code": "sq",
+      "name": "Albanian",
+      "native": "Shqip",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sq_AL-edon-medium",
+        "firm-male": "sq_AL-edon-medium",
+        "bright-female": "sq_AL-edon-medium",
+        "clear-female": "sq_AL-edon-medium",
+        "steady-male": "sq_AL-edon-medium"
+      }
+    },
+    {
+      "code": "sr",
+      "name": "Serbian",
+      "native": "Српски",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sr_RS-serbski_institut-medium",
+        "firm-male": "sr_RS-serbski_institut-medium",
+        "bright-female": "sr_RS-serbski_institut-medium",
+        "clear-female": "sr_RS-serbski_institut-medium",
+        "steady-male": "sr_RS-serbski_institut-medium"
+      }
+    },
+    {
+      "code": "sv",
+      "name": "Swedish",
+      "native": "Svenska",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sv_SE-alma-medium",
+        "firm-male": "sv_SE-lisa-medium",
+        "bright-female": "sv_SE-nst-medium",
+        "clear-female": "sv_SE-alma-medium",
+        "steady-male": "sv_SE-lisa-medium"
+      }
+    },
+    {
+      "code": "sw",
+      "name": "Swahili",
+      "native": "Kiswahili",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "sw_CD-lanfrica-medium",
+        "firm-male": "sw_CD-lanfrica-medium",
+        "bright-female": "sw_CD-lanfrica-medium",
+        "clear-female": "sw_CD-lanfrica-medium",
+        "steady-male": "sw_CD-lanfrica-medium"
+      }
+    },
+    {
+      "code": "te",
+      "name": "Telugu",
+      "native": "తెలుగు",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "te_IN-maya-medium",
+        "firm-male": "te_IN-padmavathi-medium",
+        "bright-female": "te_IN-venkatesh-medium",
+        "clear-female": "te_IN-maya-medium",
+        "steady-male": "te_IN-padmavathi-medium"
+      }
+    },
+    {
+      "code": "tr",
+      "name": "Turkish",
+      "native": "Türkçe",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "tr_TR-dfki-medium",
+        "firm-male": "tr_TR-dfki-medium",
+        "bright-female": "tr_TR-dfki-medium",
+        "clear-female": "tr_TR-dfki-medium",
+        "steady-male": "tr_TR-dfki-medium"
+      }
+    },
+    {
+      "code": "uk",
+      "name": "Ukrainian",
+      "native": "Українська",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "uk_UA-mykyta-high",
+        "firm-male": "uk_UA-oleksa-high",
+        "bright-female": "uk_UA-tetiana-high",
+        "clear-female": "uk_UA-ukrainian_tts-medium",
+        "steady-male": "uk_UA-lada-x_low"
+      }
+    },
+    {
+      "code": "ur",
+      "name": "Urdu",
+      "native": "اردو",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "ur_PK-aegis_female-medium",
+        "firm-male": "ur_PK-fasih-medium",
+        "bright-female": "ur_PK-aegis_female-medium",
+        "clear-female": "ur_PK-fasih-medium",
+        "steady-male": "ur_PK-aegis_female-medium"
+      }
+    },
+    {
+      "code": "vi",
+      "name": "Vietnamese",
+      "native": "Tiếng Việt",
+      "engine": "piper",
+      "voices": {
+        "warm-female": "vi_VN-vais1000-medium",
+        "firm-male": "vi_VN-25hours_single-low",
+        "bright-female": "vi_VN-vivos-x_low",
+        "clear-female": "vi_VN-vais1000-medium",
+        "steady-male": "vi_VN-25hours_single-low"
+      }
+    },
+    {
+      "code": "yo",
+      "name": "Yoruba",
+      "native": "Yorùbá",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ig",
+      "name": "Igbo",
+      "native": "Asụsụ Igbo",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ha",
+      "name": "Hausa",
+      "native": "Harshen Hausa",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "am",
+      "name": "Amharic",
+      "native": "አማርኛ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "zu",
+      "name": "Zulu",
+      "native": "isiZulu",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "xh",
+      "name": "Xhosa",
+      "native": "isiXhosa",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "af",
+      "name": "Afrikaans",
+      "native": "Afrikaans",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "rw",
+      "name": "Kinyarwanda",
+      "native": "Ikinyarwanda",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "lg",
+      "name": "Luganda",
+      "native": "Luganda",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "sn",
+      "name": "Shona",
+      "native": "chiShona",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ny",
+      "name": "Chichewa",
+      "native": "Chichewa",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "so",
+      "name": "Somali",
+      "native": "Soomaali",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "wo",
+      "name": "Wolof",
+      "native": "Wolof",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ti",
+      "name": "Tigrinya",
+      "native": "ትግርኛ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "om",
+      "name": "Oromo",
+      "native": "Afaan Oromoo",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ff",
+      "name": "Fulfulde",
+      "native": "Fulfulde",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "tw",
+      "name": "Twi",
+      "native": "Twi",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ee",
+      "name": "Ewe",
+      "native": "Eʋegbe",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "bm",
+      "name": "Bambara",
+      "native": "Bamanankan",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ms",
+      "name": "Malay",
+      "native": "Bahasa Melayu",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "th",
+      "name": "Thai",
+      "native": "ไทย",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "tl",
+      "name": "Filipino",
+      "native": "Filipino",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "my",
+      "name": "Burmese",
+      "native": "မြန်မာ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "km",
+      "name": "Khmer",
+      "native": "ភាសាខ្មែរ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "si",
+      "name": "Sinhala",
+      "native": "සිංහල",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ta",
+      "name": "Tamil",
+      "native": "தமிழ்",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "gu",
+      "name": "Gujarati",
+      "native": "ગુજરાતી",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "pa",
+      "name": "Punjabi",
+      "native": "ਪੰਜਾਬੀ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "kn",
+      "name": "ಕನ್ನಡ",
+      "native": "ಕನ್ನಡ",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ps",
+      "name": "Pashto",
+      "native": "پښتو",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "uz",
+      "name": "Uzbek",
+      "native": "Oʻzbekcha",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "az",
+      "name": "Azerbaijani",
+      "native": "Azərbaycan",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "hr",
+      "name": "Croatian",
+      "native": "Hrvatski",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "lt",
+      "name": "Lithuanian",
+      "native": "Lietuvių",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "mk",
+      "name": "Macedonian",
+      "native": "Македонски",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "mn",
+      "name": "Mongolian",
+      "native": "Монгол",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "ht",
+      "name": "Haitian Creole",
+      "native": "Kreyòl",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "qu",
+      "name": "Quechua",
+      "native": "Runa Simi",
+      "engine": "pending",
+      "voices": null
+    },
+    {
+      "code": "gn",
+      "name": "Guarani",
+      "native": "Avañeʼẽ",
+      "engine": "pending",
+      "voices": null
+    }
   ]
 }

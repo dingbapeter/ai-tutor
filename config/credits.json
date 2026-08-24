@@ -91,6 +91,27 @@
       "license": "OFL-1.1",
       "role": "The typeface Dingba speaks in, across the whole app",
       "url": "https://github.com/tokotype/PlusJakartaSans"
+    },
+    {
+      "name": "NaijaVoices",
+      "by": "The NaijaVoices team",
+      "license": "CC-BY-SA-4.0",
+      "role": "Igbo, Yoruba and Hausa speech data behind our Nigerian-language voices",
+      "url": "https://huggingface.co/datasets/naijavoices/naijavoices-dataset-compressed"
+    },
+    {
+      "name": "Common Voice",
+      "by": "Mozilla Foundation and its contributors",
+      "license": "CC0-1.0",
+      "role": "Donated voices that teach our tutors to hear the world's languages",
+      "url": "https://commonvoice.mozilla.org"
+    },
+    {
+      "name": "Masakhane",
+      "by": "The Masakhane community",
+      "license": "AFL-3.0",
+      "role": "African-language NLP research our language work stands on",
+      "url": "https://www.masakhane.io"
     }
   ],
   "planned": [
