@@ -37,15 +37,18 @@ Create two services from this repo. **Railway does NOT auto-detect Dockerfiles
 that live inside `apps/` — left alone it falls back to Railpack/Nixpacks,
 which runs `pnpm --filter <app> build` without building the workspace
 packages first, and the api build fails on unresolvable `@tutor/ai-gateway`
-/ `@tutor/db`.** Point each service at its Dockerfile explicitly, either way:
+/ `@tutor/db`.** Point each service at its Dockerfile explicitly:
 
-- **Config-as-code (preferred):** service → Settings → Config-as-code →
-  set the file path: `deploy/railway-api.json` for the api service,
-  `deploy/railway-web.json` for the web service. These select the
-  DOCKERFILE builder, the right Dockerfile path, and (api) a `/health`
-  healthcheck.
-- **Or an env var:** add `RAILWAY_DOCKERFILE_PATH=apps/api/Dockerfile`
-  (resp. `apps/web/Dockerfile`) to the service's variables.
+- Service → **Variables** → add
+  `RAILWAY_DOCKERFILE_PATH=apps/api/Dockerfile` (api) resp.
+  `RAILWAY_DOCKERFILE_PATH=apps/web/Dockerfile` (web).
+- api service → Settings → Deploy → **Healthcheck Path** = `/health`, so a
+  broken deploy never takes traffic.
+
+(Railway deprecated its Config-as-code feature in 2026-08 — the UI warns
+that existing config files stop working 2026-12-01 — so the
+`deploy/railway-*.json` files kept here are historical; the env var above
+is the supported path. Leave the Settings → Config-as-code field EMPTY.)
 
 Keep each service's root directory at the repo root — the Dockerfiles COPY
 workspace files from there.
