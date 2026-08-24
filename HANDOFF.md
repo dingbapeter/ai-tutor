@@ -52,10 +52,10 @@ full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
    message. Never weaken it; extend it. Kids' product = COPPA-class care.
 6. **Never put model names/identifiers in commits, code, or docs pushed to
    the repo** beyond what already exists.
-7. **The name**: undecided. Everything is deliberately name-agnostic
-   ("AI Tutor" placeholder). Verified-available candidates (as of 2026-08):
-   Wibba, Tutorae, Nutor, Dinbo — founder is still choosing; may pick a warm
-   human name (the Claude playbook). When they decide: single rebrand commit.
+7. **The name: DINGBA.AI — settled 2026-08-24** (founder's vision doc:
+   "now that DINGBA.AI is settled"). The single rebrand commit is queued as
+   step 1 of the vision work (`docs/VISION-DINGBA.md`); until that commit
+   lands the code keeps the "AI Tutor" placeholder.
 8. **Commit style**: imperative summary + honest body listing what was
    verified vs pending. Small, complete sprints.
 
@@ -75,6 +75,14 @@ avatar v0, push-to-talk). `services/mathcheck` = FastAPI + SymPy (hardened).
 Mock providers let everything run with zero models installed.
 
 ## Next work, in order
+
+**⭐ READ `docs/VISION-DINGBA.md` FIRST** — the founder's 2026-08-24 product
+vision (the Dingba Brain, universal input, vision/voice tutor, adaptive
+engine, diagnostic assessment) + homepage design template. It names the
+product (Dingba.AI), supersedes the old UI, and sets the sprint sequence:
+rebrand → new homepage → Brain v1 → adaptive engine v1 (the scoped
+warm-ups/scheduling work folds in here) → Ask/Show Dingba. The founder's
+infrastructure (Contabo, SMTP, etc.) is confirmed available.
 
 1. ~~Push (step zero), then set up CI~~ DONE 2026-08-24: GitHub Actions
    (`.github/workflows/ci.yml`) runs typecheck + all three test suites on
