@@ -103,6 +103,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Guardian transcript view, study streaks, placement-check onboarding, copy button | ✅ tested / built |
 | Terms & Privacy pages + registration consent | ✅ drafted (needs counsel before launch) |
 | Rolling 24h allowances, per-IP guest cap, error webhook, backup script | ✅ tested / in place |
+| GitHub Actions CI (typecheck + 37 API + 7 gateway + 7 mathcheck tests on every push/PR) | ✅ run green on GitHub (2026-08-24) |
 | Billing (Stripe/Paystack) | ❌ Sprint 6b (needs deploy + env) — /admin/plan bridges until then |
 | Payments, parent dashboard, WhatsApp | ❌ later sprints |
 

@@ -7,14 +7,12 @@ repository at creation — that was the mistake; this session exists to fix it).
 Your first job is to push; your standing job is to keep building at the same
 standard.
 
-## Step zero (do this before ANYTHING else)
+## Step zero — DONE (2026-08-24)
 
-1. This archive was extracted INCLUDING its `.git` — run `git log --oneline`
-   and confirm ~12 commits ending at "Live classes: bring-a-friend invites…".
-2. `git push --force origin main` (force is correct ONCE: the remote holds
-   only a throwaway initial commit; our history replaces it). If push fails,
-   STOP and tell the founder — do not build on an unpushable repo again.
-3. After the first push, NEVER force-push again.
+The full 17-commit history was pushed to github.com/dingbapeter/ai-tutor
+(the one sanctioned force-push, replacing the remote's throwaway initial
+commit). Standing rule from here: every piece of work ends with a commit AND
+a push in the same step; never accumulate unpushed work; NEVER force-push.
 
 ## What this is
 
@@ -29,7 +27,7 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 ## State: what is DONE and VERIFIED
 
 See the honesty table in `README.md` — it is the single source of truth and
-you MUST keep it updated. Summary: Sprints 1–6a complete. 29 API tests +
+you MUST keep it updated. Summary: Sprints 1–6a complete. 37 API tests +
 7 gateway tests + 7 mathcheck pytest tests pass. The stack was live-verified
 against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
 to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
@@ -77,8 +75,9 @@ Mock providers let everything run with zero models installed.
 
 ## Next work, in order
 
-1. Push (step zero), then set up CI: GitHub Actions running typecheck +
-   all three test suites on every push.
+1. ~~Push (step zero), then set up CI~~ DONE 2026-08-24: GitHub Actions
+   (`.github/workflows/ci.yml`) runs typecheck + all three test suites on
+   every push and PR.
 2. Sprint 6b when founder provides env: Stripe/Paystack billing (metering
    and entitlements are already wired for it), password reset + email
    verification via mailcow.

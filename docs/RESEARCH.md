@@ -121,7 +121,7 @@ llama.cpp (MIT) · Qwen weights (Apache-2.0) · faster-whisper/whisper.cpp (MIT)
 3. Diagnostic onboarding (placement quiz seeds the knowledge graph).
 4. Curriculum authoring pipeline (turn Siyavula/IM/PhET into packs at scale —
    this is where "content moat" gets built).
-5. CI (GitHub Actions: typecheck+tests on every push) once repo is on GitHub.
+5. ~~CI (GitHub Actions: typecheck+tests on every push)~~ ✅ done 2026-08-24.
 6. Observability (PostHog + GlitchTip self-hosted).
 7. Backups (nightly pg_dump to SeaweedFS + offsite).
 8. KaTeX rendering in chat; TTS audio caching (hash(text+voice) → SeaweedFS).
