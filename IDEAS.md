@@ -64,7 +64,7 @@ Format: date · idea · why it's parked · when to bring it back.
   engineering. Cartoon-illustrated stories join when the GPU phase lands
   (ties into #001).
 
-### 003 — Speak all languages
+### 003 — Speak all languages (SHIPPED v1 2026-08-24, see GRADUATED)
 - **Logged:** 2026-08-22
 - **Idea (founder):** The tutor should be able to speak all languages.
 - **Feasibility:** The brain and ears are nearly there already — Qwen-class
@@ -181,6 +181,31 @@ Format: date · idea · why it's parked · when to bring it back.
   a lawyer in the loop, per register item E.
 
 ## GRADUATED
+
+### 003 — Speak all languages (v1 shipped 2026-08-24)
+- **Idea (founder):** the tutor should speak all languages. Restated at the
+  homepage-copy stage: "we're building for the world in this one".
+- **Shipped:** `config/languages.json` declares 23 languages, each with its
+  native name and a per-persona voice map. A session carries a language:
+  the tutor is instructed to teach entirely in it, Whisper receives it as a
+  transcription hint, and TTS resolves the right voice for that persona in
+  that language (Amara speaks `ef_dora` in Spanish, `af_heart` in English).
+  Learners pick it on the learn screen and the choice is remembered.
+- **The honest state**, which the UI shows rather than hides:
+  - *Understanding* (typed and spoken): every listed language. Whisper
+    transcribes ~99; the chat model is multilingual.
+  - *Teaching in text*: every listed language.
+  - *Speaking aloud*: 9 today (English US/UK, Spanish, French, Hindi,
+    Italian, Portuguese, Mandarin, Japanese) via Kokoro's own voices.
+    14 more teach and listen while their voice is pending, and say so.
+- **Remaining, in priority order for our launch market:** Piper voices
+  (MIT, dozens of languages incl. Swahili and Arabic) get installed on the
+  TTS box at deploy, which upgrades most of the pending 14 to speaking.
+  Yorùbá, Igbo, Hausa, Amharic and Zulu have NO good open TTS voice today.
+  That is the real gap for African-language voice, and the honest options
+  are: fine-tune on Common Voice / openly-licensed recordings, commission
+  studio recordings per language, or partner. Worth doing properly rather
+  than faking with an English voice reading Yorùbá text.
 
 ### 006 — Bring-a-friend live classes (shipped v1, same day as parked)
 - **Idea (founder, 2026-08-24):** a paid subscriber invites friends into a

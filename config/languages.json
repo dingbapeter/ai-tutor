@@ -1,0 +1,56 @@
+{
+  "note": "Every language Dingba can teach in. Understanding (typed and spoken) and thinking work for all of these: the chat model is multilingual and Whisper transcribes ~99 languages. The 'voices' map is what the tutor can SPEAK aloud today, keyed by persona voice profile. A language with voices:null still teaches fully in text and still understands speech; it simply reads its replies in the fallback voice until a voice for it is installed. Kokoro voice ids (Apache-2.0) are listed where Kokoro covers the language; Piper (MIT) voices are named for languages Kokoro does not cover and are installed on the TTS box at deploy.",
+  "fallbackVoiceLanguage": "en",
+  "languages": [
+    {
+      "code": "en", "name": "English", "native": "English", "engine": "kokoro",
+      "voices": { "warm-female": "af_heart", "firm-male": "am_michael", "bright-female": "af_bella", "clear-female": "af_sarah", "steady-male": "am_adam" }
+    },
+    {
+      "code": "en-GB", "name": "English (British)", "native": "English (UK)", "engine": "kokoro",
+      "voices": { "warm-female": "bf_emma", "firm-male": "bm_george", "bright-female": "bf_isabella", "clear-female": "bf_alice", "steady-male": "bm_lewis" }
+    },
+    {
+      "code": "es", "name": "Spanish", "native": "Español", "engine": "kokoro",
+      "voices": { "warm-female": "ef_dora", "firm-male": "em_alex", "bright-female": "ef_dora", "clear-female": "ef_dora", "steady-male": "em_alex" }
+    },
+    {
+      "code": "fr", "name": "French", "native": "Français", "engine": "kokoro",
+      "voices": { "warm-female": "ff_siwis", "firm-male": "ff_siwis", "bright-female": "ff_siwis", "clear-female": "ff_siwis", "steady-male": "ff_siwis" }
+    },
+    {
+      "code": "hi", "name": "Hindi", "native": "हिन्दी", "engine": "kokoro",
+      "voices": { "warm-female": "hf_alpha", "firm-male": "hm_omega", "bright-female": "hf_beta", "clear-female": "hf_alpha", "steady-male": "hm_psi" }
+    },
+    {
+      "code": "it", "name": "Italian", "native": "Italiano", "engine": "kokoro",
+      "voices": { "warm-female": "if_sara", "firm-male": "im_nicola", "bright-female": "if_sara", "clear-female": "if_sara", "steady-male": "im_nicola" }
+    },
+    {
+      "code": "pt", "name": "Portuguese", "native": "Português", "engine": "kokoro",
+      "voices": { "warm-female": "pf_dora", "firm-male": "pm_alex", "bright-female": "pf_dora", "clear-female": "pf_dora", "steady-male": "pm_alex" }
+    },
+    {
+      "code": "zh", "name": "Chinese (Mandarin)", "native": "中文", "engine": "kokoro",
+      "voices": { "warm-female": "zf_xiaoxiao", "firm-male": "zm_yunjian", "bright-female": "zf_xiaoyi", "clear-female": "zf_xiaobei", "steady-male": "zm_yunxi" }
+    },
+    {
+      "code": "ja", "name": "Japanese", "native": "日本語", "engine": "kokoro",
+      "voices": { "warm-female": "jf_alpha", "firm-male": "jm_kumo", "bright-female": "jf_nezumi", "clear-female": "jf_alpha", "steady-male": "jm_kumo" }
+    },
+    { "code": "sw", "name": "Swahili", "native": "Kiswahili", "engine": "piper", "voices": null },
+    { "code": "ar", "name": "Arabic", "native": "العربية", "engine": "piper", "voices": null },
+    { "code": "de", "name": "German", "native": "Deutsch", "engine": "piper", "voices": null },
+    { "code": "tr", "name": "Turkish", "native": "Türkçe", "engine": "piper", "voices": null },
+    { "code": "vi", "name": "Vietnamese", "native": "Tiếng Việt", "engine": "piper", "voices": null },
+    { "code": "ru", "name": "Russian", "native": "Русский", "engine": "piper", "voices": null },
+    { "code": "uk", "name": "Ukrainian", "native": "Українська", "engine": "piper", "voices": null },
+    { "code": "nl", "name": "Dutch", "native": "Nederlands", "engine": "piper", "voices": null },
+    { "code": "pl", "name": "Polish", "native": "Polski", "engine": "piper", "voices": null },
+    { "code": "yo", "name": "Yoruba", "native": "Yorùbá", "engine": "none", "voices": null },
+    { "code": "ig", "name": "Igbo", "native": "Asụsụ Igbo", "engine": "none", "voices": null },
+    { "code": "ha", "name": "Hausa", "native": "Harshen Hausa", "engine": "none", "voices": null },
+    { "code": "am", "name": "Amharic", "native": "አማርኛ", "engine": "none", "voices": null },
+    { "code": "zu", "name": "Zulu", "native": "isiZulu", "engine": "none", "voices": null }
+  ]
+}

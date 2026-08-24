@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RandomCaricature } from "./Caricatures";
+import { HEADLINES } from "./headlines";
 
 /**
  * The Dingba storefront. The app itself lives at /learn; this page's one job
@@ -44,8 +45,28 @@ const MIC = "M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 
 const CLIP = "M21 12.5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 8.3";
 const CAM = "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z";
 
+/** Renders {braced} words in brand indigo. */
+function Highlighted({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\{[^}]+\})/).map((part, i) =>
+        part.startsWith("{") && part.endsWith("}") ? (
+          <span key={i}>{part.slice(1, -1)}</span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 export default function HomePage() {
   const [ask, setAsk] = useState("");
+  // One of many voices per visit. First paint is deterministic so hydration
+  // never mismatches; the shuffle lands right after mount.
+  const [pick, setPick] = useState(0);
+  useEffect(() => setPick(Math.floor(Math.random() * HEADLINES.length)), []);
+  const line = HEADLINES[pick];
 
   function startLearning(question?: string) {
     const q = (question ?? ask).trim();
@@ -61,8 +82,8 @@ export default function HomePage() {
               <span className="live-dot" aria-hidden />
               LIVE classes that feel human. Only smarter.
             </span>
-            <h1>Meet your<br />personal <span>A.I</span> tutor.</h1>
-            <p className="lede">Ask anything. Upload anything. Learn anything.</p>
+            <h1><Highlighted text={line.headline} /></h1>
+            <p className="lede">{line.sub}</p>
 
             <div className="askbox big">
               <input

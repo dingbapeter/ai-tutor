@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { masteryStage, mergeProfile, scheduleAttempt } from "../src/store/types.js";
-import { buildSystemPrompt, loadPack, loadPersonas } from "../src/tutor/prompt.js";
+import { buildSystemPrompt, loadLanguages, loadPack, loadPersonas, voiceFor } from "../src/tutor/prompt.js";
 import {
   MockChatProvider,
   MockSttProvider,
@@ -154,6 +154,54 @@ describe("adaptive engine", () => {
       headers: { authorization: `Bearer ${stranger.json().token}` },
     });
     expect(denied.statusCode).toBe(403);
+  });
+});
+
+describe("languages", () => {
+  it("routes each persona to a real voice per language, falling back honestly", () => {
+    const [amara, kofi] = loadPersonas();
+    // Spanish has its own voices, and two different tutors get different ones.
+    expect(voiceFor(amara, "es")).toBe("ef_dora");
+    expect(voiceFor(kofi, "es")).toBe("em_alex");
+    // English is the persona's own voice.
+    expect(voiceFor(amara, "en")).toBe(amara.voiceId);
+    // A language with no voices installed yet falls back rather than failing.
+    expect(voiceFor(amara, "yo")).toBe(amara.voiceId);
+    expect(voiceFor(amara, undefined)).toBe(amara.voiceId);
+  });
+
+  it("puts the language instruction in the system prompt, and leaves English alone", () => {
+    const spanish = buildSystemPrompt({
+      persona: loadPersonas()[0],
+      pack: loadPack("math-ms"),
+      studentName: "Lucia",
+      memoryLines: [],
+      language: "es",
+    });
+    expect(spanish).toContain("Spanish");
+    expect(spanish).toContain("Español");
+
+    const english = buildSystemPrompt({
+      persona: loadPersonas()[0],
+      pack: loadPack("math-ms"),
+      studentName: "Ada",
+      memoryLines: [],
+      language: "en",
+    });
+    expect(english).not.toContain("LANGUAGE:");
+  });
+
+  it("declares every language with a native name and an honest voice flag", () => {
+    for (const l of loadLanguages()) {
+      expect(l.native.length).toBeGreaterThan(0);
+      expect(l.code.length).toBeGreaterThan(0);
+      // Every voice map, where present, must cover every persona's profile.
+      if (l.voices) {
+        for (const p of loadPersonas()) {
+          expect(l.voices[p.voiceProfile!]).toBeTruthy();
+        }
+      }
+    }
   });
 });
 
@@ -484,6 +532,38 @@ describe("platform basics", () => {
       url: `/students/${kid.json().id}/care-contact`,
       headers: auth,
       payload: { name: "Someone", phone: "call me maybe" },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it("teaches in the learner's language, and picks that language's voice", async () => {
+    const langs = (await app.inject({ url: "/languages" })).json() as Array<{
+      code: string;
+      native: string;
+      speaksAloud: boolean;
+    }>;
+    expect(langs.length).toBeGreaterThan(10);
+    const yoruba = langs.find((l) => l.code === "yo")!;
+    expect(yoruba.native).toBe("Yorùbá");
+    expect(yoruba.speaksAloud).toBe(false); // honest: no voice for it yet
+    expect(langs.find((l) => l.code === "es")!.speaksAloud).toBe(true);
+
+    // A Spanish session tells the tutor to teach in Spanish.
+    const created = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Lucia", personaId: "amara", packId: "math-ms", language: "es" },
+    });
+    expect(created.statusCode).toBe(200);
+    const body = created.json() as { language: string; speaksAloud: boolean };
+    expect(body.language).toBe("es");
+    expect(body.speaksAloud).toBe(true);
+
+    // Unknown language codes are a client error, never a silent English session.
+    const bad = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Lucia", personaId: "amara", packId: "math-ms", language: "klingon" },
     });
     expect(bad.statusCode).toBe(400);
   });

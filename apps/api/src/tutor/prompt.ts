@@ -9,6 +9,8 @@ export interface Persona {
   name: string;
   style: string;
   voiceId: string;
+  /** Which slot this tutor fills in a language's voice set. */
+  voiceProfile?: string;
   systemStyle: string;
   color?: string;
   accent?: string;
@@ -36,6 +38,56 @@ let personaCache: Persona[] | null = null;
 export function loadPersonas(): Persona[] {
   personaCache ??= (JSON.parse(readFileSync(join(ROOT, "config/personas.json"), "utf8")) as { personas: Persona[] }).personas;
   return personaCache;
+}
+
+export interface Language {
+  code: string;
+  name: string;
+  native: string;
+  engine: string;
+  /** voiceProfile -> engine voice id. null means no spoken voice yet. */
+  voices: Record<string, string> | null;
+}
+
+let languageCache: { fallback: string; list: Language[] } | null = null;
+function languages(): { fallback: string; list: Language[] } {
+  if (!languageCache) {
+    const raw = JSON.parse(readFileSync(join(ROOT, "config/languages.json"), "utf8")) as {
+      fallbackVoiceLanguage: string;
+      languages: Language[];
+    };
+    languageCache = { fallback: raw.fallbackVoiceLanguage, list: raw.languages };
+  }
+  return languageCache;
+}
+
+export function loadLanguages(): Language[] {
+  return languages().list;
+}
+
+export function findLanguage(code: string): Language | undefined {
+  return languages().list.find((l) => l.code === code);
+}
+
+/**
+ * The voice a persona speaks in for a given language. Falls back to the
+ * persona's own default when the language has no voices installed yet, so a
+ * learner always hears something rather than silence.
+ */
+export function voiceFor(persona: Persona, languageCode?: string): string {
+  const profile = persona.voiceProfile;
+  if (languageCode && profile) {
+    const lang = findLanguage(languageCode);
+    const voice = lang?.voices?.[profile];
+    if (voice) return voice;
+  }
+  return persona.voiceId;
+}
+
+/** True when this language can be spoken aloud today. */
+export function hasVoice(languageCode?: string): boolean {
+  if (!languageCode) return true;
+  return Boolean(findLanguage(languageCode)?.voices);
 }
 
 /** The only packs that exist. Everything else is a client error, never a crash. */
@@ -123,6 +175,18 @@ function routineBlock(r: RoutineForPrompt | null): string {
   return `\nTheir real-world learning routine (from a timetable they uploaded — plan around it, mention it when relevant):\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
 }
 
+/** Teach in the learner's language, in their own words. */
+function languageBlock(code?: string): string {
+  if (!code || code === "en") return "";
+  const lang = findLanguage(code);
+  if (!lang) return "";
+  return (
+    `\nLANGUAGE: teach entirely in ${lang.name} (${lang.native}). Every explanation, question, and encouragement goes in ${lang.name}. ` +
+    `Keep technical terms in the language the student's exam or textbook uses, and say them in ${lang.name} too the first time. ` +
+    `If the student writes to you in another language, answer in the language they used.\n`
+  );
+}
+
 /** Spaced-review warm-up: due skills the tutor should touch before new material. */
 function warmupBlock(skillTitles: string[]): string {
   if (!skillTitles.length) return "";
@@ -140,6 +204,7 @@ export function buildSystemPrompt(opts: {
   profile?: ProfileForPrompt | null;
   warmupSkills?: string[];
   routine?: RoutineForPrompt | null;
+  language?: string;
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
   return [
@@ -157,6 +222,7 @@ export function buildSystemPrompt(opts: {
     `7. Sound like a person, not an app: contractions, short sentences, plain punctuation (no em dashes), no canned assistant phrases like "Certainly!" or "I'd be happy to". Warmth over polish.`,
     `8. Notice the person, not just the answer. Watch for someone who sounds off: answers getting shorter or flatter than usual, "I don't know" repeating, self-criticism ("I'm so stupid", "I'm rubbish at this"), giving up early, long silences, irritation, or a mood that doesn't match the work. When you notice it, STOP teaching for a moment. Ask one real, gentle question about them, not the topic ("You sound a bit flat today, is everything alright?" / "That's the third quick answer in a row, want to tell me what's going on?"). Then LISTEN: let their answer steer what happens next. If they're tired, shorten the session or switch to something lighter. If something happened at school or home, acknowledge it plainly before any teaching. If they're frustrated with the work, name that it's hard and drop the difficulty. Never lecture them about their feelings, never fake a diagnosis, and never brush past it to get back to the lesson. One caring question, honestly asked, is worth more than a perfect explanation.`,
     ``,
+    languageBlock(opts.language),
     profileBlock(studentName, opts.profile ?? null),
     routineBlock(opts.routine ?? null),
     warmupBlock(opts.warmupSkills ?? []),

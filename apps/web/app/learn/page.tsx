@@ -17,6 +17,12 @@ interface Pack {
   title: string;
   description: string;
 }
+interface Language {
+  code: string;
+  name: string;
+  native: string;
+  speaksAloud: boolean;
+}
 interface Problem {
   index: number;
   skillId: string;
@@ -61,6 +67,8 @@ export default function Home() {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [personaId, setPersonaId] = useState("");
   const [packId, setPackId] = useState("");
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [language, setLanguage] = useState("en");
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
@@ -107,6 +115,9 @@ export default function Home() {
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
     fetch(`${API}/packs`).then((r) => r.json()).then(setPacks).catch(() => {});
+    fetch(`${API}/languages`).then((r) => r.json()).then(setLanguages).catch(() => {});
+    const savedLang = localStorage.getItem("dingba_language");
+    if (savedLang) setLanguage(savedLang);
     // A question typed into the homepage ask box lands in the composer here.
     const ask = new URLSearchParams(window.location.search).get("ask");
     if (ask) setInput(ask.slice(0, 2000));
@@ -146,7 +157,7 @@ export default function Home() {
       const res = await fetch(`${API}/tts`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: text.slice(0, 2000), personaId }),
+        body: JSON.stringify({ text: text.slice(0, 2000), personaId, language }),
       });
       if (!res.ok) throw new Error("voice unavailable");
       playAudio(await res.blob());
@@ -166,8 +177,8 @@ export default function Home() {
         },
         body: JSON.stringify(
           token && studentId
-            ? { studentId, personaId, packId }
-            : { studentName: name || "Student", personaId, packId, ...(parentEmail ? { parentEmail } : {}) },
+            ? { studentId, personaId, packId, language }
+            : { studentName: name || "Student", personaId, packId, language, ...(parentEmail ? { parentEmail } : {}) },
         ),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
@@ -609,6 +620,31 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          <label className="lbl">Which language should your tutor teach in?</label>
+          <select
+            value={language}
+            onChange={(e) => {
+              setLanguage(e.target.value);
+              localStorage.setItem("dingba_language", e.target.value);
+            }}
+            className="inp"
+            aria-label="Teaching language"
+          >
+            {languages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.native}
+                {l.native !== l.name ? ` (${l.name})` : ""}
+                {l.speaksAloud ? "" : " · text and listening"}
+              </option>
+            ))}
+          </select>
+          {languages.find((l) => l.code === language && !l.speaksAloud) && (
+            <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "6px 0 0" }}>
+              Your tutor teaches and understands you in this language today. A speaking
+              voice for it is on the way.
+            </p>
+          )}
 
           <button
             disabled={!personaId || !packId || (family.length > 0 && !studentId)}

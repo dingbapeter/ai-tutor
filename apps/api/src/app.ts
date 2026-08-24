@@ -6,9 +6,12 @@ import {
   buildSystemPrompt,
   loadPack,
   loadPersonas,
+  loadLanguages,
+  findLanguage,
   PACK_IDS,
   skillTitle,
   UnknownPackError,
+  voiceFor,
 } from "./tutor/prompt.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
@@ -28,6 +31,8 @@ interface LiveSession {
   parentEmail?: string;
   personaId: string;
   packId: string;
+  /** Language the tutor teaches and speaks in this session. */
+  language: string;
   history: ChatMessage[];
   /** Serializes generations: two concurrent turns would corrupt history. */
   busy: boolean;
@@ -675,6 +680,16 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     })),
   );
 
+  app.get("/languages", async () =>
+    loadLanguages().map((l) => ({
+      code: l.code,
+      name: l.name,
+      native: l.native,
+      // Honest per language: everything teaches and listens; not everything speaks yet.
+      speaksAloud: Boolean(l.voices),
+    })),
+  );
+
   app.get("/packs", async () =>
     PACK_IDS.map((id) => {
       const p = loadPack(id);
@@ -705,6 +720,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       personaId: string;
       packId: string;
       parentEmail?: string;
+      language?: string;
     };
   }>(
     "/sessions",
@@ -722,6 +738,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             personaId: { type: "string", maxLength: 40 },
             packId: { type: "string", maxLength: 40 },
             parentEmail: { type: "string", format: "email", maxLength: 254 },
+            language: { type: "string", maxLength: 12 },
           },
         },
       },
@@ -730,6 +747,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const { personaId, packId } = req.body;
       const persona = loadPersonas().find((p) => p.id === personaId);
       if (!persona) return reply.code(400).send({ error: `unknown persona: ${personaId}` });
+
+      const language = req.body.language ?? "en";
+      if (!findLanguage(language)) return reply.code(400).send({ error: `unknown language: ${language}` });
 
       let pack;
       try {
@@ -816,8 +836,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         parentEmail,
         personaId,
         packId,
+        language,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine }) },
+          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language }) },
         ],
         busy: false,
         practiceTotal: 0,
@@ -862,6 +883,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         sessionId,
         persona: { id: persona.id, name: persona.name },
         pack: pack.title,
+        language,
+        speaksAloud: Boolean(findLanguage(language)?.voices),
         remembered: memoryLines.length,
         greeting,
       };
@@ -1094,7 +1117,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       try {
         const mime = req.headers["content-type"] ?? "audio/webm";
         const transcript = (
-          await gateway.stt.transcribe(new Uint8Array(audioIn), mime)
+          await gateway.stt.transcribe(new Uint8Array(audioIn), mime, session.language)
         ).trim();
         if (!transcript) {
           return reply.code(422).send({ error: "could not hear anything in that recording" });
@@ -1129,7 +1152,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // TTS engines have input caps; a long reply gets its head spoken and
         // the full text still arrives for the transcript view.
         await meter(session, "tts_chars", Math.min(replyText.length, 2000));
-        const spoken = await cachedSpeak(replyText.slice(0, 2000), persona.voiceId);
+        const spoken = await cachedSpeak(replyText.slice(0, 2000), voiceFor(persona, session.language));
 
         return {
           transcript,
@@ -1216,7 +1239,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   /** Voice note for a tutor message (async TTS — Phase 0 voice). */
-  app.post<{ Body: { text: string; personaId: string } }>(
+  app.post<{ Body: { text: string; personaId: string; language?: string } }>(
     "/tts",
     {
       schema: {
@@ -1225,6 +1248,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           required: ["text", "personaId"],
           additionalProperties: false,
           properties: {
+            language: { type: "string", maxLength: 12 },
             text: { type: "string", minLength: 1, maxLength: 2000 },
             personaId: { type: "string", maxLength: 40 },
           },
@@ -1234,7 +1258,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     async (req, reply) => {
       const persona = loadPersonas().find((p) => p.id === req.body.personaId);
       if (!persona) return reply.code(400).send({ error: "unknown persona" });
-      const result = await cachedSpeak(req.body.text, persona.voiceId);
+      const result = await cachedSpeak(req.body.text, voiceFor(persona, req.body.language));
       reply.header("content-type", result.mimeType);
       return reply.send(Buffer.from(result.audio));
     },
