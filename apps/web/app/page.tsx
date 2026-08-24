@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RandomCaricature } from "./Caricatures";
 
 /**
  * The Dingba storefront. The app itself lives at /learn; this page's one job
@@ -43,8 +44,15 @@ export default function HomePage() {
   return (
     <div className="home">
       <section className="home-hero fadeUp">
-        <h1>Meet your personal <span>AI</span> tutor.</h1>
-        <p className="lede">Ask anything. Learn anything. A tutor that knows you and remembers every session.</p>
+        <div className="hero-duo">
+          <div>
+            <h1>Meet your personal <span>AI</span> tutor.</h1>
+            <p className="lede">Ask anything. Learn anything. A tutor that knows you and remembers every session.</p>
+          </div>
+          <div className="hero-cast">
+            <RandomCaricature size={170} slot={0} />
+          </div>
+        </div>
         <div className="askbox">
           <input
             value={ask}
@@ -105,7 +113,11 @@ export default function HomePage() {
           Your tutor remembers what you&apos;ve learned. It knows what you&apos;re good at, where
           you&apos;re struggling, what you&apos;ve already studied and what to work on next.
         </p>
-        <div className="card" style={{ maxWidth: 460, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
+          <div className="hero-cast" style={{ paddingBottom: 8 }}>
+            <RandomCaricature size={120} slot={2} />
+          </div>
+        <div className="card" style={{ maxWidth: 460, margin: "0 auto 0 0", flex: "1 1 300px" }}>
           <b>Peter&apos;s learning profile</b>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
             {PROFILE_DEMO.map(([subject, pct]) => (
@@ -121,6 +133,7 @@ export default function HomePage() {
           <p style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 0, marginTop: 12 }}>
             Illustration. Your own profile builds from your real sessions.
           </p>
+        </div>
         </div>
       </section>
 
@@ -172,6 +185,9 @@ export default function HomePage() {
       </section>
 
       <div className="cta-panel">
+        <div className="hero-cast" style={{ marginBottom: 6 }}>
+          <RandomCaricature size={110} slot={4} />
+        </div>
         <h2>Ready to learn? Your tutor is waiting.</h2>
         <button className="btn" onClick={() => startLearning()}>Start learning with Dingba</button>
       </div>

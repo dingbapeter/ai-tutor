@@ -249,6 +249,10 @@ body[data-session="1"] .appbar { display: none; }
 .home .sub { color: var(--text-dim); text-align: center; margin: 0 auto 24px; max-width: 560px; }
 
 .home-hero { text-align: center; padding: 54px 0 10px; }
+.hero-duo { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.hero-duo > div:first-child { max-width: 540px; }
+.hero-cast { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
+@media (max-width: 640px) { .hero-cast svg { width: 128px; height: 154px; } }
 .home-hero h1 { font-size: clamp(34px, 7vw, 54px); font-weight: 800; margin: 0 0 10px; letter-spacing: -0.03em; }
 .home-hero h1 span { color: var(--brand); }
 .home-hero .lede { color: var(--text-dim); font-size: clamp(16px, 2.6vw, 19px); margin: 0 0 26px; }
