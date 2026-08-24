@@ -57,7 +57,11 @@ export default function HomePage() {
       <section className="home-hero fadeUp">
         <div className="hero-duo">
           <div className="hero-copy">
-            <h1>Meet your<br />personal <span>AI</span> tutor.</h1>
+            <span className="live-pill">
+              <span className="live-dot" aria-hidden />
+              LIVE classes that feel human. Only smarter.
+            </span>
+            <h1>Meet your<br />personal <span>A.I</span> tutor.</h1>
             <p className="lede">Ask anything. Upload anything. Learn anything.</p>
 
             <div className="askbox big">
