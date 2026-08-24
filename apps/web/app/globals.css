@@ -241,6 +241,97 @@ body[data-session="1"] .appbar { display: none; }
 .footlinks { text-align: center; color: var(--text-dim); font-size: 14px; margin: 18px 0 0; }
 .footlinks a { color: var(--text-dim); }
 
+/* ---------- homepage ---------- */
+
+.home { max-width: 960px; margin: 0 auto; padding: 0 18px calc(20px + var(--sab)); }
+.home section { padding: 44px 0 10px; }
+.home h2 { font-size: clamp(24px, 4.4vw, 32px); font-weight: 800; margin: 0 0 6px; text-align: center; }
+.home .sub { color: var(--text-dim); text-align: center; margin: 0 auto 24px; max-width: 560px; }
+
+.home-hero { text-align: center; padding: 54px 0 10px; }
+.home-hero h1 { font-size: clamp(34px, 7vw, 54px); font-weight: 800; margin: 0 0 10px; letter-spacing: -0.03em; }
+.home-hero h1 span { color: var(--brand); }
+.home-hero .lede { color: var(--text-dim); font-size: clamp(16px, 2.6vw, 19px); margin: 0 0 26px; }
+
+.askbox {
+  display: flex;
+  gap: 8px;
+  max-width: 620px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 8px 8px 22px;
+  box-shadow: var(--shadow-lift);
+}
+.askbox:focus-within { border-color: var(--brand); }
+.askbox input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16.5px;
+  min-width: 0;
+}
+.askbox input::placeholder { color: var(--text-dim); opacity: 0.7; }
+
+.try-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 16px 0 0; }
+
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 640px) { .duo { grid-template-columns: 1fr; } }
+
+.mini-chat { display: flex; flex-direction: column; gap: 10px; }
+.mini-chat .msg { max-width: 92%; animation: none; }
+
+.subject-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 640px) { .subject-grid { grid-template-columns: repeat(2, 1fr); } }
+.subject-grid .card { text-align: center; padding: 18px 10px; font-weight: 700; font-size: 15px; }
+.subject-grid .card .ico { font-size: 26px; display: block; margin-bottom: 6px; }
+
+.bar { background: var(--surface-2); border-radius: 6px; height: 10px; overflow: hidden; }
+.bar > div { height: 100%; border-radius: 6px; background: var(--brand); }
+
+.way-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 760px) { .way-grid { grid-template-columns: repeat(2, 1fr); } }
+.way-grid .card { padding: 18px 14px; }
+.way-grid .card b { display: block; margin-bottom: 4px; }
+.way-grid .card p { margin: 0; font-size: 13.5px; color: var(--text-dim); }
+.tag-soon {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.journey { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; align-items: center; color: var(--text-dim); font-weight: 600; font-size: 14.5px; }
+.journey .step { background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 16px; color: var(--text); }
+.journey .step:last-child { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+.life-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.life-chips span { background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 18px; font-weight: 600; font-size: 14.5px; }
+
+.cta-panel {
+  background: linear-gradient(135deg, var(--brand) 0%, #43389f 100%);
+  border-radius: 24px;
+  text-align: center;
+  padding: 46px 24px;
+  color: #fff;
+  margin-top: 40px;
+}
+.cta-panel h2 { color: #fff; }
+.cta-panel .btn { background: #fff; color: #43389f; margin-top: 14px; }
+.cta-panel .btn:hover { background: #f0eefe; }
+
+.site-footer { text-align: center; color: var(--text-dim); font-size: 13.5px; padding: 26px 0 8px; }
+.site-footer a { color: var(--text-dim); margin: 0 8px; }
+
 /* ---------- session ---------- */
 
 .session {

@@ -2,7 +2,7 @@
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open("tutor-v1").then((cache) => cache.addAll(["/", "/manifest.json", "/icon-192.png"])),
+    caches.open("tutor-v2").then((cache) => cache.addAll(["/", "/learn", "/manifest.json", "/icon-192.png"])),
   );
   self.skipWaiting();
 });
@@ -20,10 +20,10 @@ self.addEventListener("fetch", (event) => {
     fetch(event.request)
       .then((res) => {
         const copy = res.clone();
-        caches.open("tutor-v1").then((cache) => cache.put(event.request, copy)).catch(() => {});
+        caches.open("tutor-v2").then((cache) => cache.put(event.request, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(event.request).then((hit) => hit ?? caches.match("/"))),
+      .catch(() => caches.match(event.request).then((hit) => hit ?? caches.match("/learn"))),
   );
 });
 
@@ -46,7 +46,7 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) if ("focus" in client) return client.focus();
-      return self.clients.openWindow("/");
+      return self.clients.openWindow("/learn");
     }),
   );
 });

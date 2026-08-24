@@ -12,7 +12,7 @@ export default function Chrome() {
         Dingba<span>.</span>
       </a>
       <nav>
-        <a href="/" className={path === "/" ? "on" : ""}>Learn</a>
+        <a href="/learn" className={path.startsWith("/learn") ? "on" : ""}>Learn</a>
         <a href="/account" className={path.startsWith("/account") ? "on" : ""}>Account</a>
       </nav>
     </header>

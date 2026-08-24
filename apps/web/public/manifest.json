@@ -2,7 +2,7 @@
   "name": "Dingba",
   "short_name": "Dingba",
   "description": "Your Personal A.I Tutor. A tutor that knows you, speaks with you, and remembers every session.",
-  "start_url": "/",
+  "start_url": "/learn",
   "display": "standalone",
   "background_color": "#f6f7fb",
   "theme_color": "#6C5CE7",
