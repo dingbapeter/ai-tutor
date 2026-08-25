@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
  * home screen) so the tutor gets the whole screen. */
 export default function Chrome() {
   const path = usePathname();
+  // The Command Centre carries its own chrome; the learner bar has no place there.
+  if (path.startsWith("/command")) return null;
   return (
     <header className="appbar">
       <a href="/" className="wordmark">

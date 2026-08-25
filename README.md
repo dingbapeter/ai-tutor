@@ -120,6 +120,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Dingba Brain v1: structured learner profile (goals/strengths/struggles/interests/preferences), merged after every session (verified practice outcomes + best-effort model extraction), injected into the system prompt, profile card on the dashboard | ✅ tested (merge semantics, deterministic build from wrong answers, owner-gated endpoint); model-extraction quality checks with the real model at deploy |
 | Billing: Stripe + Paystack checkout, signature-verified webhooks → plan flips, cancellation downgrade, /me/billing, upgrade buttons | ✅ tested (17 cases incl. real HMAC schemes, tamper + replay rejection); ⚠ needs live keys + a real checkout at deploy — /admin/plan still bridges |
 | Email verification at signup (token email, /verify page, resend, banner) | ✅ tested; email delivery goes live with SMTP at deploy |
+| Command Centre: staff roles with a server-enforced capability matrix (owner/admin/finance/support/staff/investor), platform metrics with trend charts, revenue from live subscriptions, support desk (search, family view, plan changes), team management, and an append-only audit trail. Investors get the smallest surface in the system: counts and revenue totals, never a learner | ✅ tested + live-verified in a real browser across four roles (desktop + phone); 25 API tests cover the whole investor-containment surface. Set `COMMAND_OWNER_EMAILS` at deploy or nobody can open it |
 | WhatsApp, study plans & scheduling | ❌ later sprints |
 
 ## Roadmap

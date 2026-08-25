@@ -542,3 +542,227 @@ body[data-session="1"] .appbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- command centre ----------
+   The operator's console. Denser than the learner app, calmer in colour, and
+   built from the same tokens so it never drifts from the brand. */
+
+.cc {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-top, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.cc-mark {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cc-mark span { color: var(--brand); }
+.cc-mark small {
+  display: block;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cc-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+}
+.cc-tabs::-webkit-scrollbar { display: none; }
+.cc-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 8px 13px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-tabs button:hover { background: var(--surface-2); color: var(--text); }
+.cc-tabs button.on { background: var(--brand-soft); color: var(--brand-deep); }
+
+.cc-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.cc-who .who-email { font-size: 13.5px; color: var(--text-dim); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+.cc-role {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.cc-role.investor { background: var(--ok-soft); color: var(--ok); }
+.cc-role.suspended { background: var(--danger-soft); color: var(--danger); }
+
+.cc-body { max-width: 1080px; width: 100%; margin: 0 auto; padding: 22px 20px calc(40px + var(--sab)); }
+
+.cc-h { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0 0 4px; }
+.cc-h h2 { font-size: 22px; font-weight: 800; margin: 0; }
+.cc-h .cc-sub { color: var(--text-dim); font-size: 14px; margin: 0; }
+.cc-lede { color: var(--text-dim); font-size: 14.5px; margin: 0 0 18px; }
+
+.cc-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.cc-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px 16px;
+  box-shadow: var(--shadow);
+}
+.cc-stat .k {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+.cc-stat .v { font-size: 27px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.cc-stat .n { font-size: 12.5px; color: var(--text-dim); margin: 4px 0 0; }
+.cc-stat.alert .v { color: var(--danger); }
+
+.cc-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin: 0 0 16px;
+}
+.cc-panel > h3 { font-size: 15.5px; font-weight: 800; margin: 0 0 2px; }
+.cc-panel > h3 + p { color: var(--text-dim); font-size: 13.5px; margin: 0 0 14px; }
+
+.cc-chart { width: 100%; height: 132px; display: block; overflow: visible; }
+.cc-chart .area { fill: var(--brand); opacity: 0.13; }
+.cc-chart .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.cc-chart .dot { fill: var(--brand); }
+.cc-chart-foot { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 12px; margin-top: 6px; }
+
+.cc-bars { display: flex; flex-direction: column; gap: 10px; }
+.cc-bar-row { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: 10px; font-size: 14px; }
+.cc-bar-track { display: block; height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.cc-bar-fill { display: block; min-width: 3px; height: 100%; border-radius: 999px; background: var(--brand); }
+.cc-bar-row .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.cc-table-wrap { overflow-x: auto; }
+.cc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cc-table th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 12px 9px 0;
+  white-space: nowrap;
+}
+.cc-table td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.cc-table tr.click { cursor: pointer; }
+.cc-table tr.click:hover td { background: var(--surface-2); }
+.cc-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text-dim); }
+.cc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.cc-search { display: flex; gap: 10px; margin: 0 0 16px; }
+.cc-search .inp { margin: 0; }
+
+.cc-form { display: grid; grid-template-columns: 1fr 150px 1fr auto; gap: 10px; align-items: end; }
+@media (max-width: 720px) { .cc-form { grid-template-columns: 1fr; } }
+.cc-form .inp, .cc-form select { margin: 0; }
+
+select.inp {
+  appearance: none;
+  padding-right: 38px;
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 11px 7px;
+  /* Caret drawn inline so it needs no network request and no icon font. */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' fill='none' stroke='%236b6b80' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.cc-empty { color: var(--text-dim); font-size: 14px; padding: 16px 0; text-align: center; }
+
+.cc-gate { max-width: 380px; margin: 12vh auto 0; padding: 0 20px; }
+.cc-gate h1 { font-size: 26px; font-weight: 800; margin: 0 0 6px; }
+.cc-gate p { color: var(--text-dim); font-size: 14.5px; margin: 0 0 20px; }
+
+.cc-tag {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.cc-tag.ok { background: var(--ok-soft); color: var(--ok); }
+.cc-tag.bad { background: var(--danger-soft); color: var(--danger); }
+.cc-tag.warn { background: var(--warn-soft); color: var(--warn-text); }
+
+.cc-note {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  margin: 0 0 16px;
+}
+
+.cc-rowacts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* On a phone the tab strip drops to its own row, so the bar never pushes the
+   page sideways. A board member checking the numbers on the way to a meeting
+   gets the same console, not a squeezed one. */
+@media (max-width: 760px) {
+  .cc-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .cc-mark { order: 1; }
+  .cc-who { order: 2; margin-left: auto; min-width: 0; }
+  .cc-tabs { order: 3; flex-basis: 100%; min-width: 0; }
+  .cc-who .who-email { max-width: 128px; font-size: 12.5px; }
+  .cc-body { padding: 18px 14px calc(36px + var(--sab)); }
+  .cc-stats { grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 10px; }
+  .cc-stat .v { font-size: 24px; }
+  .cc-h { flex-wrap: wrap; }
+}
