@@ -66,6 +66,18 @@ VAPID_PUBLIC_KEY=<generated>
 VAPID_PRIVATE_KEY=<generated>
 VAPID_SUBJECT=mailto:you@dingba.ai
 
+# --- Command Centre (the backend of everything) ---
+# Your email, and any co-founder who should have full control. Comma separated.
+# Nobody can open the console until at least one address is here; every other
+# person (finance, support, staff, investors) is added from inside it.
+COMMAND_OWNER_EMAILS=dingbapeter@gmail.com
+# Monthly price per paid plan, for the finance view. Blank means the console
+# shows subscriber counts and says the prices are unset, rather than a made-up
+# revenue number in front of an investor.
+PRICE_PLUS_MONTHLY=<e.g. 9>
+PRICE_PREMIUM_MONTHLY=<e.g. 19>
+PRICE_CURRENCY=USD
+
 # --- Ops ---
 ADMIN_KEY=<long random string, for /admin endpoints>
 ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>

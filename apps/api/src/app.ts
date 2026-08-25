@@ -18,6 +18,7 @@ import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 import { registerBilling } from "./billing.js";
+import { registerCommandCentre } from "./command/routes.js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -2075,6 +2076,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   // ---- Billing (Sprint 6b) ----
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
+
+  // ---- Command Centre (Sprint 15) ----
+  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store));
 
   return app;
 }

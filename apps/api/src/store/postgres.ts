@@ -3,10 +3,14 @@ import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
 import {
   mergeProfile,
   scheduleAttempt,
+  type AuditEntry,
+  type AuditRow,
   type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
+  type PlatformMetrics,
   type SessionRecap,
+  type StaffMember,
   type Store,
   type UsageKind,
 } from "./types.js";
@@ -695,6 +699,7 @@ export class PostgresStore implements Store {
     await this.db.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
     await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
     await this.db.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+    await this.db.delete(schema.staffMembers).where(eq(schema.staffMembers.userId, userId));
     await this.db.delete(schema.users).where(eq(schema.users.id, userId));
   }
 
@@ -778,5 +783,237 @@ export class PostgresStore implements Store {
       .where(and(eq(schema.apiKeys.id, keyId), eq(schema.apiKeys.ownerUserId, ownerUserId)))
       .returning({ id: schema.apiKeys.id });
     return rows.length > 0;
+  }
+
+  // ---- Command Centre ----
+
+  /** Staff rows carry no email of their own; the account is the source of truth. */
+  private staffSelect() {
+    return this.db
+      .select({
+        userId: schema.staffMembers.userId,
+        email: schema.users.email,
+        displayName: schema.users.displayName,
+        role: schema.staffMembers.role,
+        title: schema.staffMembers.title,
+        status: schema.staffMembers.status,
+        createdAt: schema.staffMembers.createdAt,
+        lastSeenAt: schema.staffMembers.lastSeenAt,
+      })
+      .from(schema.staffMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.staffMembers.userId));
+  }
+
+  async listStaff(): Promise<StaffMember[]> {
+    return this.staffSelect().orderBy(schema.staffMembers.createdAt);
+  }
+
+  async getStaff(userId: string): Promise<StaffMember | null> {
+    const rows = await this.staffSelect().where(eq(schema.staffMembers.userId, userId)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  async upsertStaff(member: {
+    userId: string;
+    role: string;
+    title?: string;
+    status?: "active" | "suspended";
+    invitedBy?: string;
+  }) {
+    const role = member.role as "owner" | "admin" | "finance" | "support" | "staff" | "investor";
+    const set: Record<string, unknown> = { role };
+    if (member.title !== undefined) set.title = member.title;
+    if (member.status !== undefined) set.status = member.status;
+    await this.db
+      .insert(schema.staffMembers)
+      .values({
+        userId: member.userId,
+        role,
+        title: member.title,
+        status: member.status ?? "active",
+        invitedBy: member.invitedBy,
+      })
+      .onConflictDoUpdate({ target: schema.staffMembers.userId, set });
+  }
+
+  async removeStaff(userId: string) {
+    const rows = await this.db
+      .delete(schema.staffMembers)
+      .where(eq(schema.staffMembers.userId, userId))
+      .returning({ userId: schema.staffMembers.userId });
+    return rows.length > 0;
+  }
+
+  async touchStaffSeen(userId: string) {
+    await this.db
+      .update(schema.staffMembers)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(schema.staffMembers.userId, userId));
+  }
+
+  async recordAudit(entry: AuditEntry) {
+    await this.db.insert(schema.auditLog).values({
+      actorUserId: entry.actorUserId,
+      actorEmail: entry.actorEmail,
+      actorRole: entry.actorRole,
+      action: entry.action,
+      target: entry.target,
+      meta: entry.meta,
+      ip: entry.ip,
+    });
+  }
+
+  async listAudit(limit: number, opts: { action?: string } = {}): Promise<AuditRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.auditLog)
+      .where(opts.action ? eq(schema.auditLog.action, opts.action) : undefined)
+      .orderBy(desc(schema.auditLog.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      actorUserId: r.actorUserId,
+      actorEmail: r.actorEmail,
+      actorRole: r.actorRole,
+      action: r.action,
+      target: r.target ?? undefined,
+      meta: r.meta,
+      ip: r.ip ?? undefined,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async platformMetrics(days: number): Promise<PlatformMetrics> {
+    // Timestamps are stored in UTC, so every window is cut in UTC too.
+    const window = Math.max(1, Math.min(365, Math.floor(days)));
+    const totals = (await this.db.execute(sql`
+      select
+        (select count(*) from students) as learners,
+        (select count(*) from users where role = 'parent') as guardians,
+        (select count(*) from sessions) as sessions,
+        (select count(*) from sessions
+           where started_at >= date_trunc('day', now() at time zone 'utc')) as sessions_today,
+        (select count(distinct student_id) from sessions
+           where started_at >= date_trunc('day', now() at time zone 'utc')) as active_today,
+        (select count(distinct student_id) from sessions
+           where started_at >= (now() at time zone 'utc') - interval '7 days') as active_week,
+        (select count(distinct student_id) from sessions
+           where started_at >= (now() at time zone 'utc') - interval '30 days') as active_month,
+        (select count(*) from messages) as messages,
+        (select coalesce(sum(quantity), 0) from usage_events where kind = 'voice_turn') as voice_turns,
+        (select coalesce(sum(quantity), 0) from usage_events where kind = 'practice') as practice_attempts,
+        (select count(*) from safety_incidents) as safety_incidents,
+        (select count(*) from safety_incidents where severity = 'danger') as safety_danger,
+        (select count(*) from billing_subscriptions where status = 'active') as paid_subscriptions
+    `)) as unknown as Array<Record<string, string | number>>;
+    const t = totals[0] ?? {};
+    const n = (key: string) => Number(t[key] ?? 0);
+
+    const planRows = (await this.db.execute(sql`
+      select plan, count(*) as count from users group by plan order by count desc, plan
+    `)) as unknown as Array<{ plan: string; count: string | number }>;
+
+    const sessionsSeries = (await this.db.execute(sql`
+      select to_char(d, 'YYYY-MM-DD') as day,
+             (select count(*) from sessions s where s.started_at::date = d)::int as count
+      from generate_series(
+        (now() at time zone 'utc')::date - ${window - 1},
+        (now() at time zone 'utc')::date,
+        interval '1 day'
+      ) as g(d)
+    `)) as unknown as Array<{ day: string; count: number }>;
+
+    const signupsSeries = (await this.db.execute(sql`
+      select to_char(d, 'YYYY-MM-DD') as day,
+             (select count(*) from users u where u.created_at::date = d)::int as count
+      from generate_series(
+        (now() at time zone 'utc')::date - ${window - 1},
+        (now() at time zone 'utc')::date,
+        interval '1 day'
+      ) as g(d)
+    `)) as unknown as Array<{ day: string; count: number }>;
+
+    return {
+      learners: n("learners"),
+      guardians: n("guardians"),
+      sessions: n("sessions"),
+      sessionsToday: n("sessions_today"),
+      activeToday: n("active_today"),
+      activeThisWeek: n("active_week"),
+      activeThisMonth: n("active_month"),
+      messages: n("messages"),
+      voiceTurns: n("voice_turns"),
+      practiceAttempts: n("practice_attempts"),
+      safetyIncidents: n("safety_incidents"),
+      safetyDanger: n("safety_danger"),
+      paidSubscriptions: n("paid_subscriptions"),
+      planMix: planRows.map((r) => ({ plan: r.plan, count: Number(r.count) })),
+      sessionsSeries: sessionsSeries.map((r) => ({ day: r.day, count: Number(r.count) })),
+      signupsSeries: signupsSeries.map((r) => ({ day: r.day, count: Number(r.count) })),
+    };
+  }
+
+  async getAccountById(userId: string) {
+    const rows = await this.db
+      .select({
+        userId: schema.users.id,
+        email: schema.users.email,
+        displayName: schema.users.displayName,
+        role: schema.users.role,
+        plan: schema.users.plan,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async listSubscriptions(limit: number) {
+    return this.db
+      .select({
+        userId: schema.billingSubscriptions.userId,
+        email: schema.users.email,
+        provider: schema.billingSubscriptions.provider,
+        plan: schema.billingSubscriptions.plan,
+        status: schema.billingSubscriptions.status,
+        subscriptionRef: schema.billingSubscriptions.subscriptionRef,
+        updatedAt: schema.billingSubscriptions.updatedAt,
+      })
+      .from(schema.billingSubscriptions)
+      .innerJoin(schema.users, eq(schema.users.id, schema.billingSubscriptions.userId))
+      .orderBy(desc(schema.billingSubscriptions.updatedAt))
+      .limit(limit);
+  }
+
+  async searchAccounts(query: string, limit: number) {
+    const q = query.trim();
+    if (!q) return [];
+    const like = `%${q.toLowerCase()}%`;
+    const rows = (await this.db.execute(sql`
+      select u.id as user_id, u.email, u.display_name, u.role, u.plan, u.created_at,
+             (select count(*) from students s where s.user_id = u.id or s.parent_user_id = u.id) as students
+      from users u
+      where lower(u.email) like ${like} or lower(coalesce(u.display_name, '')) like ${like}
+      order by u.created_at desc
+      limit ${Math.max(1, Math.min(100, Math.floor(limit)))}
+    `)) as unknown as Array<{
+      user_id: string;
+      email: string;
+      display_name: string | null;
+      role: string;
+      plan: string;
+      students: string | number;
+      created_at: Date;
+    }>;
+    return rows.map((r) => ({
+      userId: r.user_id,
+      email: r.email,
+      displayName: r.display_name,
+      role: r.role,
+      plan: r.plan,
+      students: Number(r.students),
+      createdAt: new Date(r.created_at),
+    }));
   }
 }

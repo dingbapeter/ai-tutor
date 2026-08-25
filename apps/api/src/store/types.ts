@@ -300,6 +300,60 @@ export interface Store {
     ref: { customerRef?: string; subscriptionRef?: string },
   ): Promise<{ userId: string; email: string } | null>;
 
+  // ---- Command Centre ----
+
+  /** Staff roster, investors included. */
+  listStaff(): Promise<StaffMember[]>;
+  getStaff(userId: string): Promise<StaffMember | null>;
+  upsertStaff(member: {
+    userId: string;
+    role: string;
+    title?: string;
+    status?: "active" | "suspended";
+    invitedBy?: string;
+  }): Promise<void>;
+  removeStaff(userId: string): Promise<boolean>;
+  touchStaffSeen(userId: string): Promise<void>;
+
+  /** Append-only audit trail. */
+  recordAudit(entry: AuditEntry): Promise<void>;
+  listAudit(limit: number, opts?: { action?: string }): Promise<AuditRow[]>;
+
+  /** Aggregate metrics for the Command Centre. No PII. */
+  platformMetrics(days: number): Promise<PlatformMetrics>;
+
+  /** One account by id, for the support view. Returns PII, so it is gated. */
+  getAccountById(userId: string): Promise<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    plan: string;
+    createdAt: Date;
+  } | null>;
+
+  /** Recent subscriptions, newest first. Names payers, so finance:detail only. */
+  listSubscriptions(limit: number): Promise<Array<{
+    userId: string;
+    email: string;
+    provider: string;
+    plan: string;
+    status: string;
+    subscriptionRef: string;
+    updatedAt: Date;
+  }>>;
+
+  /** Account search for support. Returns PII, so it is capability-gated. */
+  searchAccounts(query: string, limit: number): Promise<Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    plan: string;
+    students: number;
+    createdAt: Date;
+  }>>;
+
   createApiKey(
     ownerUserId: string,
     name: string,
@@ -314,6 +368,54 @@ export interface Store {
     ownerUserId: string,
   ): Promise<Array<{ id: string; name: string; scopes: string[]; monthlyQuota: number; revoked: boolean }>>;
   revokeApiKey(ownerUserId: string, keyId: string): Promise<boolean>;
+}
+
+/** A Command Centre staff member (investors included, on their own role). */
+export interface StaffMember {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+  title: string | null;
+  status: "active" | "suspended";
+  createdAt: Date;
+  lastSeenAt: Date | null;
+}
+
+export interface AuditEntry {
+  actorUserId: string;
+  actorEmail: string;
+  actorRole: string;
+  action: string;
+  target?: string;
+  meta: Record<string, unknown>;
+  ip?: string;
+}
+
+export interface AuditRow extends AuditEntry {
+  id: string;
+  createdAt: Date;
+}
+
+/** Aggregate platform metrics. Contains no personally identifying data. */
+export interface PlatformMetrics {
+  learners: number;
+  guardians: number;
+  sessions: number;
+  sessionsToday: number;
+  activeToday: number;
+  activeThisWeek: number;
+  activeThisMonth: number;
+  messages: number;
+  voiceTurns: number;
+  practiceAttempts: number;
+  safetyIncidents: number;
+  safetyDanger: number;
+  paidSubscriptions: number;
+  planMix: Array<{ plan: string; count: number }>;
+  /** Daily counts, oldest first, for the trend charts. */
+  sessionsSeries: Array<{ day: string; count: number }>;
+  signupsSeries: Array<{ day: string; count: number }>;
 }
 
 export type UsageKind = "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "api_call" | "camera_solve";

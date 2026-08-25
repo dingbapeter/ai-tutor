@@ -90,6 +90,40 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * Command Centre staff. A staff member is a user with elevated access; the
+ * role decides which capabilities they hold (see apps/api/src/command/rbac.ts).
+ * Investors live here too, on a role that can only ever see aggregates.
+ */
+export const staffMembers = pgTable("staff_members", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  role: text("role", {
+    enum: ["owner", "admin", "finance", "support", "staff", "investor"],
+  }).notNull(),
+  title: text("title"),
+  status: text("status", { enum: ["active", "suspended"] }).notNull().default("active"),
+  invitedBy: uuid("invited_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at"),
+});
+
+/**
+ * Every privileged action, permanently. Who did what, to whom, from where.
+ * Append-only by contract: the Command Centre can read it and nothing can
+ * delete from it, because an audit log you can edit is not an audit log.
+ */
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: uuid("actor_user_id").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  actorRole: text("actor_role").notNull(),
+  action: text("action").notNull(),
+  target: text("target"),
+  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+  ip: text("ip"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 /** Metering: every billable action, attributable to a user/student/API key. */
 export const usageEvents = pgTable("usage_events", {
   id: uuid("id").primaryKey().defaultRandom(),
