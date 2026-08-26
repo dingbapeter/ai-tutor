@@ -296,7 +296,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     done(null, body),
   );
 
-  await app.register(cors, { origin: env.WEB_ORIGIN ?? true });
+  await app.register(cors, {
+    origin: env.WEB_ORIGIN ?? true,
+    // Without this the browser hides content-disposition from fetch(), and
+    // every Command Centre export saves as a generic, undated filename.
+    exposedHeaders: ["content-disposition"],
+  });
   await app.register(rateLimit, {
     max: Number(env.RATE_LIMIT_MAX ?? 120),
     timeWindow: "1 minute",

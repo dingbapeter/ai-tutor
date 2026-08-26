@@ -10,6 +10,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { MemoryStore } from "../src/store/memory.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES } from "../src/command/rbac.js";
+import { csvCell, csvFilename, toCsv } from "../src/command/csv.js";
 
 /**
  * The Command Centre, tested against the real routes and a real store.
@@ -560,6 +561,114 @@ describe("platform controls", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.meta.after.signupsPaused === true)).toBe(true);
     expect(entries.some((e) => e.meta.before.signupsPaused === true && e.meta.after.signupsPaused === false)).toBe(true);
+  });
+});
+
+describe("csv writing", () => {
+  it("defuses cells a spreadsheet would run as a formula", () => {
+    // A learner picks their own display name, so an export carries user input
+    // straight into someone's spreadsheet.
+    expect(csvCell("=cmd|'/c calc'!A1")).toBe("'=cmd|'/c calc'!A1");
+    expect(csvCell("+1234")).toBe("'+1234");
+    expect(csvCell("-inline")).toBe("'-inline");
+    expect(csvCell("@handle")).toBe("'@handle");
+    // An ordinary name is left exactly as it is.
+    expect(csvCell("Adaeze")).toBe("Adaeze");
+  });
+
+  it("quotes commas, quotes and newlines instead of breaking the row", () => {
+    expect(csvCell("Lagos, Nigeria")).toBe('"Lagos, Nigeria"');
+    expect(csvCell('she said "no"')).toBe('"she said ""no"""');
+    expect(csvCell("line one\nline two")).toBe('"line one\nline two"');
+    expect(csvCell(null)).toBe("");
+    expect(csvCell(undefined)).toBe("");
+  });
+
+  it("writes a byte order mark so Excel reads names as UTF-8", () => {
+    const out = toCsv(["name"], [["Yorùbá"], ["Chiamaka"]]);
+    expect(out.startsWith("\ufeff")).toBe(true);
+    expect(out).toContain("Yorùbá");
+    expect(out.split("\r\n")[0]).toBe("\ufeffname");
+  });
+
+  it("names files so they sort by date", () => {
+    expect(csvFilename("safety", new Date("2026-08-26T09:00:00Z"))).toBe("dingba-safety-2026-08-26.csv");
+  });
+});
+
+describe("exports", () => {
+  it("hands the owner a real csv with the right headers", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/export/metrics.csv", headers: auth("owner") });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.headers["content-disposition"]).toContain("attachment; filename=\"dingba-metrics-");
+    const lines = res.body.split("\r\n").filter(Boolean);
+    expect(lines[0]).toBe("\ufeffday,sessions,new_accounts");
+    expect(lines).toHaveLength(31); // header + 30 days
+  });
+
+  it("lets the browser read the filename it sends back", async () => {
+    // fetch() hides content-disposition cross-origin unless it is exposed, and
+    // the console reads the filename from it. Without this every download
+    // saves as a generic, undated name.
+    const res = await app.inject({
+      method: "GET",
+      url: "/command/export/metrics.csv",
+      headers: { ...auth("owner"), origin: "http://localhost:3000" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers["access-control-expose-headers"]).toLowerCase()).toContain("content-disposition");
+  });
+
+  it("gates every dataset on exactly the capability its view needs", async () => {
+    const cases: Array<[string, string, number]> = [
+      ["investor", "metrics", 200],
+      ["investor", "finance", 200],
+      ["investor", "subscriptions", 403],
+      ["investor", "safety", 403],
+      ["investor", "staff", 403],
+      ["investor", "audit", 403],
+      ["finance", "subscriptions", 200],
+      ["finance", "safety", 403],
+      ["support", "safety", 200],
+      ["support", "audit", 403],
+    ];
+    for (const [who, dataset, expected] of cases) {
+      const res = await app.inject({ method: "GET", url: `/command/export/${dataset}.csv`, headers: auth(who) });
+      expect(res.statusCode, `${who} -> ${dataset}`).toBe(expected);
+    }
+  });
+
+  it("never leaks a learner's words through an export an investor can reach", async () => {
+    for (const dataset of ["metrics", "finance"]) {
+      const res = await app.inject({ method: "GET", url: `/command/export/${dataset}.csv`, headers: auth("investor") });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).not.toContain("@");
+      expect(res.body).not.toContain("do not want to be here");
+    }
+  });
+
+  it("carries the safety rows a support agent needs, filter and all", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/export/safety.csv?severity=danger", headers: auth("support") });
+    expect(res.statusCode).toBe(200);
+    const lines = res.body.split("\r\n").filter(Boolean);
+    expect(lines[0]).toContain("severity,from,learner,guardian_email");
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.slice(1).every((l) => l.includes("danger"))).toBe(true);
+    expect(res.body).toContain("parent@family.example");
+  });
+
+  it("404s on a dataset that does not exist rather than guessing", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/export/everything.csv", headers: auth("owner") });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("writes every download to the trail", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/audit?action=export.safety", headers: auth("owner") });
+    const entries = res.json().entries as Array<{ actorEmail: string; meta: { rows: number } }>;
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].actorEmail).toBe("support@dingba.ai");
+    expect(entries[0].meta.rows).toBeGreaterThan(0);
   });
 });
 

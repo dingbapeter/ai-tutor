@@ -3,6 +3,7 @@ import type { Store } from "../store/types.js";
 import { audit } from "./audit.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES, type Capability, type StaffRole } from "./rbac.js";
 import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
+import { csvFilename, toCsv } from "./csv.js";
 
 /**
  * The Command Centre API: the backend of everything. Metrics, money, people,
@@ -390,6 +391,76 @@ export async function registerCommandCentre(
     });
     return { removed: req.params.userId };
   });
+
+  // ---- Exports ----
+
+  /**
+   * The same views, as files. Each dataset needs exactly the capability its
+   * on-screen view needs, so an export can never be a way around the matrix,
+   * and every download is written to the trail.
+   */
+  const EXPORTS: Record<string, Capability> = {
+    metrics: "metrics:read",
+    finance: "finance:aggregate",
+    subscriptions: "finance:detail",
+    safety: "safety:read",
+    staff: "staff:read",
+    audit: "audit:read",
+  };
+
+  app.get<{ Params: { dataset: string }; Querystring: { days?: string; severity?: string } }>(
+    "/command/export/:dataset.csv",
+    async (req, reply) => {
+      const dataset = req.params.dataset;
+      const needed = EXPORTS[dataset];
+      if (!needed) return reply.code(404).send({ error: "there is no export by that name" });
+      const actor = await requireCap(req, reply, needed);
+      if (!actor) return;
+
+      let headers: string[] = [];
+      let rows: Array<Array<unknown>> = [];
+
+      if (dataset === "metrics") {
+        const days = clampDays(req.query.days);
+        const m = await store.platformMetrics(days);
+        const signups = new Map(m.signupsSeries.map((p) => [p.day, p.count]));
+        headers = ["day", "sessions", "new_accounts"];
+        rows = m.sessionsSeries.map((p) => [p.day, p.count, signups.get(p.day) ?? 0]);
+      } else if (dataset === "finance") {
+        const m = await store.platformMetrics(30);
+        headers = ["plan", "accounts"];
+        rows = m.planMix.map((p) => [p.plan, p.count]);
+      } else if (dataset === "subscriptions") {
+        headers = ["account", "plan", "status", "processor", "reference", "updated_at"];
+        rows = (await store.listSubscriptions(1000)).map((r) => [
+          r.email, r.plan, r.status, r.provider, r.subscriptionRef, r.updatedAt,
+        ]);
+      } else if (dataset === "safety") {
+        const severity = req.query.severity === "danger" || req.query.severity === "concern" ? req.query.severity : undefined;
+        headers = ["raised_at", "severity", "from", "learner", "guardian_email", "categories", "excerpt"];
+        rows = (await store.listPlatformIncidents(500, { severity })).map((i) => [
+          i.createdAt, i.severity, i.direction, i.studentName, i.guardianEmail ?? "", i.categories.join(" "), i.excerpt,
+        ]);
+      } else if (dataset === "staff") {
+        headers = ["email", "name", "role", "title", "status", "added_at", "last_seen_at"];
+        rows = (await store.listStaff()).map((m) => [
+          m.email, m.displayName ?? "", m.role, m.title ?? "", m.status, m.createdAt, m.lastSeenAt ?? "",
+        ]);
+      } else {
+        headers = ["at", "actor", "role", "action", "target", "details", "ip"];
+        rows = (await store.listAudit(1000)).map((e) => [
+          e.createdAt, e.actorEmail, e.actorRole, e.action, e.target ?? "",
+          Object.keys(e.meta).length ? JSON.stringify(e.meta) : "", e.ip ?? "",
+        ]);
+      }
+
+      await audit(store, actor, `export.${dataset}`, { meta: { rows: rows.length }, ip: ipOf(req) });
+      return reply
+        .header("content-type", "text/csv; charset=utf-8")
+        .header("content-disposition", `attachment; filename="${csvFilename(dataset, new Date())}"`)
+        .send(toCsv(headers, rows));
+    },
+  );
 
   // ---- The trail ----
 

@@ -259,19 +259,58 @@ export default function CommandCentre() {
         {allowed.length === 0 && (
           <p className="cc-empty">This role has no console sections yet. Ask an owner to widen it.</p>
         )}
-        {tab === "overview" && <Overview call={call} />}
-        {tab === "safety" && <Safety call={call} />}
-        {tab === "money" && <Money call={call} me={me} />}
+        {tab === "overview" && <Overview call={call} token={token} />}
+        {tab === "safety" && <Safety call={call} token={token} />}
+        {tab === "money" && <Money call={call} me={me} token={token} />}
         {tab === "people" && <People call={call} me={me} />}
-        {tab === "team" && <Team call={call} me={me} />}
+        {tab === "team" && <Team call={call} me={me} token={token} />}
         {tab === "controls" && <ControlsPanel call={call} />}
-        {tab === "trail" && <Trail call={call} />}
+        {tab === "trail" && <Trail call={call} token={token} />}
       </div>
     </div>
   );
 }
 
 type Call = (path: string, init?: RequestInit) => Promise<unknown>;
+
+/**
+ * Downloads a CSV. A plain link cannot carry the bearer token, so the file is
+ * fetched, turned into a blob, and handed to the browser as a save.
+ */
+function Download({ token, dataset, query = "", label }: { token: string; dataset: string; query?: string; label: string }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function go() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const res = await fetch(`${API}/command/export/${dataset}.csv${query}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("content-disposition")?.match(/filename="(.+?)"/)?.[1] ?? `${dataset}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button className="btn quiet small" onClick={go} disabled={busy}>
+      {busy ? "Preparing" : failed ? "That did not download, try again" : label}
+    </button>
+  );
+}
 
 /* ---------- sign in ---------- */
 
@@ -322,7 +361,7 @@ function Gate({ error, onToken }: { error: string | null; onToken: (t: string) =
 
 /* ---------- overview ---------- */
 
-function Overview({ call }: { call: Call }) {
+function Overview({ call, token }: { call: Call; token: string }) {
   const [days, setDays] = useState<number>(30);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -346,12 +385,15 @@ function Overview({ call }: { call: Call }) {
     <>
       <div className="cc-h">
         <h2>Overview</h2>
-        <div className="cc-tabs">
-          {RANGES.map((r) => (
-            <button key={r} className={days === r ? "on" : ""} onClick={() => setDays(r)}>
-              {r} days
-            </button>
-          ))}
+        <div className="cc-rowacts">
+          <span className="cc-tabs">
+            {RANGES.map((r) => (
+              <button key={r} className={days === r ? "on" : ""} onClick={() => setDays(r)}>
+                {r} days
+              </button>
+            ))}
+          </span>
+          <Download token={token} dataset="metrics" query={`?days=${days}`} label="Download these days" />
         </div>
       </div>
       <p className="cc-lede">Everything happening on the platform, counted, with nobody named.</p>
@@ -423,7 +465,7 @@ function PlanBars({ mix }: { mix: Array<{ plan: string; count: number }> }) {
 
 /* ---------- safety ---------- */
 
-function Safety({ call }: { call: Call }) {
+function Safety({ call, token }: { call: Call; token: string }) {
   const [severity, setSeverity] = useState<"" | "danger" | "concern">("");
   const [data, setData] = useState<SafetyView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -449,12 +491,20 @@ function Safety({ call }: { call: Call }) {
     <>
       <div className="cc-h">
         <h2>Safety</h2>
-        <div className="cc-tabs">
-          {([["", "Everything"], ["danger", "Danger"], ["concern", "Concern"]] as const).map(([v, label]) => (
-            <button key={v} className={severity === v ? "on" : ""} onClick={() => setSeverity(v)}>
-              {label}
-            </button>
-          ))}
+        <div className="cc-rowacts">
+          <span className="cc-tabs">
+            {([["", "Everything"], ["danger", "Danger"], ["concern", "Concern"]] as const).map(([v, label]) => (
+              <button key={v} className={severity === v ? "on" : ""} onClick={() => setSeverity(v)}>
+                {label}
+              </button>
+            ))}
+          </span>
+          <Download
+            token={token}
+            dataset="safety"
+            query={severity ? `?severity=${severity}` : ""}
+            label="Download this view"
+          />
         </div>
       </div>
       <p className="cc-lede">
@@ -526,7 +576,7 @@ function Safety({ call }: { call: Call }) {
 
 /* ---------- money ---------- */
 
-function Money({ call, me }: { call: Call; me: Me }) {
+function Money({ call, me, token }: { call: Call; me: Me; token: string }) {
   const [data, setData] = useState<Finance | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -549,6 +599,10 @@ function Money({ call, me }: { call: Call; me: Me }) {
     <>
       <div className="cc-h">
         <h2>Money</h2>
+        <div className="cc-rowacts">
+          <Download token={token} dataset="finance" label="Download the plan mix" />
+          {detail && <Download token={token} dataset="subscriptions" label="Download subscriptions" />}
+        </div>
       </div>
       <p className="cc-lede">
         Revenue counted from live subscriptions.
@@ -845,7 +899,7 @@ function People({ call, me }: { call: Call; me: Me }) {
 
 /* ---------- team ---------- */
 
-function Team({ call, me }: { call: Call; me: Me }) {
+function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
   const [roles, setRoles] = useState<string[]>([]);
   const [staff, setStaff] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -916,6 +970,7 @@ function Team({ call, me }: { call: Call; me: Me }) {
     <>
       <div className="cc-h">
         <h2>Team</h2>
+        <Download token={token} dataset="staff" label="Download the roster" />
       </div>
       <p className="cc-lede">
         Who holds which keys. Investors sit here too, on a role that can only ever reach counts and revenue
@@ -1178,7 +1233,7 @@ function ControlsPanel({ call }: { call: Call }) {
 
 /* ---------- trail ---------- */
 
-function Trail({ call }: { call: Call }) {
+function Trail({ call, token }: { call: Call; token: string }) {
   const [entries, setEntries] = useState<AuditRow[] | null>(null);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1207,6 +1262,7 @@ function Trail({ call }: { call: Call }) {
     <>
       <div className="cc-h">
         <h2>Trail</h2>
+        <Download token={token} dataset="audit" label="Download the trail" />
       </div>
       <p className="cc-lede">
         Every privileged action, permanently. Nothing in the console can delete from this, because an audit log
