@@ -10,6 +10,7 @@ import {
   type PlatformIncident,
   type PlatformMetrics,
   type SessionRecap,
+  type StaffHr,
   type StaffMember,
   type Store,
   type UsageKind,
@@ -523,6 +524,7 @@ export class MemoryStore implements Store {
     invitedBy: string | null;
     createdAt: Date;
     lastSeenAt: Date | null;
+    hr: StaffHr;
   }>();
   private auditRows: AuditRow[] = [];
 
@@ -541,6 +543,7 @@ export class MemoryStore implements Store {
     status: "active" | "suspended";
     createdAt: Date;
     lastSeenAt: Date | null;
+    hr: StaffHr;
   }): StaffMember {
     const account = this.accountFor(rec.userId);
     return {
@@ -552,6 +555,13 @@ export class MemoryStore implements Store {
       status: rec.status,
       createdAt: rec.createdAt,
       lastSeenAt: rec.lastSeenAt,
+      fullName: rec.hr.fullName ?? null,
+      employmentType: rec.hr.employmentType ?? null,
+      startDate: rec.hr.startDate ?? null,
+      endDate: rec.hr.endDate ?? null,
+      managerUserId: rec.hr.managerUserId ?? null,
+      location: rec.hr.location ?? null,
+      notes: rec.hr.notes ?? null,
     };
   }
 
@@ -582,11 +592,27 @@ export class MemoryStore implements Store {
       invitedBy: member.invitedBy ?? existing?.invitedBy ?? null,
       createdAt: existing?.createdAt ?? new Date(),
       lastSeenAt: existing?.lastSeenAt ?? null,
+      hr: existing?.hr ?? {},
     });
   }
 
+  async updateStaffHr(userId: string, hr: StaffHr) {
+    const rec = this.staff.get(userId);
+    if (!rec) return false;
+    // Only the keys given are touched; the rest of the record stands.
+    rec.hr = { ...rec.hr, ...hr };
+    return true;
+  }
+
   async removeStaff(userId: string) {
-    return this.staff.delete(userId);
+    const gone = this.staff.delete(userId);
+    // Nobody should be left reporting to someone who is no longer here.
+    if (gone) {
+      for (const rec of this.staff.values()) {
+        if (rec.hr.managerUserId === userId) rec.hr = { ...rec.hr, managerUserId: null };
+      }
+    }
+    return gone;
   }
 
   async touchStaffSeen(userId: string) {

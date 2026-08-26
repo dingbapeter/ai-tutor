@@ -11,6 +11,7 @@ import {
   type PlatformIncident,
   type PlatformMetrics,
   type SessionRecap,
+  type StaffHr,
   type StaffMember,
   type Store,
   type UsageKind,
@@ -800,6 +801,13 @@ export class PostgresStore implements Store {
         status: schema.staffMembers.status,
         createdAt: schema.staffMembers.createdAt,
         lastSeenAt: schema.staffMembers.lastSeenAt,
+        fullName: schema.staffMembers.fullName,
+        employmentType: schema.staffMembers.employmentType,
+        startDate: schema.staffMembers.startDate,
+        endDate: schema.staffMembers.endDate,
+        managerUserId: schema.staffMembers.managerUserId,
+        location: schema.staffMembers.location,
+        notes: schema.staffMembers.notes,
       })
       .from(schema.staffMembers)
       .innerJoin(schema.users, eq(schema.users.id, schema.staffMembers.userId));
@@ -840,6 +848,27 @@ export class PostgresStore implements Store {
   async removeStaff(userId: string) {
     const rows = await this.db
       .delete(schema.staffMembers)
+      .where(eq(schema.staffMembers.userId, userId))
+      .returning({ userId: schema.staffMembers.userId });
+    if (rows.length === 0) return false;
+    // Nobody should be left reporting to someone who is no longer here.
+    await this.db
+      .update(schema.staffMembers)
+      .set({ managerUserId: null })
+      .where(eq(schema.staffMembers.managerUserId, userId));
+    return true;
+  }
+
+  async updateStaffHr(userId: string, hr: StaffHr) {
+    // Only the keys given are touched; the rest of the record stands.
+    const set: Record<string, unknown> = {};
+    for (const key of ["fullName", "employmentType", "startDate", "endDate", "managerUserId", "location", "notes"] as const) {
+      if (hr[key] !== undefined) set[key] = hr[key];
+    }
+    if (Object.keys(set).length === 0) return (await this.getStaff(userId)) !== null;
+    const rows = await this.db
+      .update(schema.staffMembers)
+      .set(set)
       .where(eq(schema.staffMembers.userId, userId))
       .returning({ userId: schema.staffMembers.userId });
     return rows.length > 0;

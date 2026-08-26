@@ -89,6 +89,33 @@ interface StaffRow {
   status: "active" | "suspended";
   createdAt: string;
   lastSeenAt: string | null;
+  fullName: string | null;
+  employmentType: EmploymentType | null;
+  startDate: string | null;
+  endDate: string | null;
+  managerUserId: string | null;
+  location: string | null;
+  notes: string | null;
+}
+
+type EmploymentType = "employee" | "contractor" | "advisor" | "investor";
+
+const EMPLOYMENT_TYPES: EmploymentType[] = ["employee", "contractor", "advisor", "investor"];
+
+/** Whole months between a start date and today, for the tenure line. */
+function tenure(startDate: string | null): string {
+  if (!startDate) return "";
+  const start = new Date(`${startDate}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return "";
+  const months = Math.max(
+    0,
+    (new Date().getFullYear() - start.getFullYear()) * 12 + (new Date().getMonth() - start.getMonth()),
+  );
+  if (months < 1) return "started this month";
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"}`;
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  return rest ? `${years}y ${rest}m` : `${years} year${years === 1 ? "" : "s"}`;
 }
 
 interface AuditRow {
@@ -907,6 +934,7 @@ function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
   const [role, setRole] = useState("staff");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const canWrite = me.capabilities.includes("staff:write");
 
@@ -1014,9 +1042,11 @@ function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
             <table className="cc-table">
               <thead>
                 <tr>
+                  <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
                   <th>Title</th>
+                  <th>Engaged</th>
                   <th>Status</th>
                   <th>Last seen</th>
                   {canWrite && <th />}
@@ -1025,27 +1055,40 @@ function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
               <tbody>
                 {staff.map((s) => (
                   <tr key={s.userId}>
+                    <td>
+                      <b>{s.fullName || s.displayName || "not recorded"}</b>
+                      {s.startDate && <><br /><span className="cc-tag">{tenure(s.startDate)}</span></>}
+                    </td>
                     <td>{s.email}</td>
                     <td><span className={`cc-role ${s.role}`}>{s.role}</span></td>
                     <td>{s.title ?? ""}</td>
+                    <td>{s.employmentType ?? <span className="cc-tag">not recorded</span>}</td>
                     <td>
                       <span className={`cc-tag ${s.status === "active" ? "ok" : "bad"}`}>{s.status}</span>
                     </td>
                     <td>{s.lastSeenAt ? when(s.lastSeenAt) : "never"}</td>
                     {canWrite && (
                       <td>
-                        {s.userId === me.userId ? (
-                          <span className="cc-tag">you</span>
-                        ) : (
-                          <span className="cc-rowacts">
-                            {s.status === "active" ? (
-                              <button className="btn quiet small" onClick={() => setStatus(s, "suspended")}>Suspend</button>
-                            ) : (
-                              <button className="btn quiet small" onClick={() => setStatus(s, "active")}>Restore</button>
-                            )}
-                            <button className="btn danger small" onClick={() => remove(s)}>Remove</button>
-                          </span>
-                        )}
+                        <span className="cc-rowacts">
+                          <button
+                            className="btn quiet small"
+                            onClick={() => setEditing(editing === s.userId ? null : s.userId)}
+                          >
+                            {editing === s.userId ? "Close" : "Details"}
+                          </button>
+                          {s.userId === me.userId ? (
+                            <span className="cc-tag">you</span>
+                          ) : (
+                            <>
+                              {s.status === "active" ? (
+                                <button className="btn quiet small" onClick={() => setStatus(s, "suspended")}>Suspend</button>
+                              ) : (
+                                <button className="btn quiet small" onClick={() => setStatus(s, "active")}>Restore</button>
+                              )}
+                              <button className="btn danger small" onClick={() => remove(s)}>Remove</button>
+                            </>
+                          )}
+                        </span>
                       </td>
                     )}
                   </tr>
@@ -1055,6 +1098,27 @@ function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
           </div>
         )}
       </div>
+
+      {canWrite && editing && staff && (
+        <EmploymentRecord
+          key={editing}
+          call={call}
+          person={staff.find((s) => s.userId === editing)!}
+          roster={staff}
+          onSaved={async () => {
+            await load();
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {staff && staff.some((s) => s.managerUserId) && (
+        <div className="cc-panel">
+          <h3>Who reports to whom</h3>
+          <p>Built from the reporting lines on each record.</p>
+          <OrgChart roster={staff} />
+        </div>
+      )}
 
       <div className="cc-panel">
         <h3>What each role can reach</h3>
@@ -1080,6 +1144,190 @@ function Team({ call, me, token }: { call: Call; me: Me; token: string }) {
       </div>
     </>
   );
+}
+
+/** The employment half of a record: who someone is and how they are engaged. */
+function EmploymentRecord({
+  call,
+  person,
+  roster,
+  onSaved,
+  onClose,
+}: {
+  call: Call;
+  person: StaffRow;
+  roster: StaffRow[];
+  onSaved: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState({
+    fullName: person.fullName ?? "",
+    employmentType: person.employmentType ?? "",
+    startDate: person.startDate ?? "",
+    endDate: person.endDate ?? "",
+    managerUserId: person.managerUserId ?? "",
+    location: person.location ?? "",
+    notes: person.notes ?? "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      // Empty means "not recorded", which is null on the wire, not "".
+      const blank = (v: string) => (v.trim() ? v.trim() : null);
+      await call(`/command/staff/${person.userId}/hr`, {
+        method: "PUT",
+        body: JSON.stringify({
+          fullName: blank(draft.fullName),
+          employmentType: draft.employmentType ? draft.employmentType : null,
+          startDate: blank(draft.startDate),
+          endDate: blank(draft.endDate),
+          managerUserId: blank(draft.managerUserId),
+          location: blank(draft.location),
+          notes: blank(draft.notes),
+        }),
+      });
+      await onSaved();
+      setSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const others = roster.filter((r) => r.userId !== person.userId);
+
+  return (
+    <div className="cc-panel">
+      <div className="cc-h">
+        <h3>{person.fullName || person.displayName || person.email}</h3>
+        <button className="btn quiet small" onClick={onClose}>Close</button>
+      </div>
+      <p>
+        {person.email}
+        {person.startDate ? `, ${tenure(person.startDate)} in` : ""}
+        {person.endDate ? `, left ${person.endDate}` : ""}
+      </p>
+
+      {error && <div className="err">{error}</div>}
+      {saved && !error && <div className="notice">Saved.</div>}
+
+      <div className="cc-form">
+        <div>
+          <label className="lbl" htmlFor="hr-name">Legal name</label>
+          <input
+            id="hr-name"
+            className="inp"
+            value={draft.fullName}
+            maxLength={120}
+            onChange={(e) => setDraft({ ...draft, fullName: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="lbl" htmlFor="hr-type">Engaged as</label>
+          <select
+            id="hr-type"
+            className="inp"
+            value={draft.employmentType}
+            onChange={(e) => setDraft({ ...draft, employmentType: e.target.value })}
+          >
+            <option value="">not recorded</option>
+            {EMPLOYMENT_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="lbl" htmlFor="hr-where">Based in</label>
+          <input
+            id="hr-where"
+            className="inp"
+            value={draft.location}
+            maxLength={120}
+            onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+          />
+        </div>
+        <div />
+        <div>
+          <label className="lbl" htmlFor="hr-start">Started</label>
+          <input id="hr-start" className="inp" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} />
+        </div>
+        <div>
+          <label className="lbl" htmlFor="hr-end">Left</label>
+          <input id="hr-end" className="inp" type="date" value={draft.endDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} />
+        </div>
+        <div>
+          <label className="lbl" htmlFor="hr-manager">Reports to</label>
+          <select
+            id="hr-manager"
+            className="inp"
+            value={draft.managerUserId}
+            onChange={(e) => setDraft({ ...draft, managerUserId: e.target.value })}
+          >
+            <option value="">nobody</option>
+            {others.map((r) => (
+              <option key={r.userId} value={r.userId}>{r.fullName || r.email}</option>
+            ))}
+          </select>
+        </div>
+        <button className="btn" onClick={save} disabled={busy}>{busy ? "Saving" : "Save record"}</button>
+      </div>
+
+      <label className="lbl" htmlFor="hr-notes">Notes</label>
+      <textarea
+        id="hr-notes"
+        className="inp"
+        rows={3}
+        maxLength={2000}
+        value={draft.notes}
+        onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+        placeholder="Anything the next person in this seat would need to know."
+      />
+      <p className="cc-lede" style={{ margin: "8px 0 0" }}>
+        The trail records that this record changed and which fields, never what the notes say.
+      </p>
+    </div>
+  );
+}
+
+/** The reporting tree, drawn from the lines on each record. */
+function OrgChart({ roster }: { roster: StaffRow[] }) {
+  const byManager = new Map<string, StaffRow[]>();
+  for (const person of roster) {
+    const key = person.managerUserId ?? "";
+    byManager.set(key, [...(byManager.get(key) ?? []), person]);
+  }
+  const label = (p: StaffRow) => p.fullName || p.displayName || p.email;
+
+  // Depth is bounded by the roster size, and the API refuses loops, so this
+  // cannot run away even if a record is edited straight in the database.
+  function branch(managerId: string, depth: number): React.ReactElement | null {
+    const reports = byManager.get(managerId) ?? [];
+    if (reports.length === 0 || depth > roster.length) return null;
+    return (
+      <ul className="cc-tree">
+        {reports.map((p) => (
+          <li key={p.userId}>
+            <span className="cc-tree-person">
+              <b>{label(p)}</b>
+              <span className={`cc-role ${p.role}`}>{p.role}</span>
+              {p.title && <span className="cc-tag">{p.title}</span>}
+              {p.endDate && <span className="cc-tag bad">left {p.endDate}</span>}
+            </span>
+            {branch(p.userId, depth + 1)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return branch("", 0) ?? <p className="cc-empty">Everyone reports to somebody, which cannot be right.</p>;
 }
 
 /* ---------- controls ---------- */

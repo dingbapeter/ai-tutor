@@ -105,6 +105,16 @@ export const staffMembers = pgTable("staff_members", {
   invitedBy: uuid("invited_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at"),
+  /** ---- Employment record. Separate from console access above. ---- */
+  fullName: text("full_name"),
+  employmentType: text("employment_type", {
+    enum: ["employee", "contractor", "advisor", "investor"],
+  }),
+  startDate: text("start_date"), // ISO date, no clock: a start date is a day
+  endDate: text("end_date"),
+  managerUserId: uuid("manager_user_id"),
+  location: text("location"),
+  notes: text("notes"),
 });
 
 /**

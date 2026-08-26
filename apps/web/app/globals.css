@@ -758,7 +758,16 @@ select.inp {
   margin: 0 0 16px;
 }
 
-.cc-rowacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.cc-rowacts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
+
+/* The reporting tree: one indent per level, with a rule down the side so a
+   deep branch is still readable. */
+.cc-tree { list-style: none; margin: 0; padding: 0; }
+.cc-tree .cc-tree { margin-left: 10px; padding-left: 16px; border-left: 2px solid var(--line); }
+.cc-tree li { padding: 5px 0; }
+.cc-tree-person { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14.5px; }
 
 /* On a phone the tab strip drops to its own row, so the bar never pushes the
    page sideways. A board member checking the numbers on the way to a meeting

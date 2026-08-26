@@ -455,6 +455,155 @@ describe("staff management", () => {
   });
 });
 
+describe("employment records", () => {
+  async function idOf(email: string) {
+    const roster = (await app.inject({ method: "GET", url: "/command/staff", headers: auth("owner") })).json().staff;
+    return (roster as Array<{ email: string; userId: string }>).find((m) => m.email === email)!.userId;
+  }
+
+  it("turns a console row into an employment record", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    const res = await app.inject({
+      method: "PUT",
+      url: `/command/staff/${cfo}/hr`,
+      headers: auth("owner"),
+      payload: {
+        fullName: "Adaeze Okonkwo",
+        employmentType: "employee",
+        startDate: "2026-03-02",
+        location: "Lagos",
+        notes: "Runs the monthly close.",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const staff = res.json().staff;
+    expect(staff.fullName).toBe("Adaeze Okonkwo");
+    expect(staff.employmentType).toBe("employee");
+    expect(staff.startDate).toBe("2026-03-02");
+    // The console half of the record is untouched by an HR write.
+    expect(staff.role).toBe("finance");
+    expect(staff.status).toBe("active");
+  });
+
+  it("touches only the fields it was given", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    const res = await app.inject({
+      method: "PUT",
+      url: `/command/staff/${cfo}/hr`,
+      headers: auth("owner"),
+      payload: { location: "Abuja" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().staff.location).toBe("Abuja");
+    expect(res.json().staff.fullName).toBe("Adaeze Okonkwo"); // still there
+    expect(res.json().staff.startDate).toBe("2026-03-02");
+  });
+
+  it("refuses a reporting line that loops", async () => {
+    const owner = await idOf(OWNER);
+    const cfo = await idOf("cfo@dingba.ai");
+    const support = await idOf("support@dingba.ai");
+
+    // A chain: support -> cfo -> owner.
+    expect(
+      (await app.inject({ method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth("owner"), payload: { managerUserId: owner } })).statusCode,
+    ).toBe(200);
+    expect(
+      (await app.inject({ method: "PUT", url: `/command/staff/${support}/hr`, headers: auth("owner"), payload: { managerUserId: cfo } })).statusCode,
+    ).toBe(200);
+
+    // Reporting to yourself is the shortest loop there is.
+    const self = await app.inject({
+      method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth("owner"), payload: { managerUserId: cfo },
+    });
+    expect(self.statusCode).toBe(400);
+    expect(self.json().error).toContain("loops");
+
+    // And the long way round: owner -> support would close the chain.
+    const round = await app.inject({
+      method: "PUT", url: `/command/staff/${owner}/hr`, headers: auth("owner"), payload: { managerUserId: support },
+    });
+    expect(round.statusCode).toBe(400);
+    expect(round.json().error).toContain("loops");
+
+    // The line that does not loop still goes through.
+    expect((await store.getStaff(support))!.managerUserId).toBe(cfo);
+  });
+
+  it("will not point a reporting line at someone who is not staff", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    const outsider = (await store.getAccountByEmail("parent@family.example"))!.userId;
+    const res = await app.inject({
+      method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth("owner"), payload: { managerUserId: outsider },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain("staff list");
+  });
+
+  it("refuses an end date before the start date", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    const res = await app.inject({
+      method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth("owner"),
+      payload: { startDate: "2026-03-02", endDate: "2025-12-31" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain("end date");
+  });
+
+  it("insists on a real date rather than a sentence", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    const res = await app.inject({
+      method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth("owner"), payload: { startDate: "last March" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("keeps employment records away from anyone without staff:write", async () => {
+    const cfo = await idOf("cfo@dingba.ai");
+    for (const who of ["support", "finance", "investor"]) {
+      const res = await app.inject({
+        method: "PUT", url: `/command/staff/${cfo}/hr`, headers: auth(who), payload: { location: "nowhere" },
+      });
+      expect(res.statusCode, who).toBe(403);
+    }
+    expect((await store.getStaff(cfo))!.location).toBe("Abuja");
+  });
+
+  it("audits that a record changed without copying the notes into the trail", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/audit?action=staff.hr.change", headers: auth("owner") });
+    const entries = res.json().entries as Array<{ meta: { email: string; fields: string[] } }>;
+    expect(entries.length).toBeGreaterThan(0);
+    const withNotes = entries.find((e) => e.meta.fields.includes("notes"));
+    expect(withNotes).toBeDefined();
+    expect(JSON.stringify(withNotes)).not.toContain("monthly close");
+  });
+
+  it("leaves nobody reporting to someone who has been removed", async () => {
+    await register("leaving@dingba.ai");
+    await app.inject({ method: "POST", url: "/command/staff", headers: auth("owner"), payload: { email: "leaving@dingba.ai", role: "staff" } });
+    const leaver = await idOf("leaving@dingba.ai");
+    const stayer = await idOf("support@dingba.ai");
+    await app.inject({ method: "PUT", url: `/command/staff/${stayer}/hr`, headers: auth("owner"), payload: { managerUserId: leaver } });
+    expect((await store.getStaff(stayer))!.managerUserId).toBe(leaver);
+
+    await app.inject({ method: "DELETE", url: `/command/staff/${leaver}`, headers: auth("owner") });
+    expect((await store.getStaff(stayer))!.managerUserId).toBeNull();
+  });
+
+  it("carries the employment record into the roster export", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/export/staff.csv", headers: auth("owner") });
+    expect(res.statusCode).toBe(200);
+    const lines = res.body.split("\r\n").filter(Boolean);
+    expect(lines[0]).toContain("legal_name,account_name,role,title,employment_type");
+    expect(lines[0]).toContain("reports_to");
+    const cfoRow = lines.find((l) => l.startsWith("cfo@dingba.ai"))!;
+    expect(cfoRow).toContain("Adaeze Okonkwo");
+    expect(cfoRow).toContain("employee");
+    // The reporting line is written as an email, not a raw id nobody can read.
+    expect(cfoRow).toContain(OWNER);
+  });
+});
+
 describe("platform controls", () => {
   it("shows the switches to any staff member but lets only config:write flip them", async () => {
     const read = await app.inject({ method: "GET", url: "/command/controls", headers: auth("support") });

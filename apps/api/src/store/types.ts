@@ -313,6 +313,8 @@ export interface Store {
     invitedBy?: string;
   }): Promise<void>;
   removeStaff(userId: string): Promise<boolean>;
+  /** Writes the employment half of a record. Only the keys given are touched. */
+  updateStaffHr(userId: string, hr: StaffHr): Promise<boolean>;
   touchStaffSeen(userId: string): Promise<void>;
 
   /** Append-only audit trail. */
@@ -395,6 +397,28 @@ export interface StaffMember {
   status: "active" | "suspended";
   createdAt: Date;
   lastSeenAt: Date | null;
+  /** The employment record. Null throughout until someone fills it in. */
+  fullName: string | null;
+  employmentType: EmploymentType | null;
+  startDate: string | null;
+  endDate: string | null;
+  managerUserId: string | null;
+  location: string | null;
+  notes: string | null;
+}
+
+export const EMPLOYMENT_TYPES = ["employee", "contractor", "advisor", "investor"] as const;
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
+
+/** The employment half of a staff record, all of it optional. */
+export interface StaffHr {
+  fullName?: string | null;
+  employmentType?: EmploymentType | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  managerUserId?: string | null;
+  location?: string | null;
+  notes?: string | null;
 }
 
 export interface AuditEntry {

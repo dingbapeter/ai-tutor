@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { Store } from "../store/types.js";
+import { EMPLOYMENT_TYPES, type StaffHr, type StaffMember, type Store } from "../store/types.js";
 import { audit } from "./audit.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES, type Capability, type StaffRole } from "./rbac.js";
 import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
@@ -442,9 +442,16 @@ export async function registerCommandCentre(
           i.createdAt, i.severity, i.direction, i.studentName, i.guardianEmail ?? "", i.categories.join(" "), i.excerpt,
         ]);
       } else if (dataset === "staff") {
-        headers = ["email", "name", "role", "title", "status", "added_at", "last_seen_at"];
-        rows = (await store.listStaff()).map((m) => [
-          m.email, m.displayName ?? "", m.role, m.title ?? "", m.status, m.createdAt, m.lastSeenAt ?? "",
+        const roster = await store.listStaff();
+        const emailOf = new Map(roster.map((m) => [m.userId, m.email]));
+        headers = [
+          "email", "legal_name", "account_name", "role", "title", "employment_type",
+          "start_date", "end_date", "reports_to", "location", "console_status", "added_at", "last_seen_at",
+        ];
+        rows = roster.map((m) => [
+          m.email, m.fullName ?? "", m.displayName ?? "", m.role, m.title ?? "", m.employmentType ?? "",
+          m.startDate ?? "", m.endDate ?? "", m.managerUserId ? emailOf.get(m.managerUserId) ?? "" : "",
+          m.location ?? "", m.status, m.createdAt, m.lastSeenAt ?? "",
         ]);
       } else {
         headers = ["at", "actor", "role", "action", "target", "details", "ip"];
@@ -459,6 +466,77 @@ export async function registerCommandCentre(
         .header("content-type", "text/csv; charset=utf-8")
         .header("content-disposition", `attachment; filename="${csvFilename(dataset, new Date())}"`)
         .send(toCsv(headers, rows));
+    },
+  );
+
+  // ---- Employment records ----
+
+  /**
+   * A reporting line must be a tree, not a knot. Walking up from the proposed
+   * manager, anyone who reaches the person being edited would create a loop,
+   * which would hang every org chart that ever tried to render it.
+   */
+  function wouldLoop(roster: StaffMember[], userId: string, managerUserId: string): boolean {
+    if (managerUserId === userId) return true;
+    const byId = new Map(roster.map((m) => [m.userId, m]));
+    const seen = new Set<string>();
+    let cursor: string | null = managerUserId;
+    while (cursor && !seen.has(cursor)) {
+      if (cursor === userId) return true;
+      seen.add(cursor);
+      cursor = byId.get(cursor)?.managerUserId ?? null;
+    }
+    return false;
+  }
+
+  app.put<{ Params: { userId: string }; Body: StaffHr }>(
+    "/command/staff/:userId/hr",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            fullName: { type: ["string", "null"], maxLength: 120 },
+            employmentType: { type: ["string", "null"], enum: [...EMPLOYMENT_TYPES, null] },
+            // A start date is a day, so it is stored as one.
+            startDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            endDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            managerUserId: { type: ["string", "null"], format: "uuid" },
+            location: { type: ["string", "null"], maxLength: 120 },
+            notes: { type: ["string", "null"], maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const actor = await requireCap(req, reply, "staff:write");
+      if (!actor) return;
+      const roster = await store.listStaff();
+      const target = roster.find((m) => m.userId === req.params.userId);
+      if (!target) return reply.code(404).send({ error: "that person is not on the staff list" });
+
+      const hr = req.body;
+      if (hr.startDate && hr.endDate && hr.endDate < hr.startDate) {
+        return reply.code(400).send({ error: "the end date cannot fall before the start date" });
+      }
+      if (hr.managerUserId) {
+        if (!roster.some((m) => m.userId === hr.managerUserId)) {
+          return reply.code(400).send({ error: "a manager has to be on the staff list too" });
+        }
+        if (wouldLoop(roster, target.userId, hr.managerUserId)) {
+          return reply.code(400).send({ error: "that reporting line loops back on itself" });
+        }
+      }
+
+      await store.updateStaffHr(target.userId, hr);
+      // Notes can carry sensitive detail, so record that it changed, not what to.
+      await audit(store, actor, "staff.hr.change", {
+        target: target.userId,
+        meta: { email: target.email, fields: Object.keys(hr) },
+        ip: ipOf(req),
+      });
+      return { staff: await store.getStaff(target.userId) };
     },
   );
 
