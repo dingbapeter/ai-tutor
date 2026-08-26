@@ -7,6 +7,7 @@ import {
   type LearnerProfile,
   type LearnerRoutine,
   type MasteryState,
+  type PlatformIncident,
   type PlatformMetrics,
   type SessionRecap,
   type StaffMember,
@@ -356,6 +357,7 @@ export class MemoryStore implements Store {
   }
 
   private incidents: Array<{
+    id: string;
     studentId: string;
     sessionId?: string;
     direction: "student" | "tutor";
@@ -373,7 +375,7 @@ export class MemoryStore implements Store {
     severity: "concern" | "danger";
     excerpt: string;
   }) {
-    this.incidents.push({ ...incident, createdAt: new Date() });
+    this.incidents.push({ ...incident, id: crypto.randomUUID(), createdAt: new Date() });
   }
 
   async listIncidents(studentId: string, limit: number) {
@@ -601,6 +603,46 @@ export class MemoryStore implements Store {
       .filter((r) => !opts.action || r.action === opts.action)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);
+  }
+
+  async listPlatformIncidents(limit: number, opts: { severity?: "concern" | "danger" } = {}) {
+    return this.incidents
+      .filter((i) => !opts.severity || i.severity === opts.severity)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((i): PlatformIncident => {
+        const profile = this.profiles.get(i.studentId);
+        const owner = profile ? this.accountFor(profile.ownerUserId) : null;
+        return {
+          id: i.id,
+          studentId: i.studentId,
+          studentName: profile?.displayName ?? "unknown learner",
+          guardianEmail: owner?.email ?? null,
+          direction: i.direction,
+          categories: i.categories,
+          severity: i.severity,
+          excerpt: i.excerpt,
+          createdAt: i.createdAt,
+        };
+      });
+  }
+
+  async countIncidentsSince(since: Date) {
+    const recent = this.incidents.filter((i) => i.createdAt >= since);
+    return {
+      concern: recent.filter((i) => i.severity === "concern").length,
+      danger: recent.filter((i) => i.severity === "danger").length,
+    };
+  }
+
+  private settings = new Map<string, unknown>();
+
+  async getSetting(key: string) {
+    return this.settings.has(key) ? this.settings.get(key) : null;
+  }
+
+  async setSetting(key: string, value: unknown) {
+    this.settings.set(key, value);
   }
 
   async platformMetrics(days: number): Promise<PlatformMetrics> {

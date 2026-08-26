@@ -102,13 +102,41 @@ interface AuditRow {
   createdAt: string;
 }
 
-type Tab = "overview" | "money" | "people" | "team" | "trail";
+interface Incident {
+  id: string;
+  studentId: string;
+  studentName: string;
+  guardianEmail: string | null;
+  direction: string;
+  categories: string[];
+  severity: string;
+  excerpt: string;
+  createdAt: string;
+}
+
+interface SafetyView {
+  severity: string | null;
+  today: { concern: number; danger: number };
+  week: { concern: number; danger: number };
+  incidents: Incident[];
+}
+
+interface Controls {
+  signupsPaused: boolean;
+  signupsPausedReason: string;
+  notice: string;
+  noticeLevel: "info" | "warn";
+}
+
+type Tab = "overview" | "safety" | "money" | "people" | "team" | "controls" | "trail";
 
 const TABS: Array<{ id: Tab; label: string; needs: Capability }> = [
   { id: "overview", label: "Overview", needs: "metrics:read" },
+  { id: "safety", label: "Safety", needs: "safety:read" },
   { id: "money", label: "Money", needs: "finance:aggregate" },
   { id: "people", label: "People", needs: "people:read" },
   { id: "team", label: "Team", needs: "staff:read" },
+  { id: "controls", label: "Controls", needs: "config:write" },
   { id: "trail", label: "Trail", needs: "audit:read" },
 ];
 
@@ -232,9 +260,11 @@ export default function CommandCentre() {
           <p className="cc-empty">This role has no console sections yet. Ask an owner to widen it.</p>
         )}
         {tab === "overview" && <Overview call={call} />}
+        {tab === "safety" && <Safety call={call} />}
         {tab === "money" && <Money call={call} me={me} />}
         {tab === "people" && <People call={call} me={me} />}
         {tab === "team" && <Team call={call} me={me} />}
+        {tab === "controls" && <ControlsPanel call={call} />}
         {tab === "trail" && <Trail call={call} />}
       </div>
     </div>
@@ -388,6 +418,109 @@ function PlanBars({ mix }: { mix: Array<{ plan: string; count: number }> }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/* ---------- safety ---------- */
+
+function Safety({ call }: { call: Call }) {
+  const [severity, setSeverity] = useState<"" | "danger" | "concern">("");
+  const [data, setData] = useState<SafetyView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (sev: string) => {
+      setError(null);
+      try {
+        const q = sev ? `?severity=${sev}` : "";
+        setData((await call(`/command/safety${q}`)) as SafetyView);
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [call],
+  );
+
+  useEffect(() => {
+    load(severity);
+  }, [load, severity]);
+
+  return (
+    <>
+      <div className="cc-h">
+        <h2>Safety</h2>
+        <div className="cc-tabs">
+          {([["", "Everything"], ["danger", "Danger"], ["concern", "Concern"]] as const).map(([v, label]) => (
+            <button key={v} className={severity === v ? "on" : ""} onClick={() => setSeverity(v)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="cc-lede">
+        Every flag raised on the platform, newest first, so nobody has to know which family to look for. Opening
+        this page is written to the trail.
+      </p>
+
+      {error && <div className="err">{error}</div>}
+
+      {data && (
+        <>
+          <div className="cc-stats">
+            <Stat k="Danger, last 24h" v={num(data.today.danger)} n="guardians were emailed" alert={data.today.danger > 0} />
+            <Stat k="Concern, last 24h" v={num(data.today.concern)} n="redirected in the moment" />
+            <Stat k="Danger, last 7 days" v={num(data.week.danger)} alert={data.week.danger > 0} />
+            <Stat k="Concern, last 7 days" v={num(data.week.concern)} />
+          </div>
+
+          <div className="cc-panel">
+            <h3>{data.incidents.length === 0 ? "Nothing flagged" : `${data.incidents.length} flagged`}</h3>
+            <p>Tutor-side flags mean the model produced something it should not have. Those are our bug, not the learner's.</p>
+            {data.incidents.length > 0 ? (
+              <div className="cc-table-wrap">
+                <table className="cc-table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Severity</th>
+                      <th>Learner</th>
+                      <th>Reach</th>
+                      <th>From</th>
+                      <th>Categories</th>
+                      <th>What was said</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.incidents.map((i) => (
+                      <tr key={i.id}>
+                        <td style={{ whiteSpace: "nowrap" }}>{when(i.createdAt)}</td>
+                        <td>
+                          <span className={`cc-tag ${i.severity === "danger" ? "bad" : "warn"}`}>{i.severity}</span>
+                        </td>
+                        <td>{i.studentName}</td>
+                        <td>
+                          {i.guardianEmail ? (
+                            <a href={`mailto:${i.guardianEmail}`}>{i.guardianEmail}</a>
+                          ) : (
+                            <span className="cc-tag">no account</span>
+                          )}
+                        </td>
+                        <td>{i.direction === "tutor" ? <span className="cc-tag bad">tutor</span> : "learner"}</td>
+                        <td>{i.categories.join(", ")}</td>
+                        <td>{i.excerpt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="cc-empty">Nothing has been flagged in this view.</p>
+            )}
+          </div>
+        </>
+      )}
+      {!data && !error && <p className="cc-empty">Checking.</p>}
+    </>
   );
 }
 
@@ -889,6 +1022,155 @@ function Team({ call, me }: { call: Call; me: Me }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </>
+  );
+}
+
+/* ---------- controls ---------- */
+
+function ControlsPanel({ call }: { call: Call }) {
+  const [live, setLive] = useState<Controls | null>(null);
+  const [draft, setDraft] = useState<Controls | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    call("/command/controls")
+      .then((b) => {
+        if (!alive) return;
+        const c = (b as { controls: Controls }).controls;
+        setLive(c);
+        setDraft(c);
+      })
+      .catch((e) => alive && setError((e as Error).message));
+    return () => {
+      alive = false;
+    };
+  }, [call]);
+
+  async function save(patch: Partial<Controls>) {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const b = (await call("/command/controls", { method: "PUT", body: JSON.stringify(patch) })) as { controls: Controls };
+      setLive(b.controls);
+      setDraft(b.controls);
+      setSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !live) return <div className="err">{error}</div>;
+  if (!live || !draft) return <p className="cc-empty">Reading the switches.</p>;
+
+  const noticeChanged = draft.notice !== live.notice || draft.noticeLevel !== live.noticeLevel;
+  const reasonChanged = draft.signupsPausedReason !== live.signupsPausedReason;
+
+  return (
+    <>
+      <div className="cc-h">
+        <h2>Controls</h2>
+      </div>
+      <p className="cc-lede">
+        Switches that take effect on the very next request, with no deploy. Every flip is written to the trail
+        with what it was before and what it became.
+      </p>
+
+      {error && <div className="err">{error}</div>}
+      {saved && !error && <div className="notice">Saved. It is live now.</div>}
+
+      <div className="cc-panel">
+        <h3>New signups</h3>
+        <p>
+          {live.signupsPaused
+            ? "Registration is closed. Anyone trying to join is turned away with the reason below."
+            : "Registration is open. Anyone can create an account."}
+        </p>
+        <div className="cc-rowacts">
+          <button
+            className={`btn ${live.signupsPaused ? "quiet" : ""}`}
+            disabled={busy || !live.signupsPaused}
+            onClick={() => save({ signupsPaused: false })}
+          >
+            Open
+          </button>
+          <button
+            className={`btn ${live.signupsPaused ? "" : "quiet"}`}
+            disabled={busy || live.signupsPaused}
+            onClick={() => save({ signupsPaused: true })}
+          >
+            Pause
+          </button>
+        </div>
+        <label className="lbl" htmlFor="pause-reason">What people are told while it is paused</label>
+        <input
+          id="pause-reason"
+          className="inp"
+          value={draft.signupsPausedReason}
+          maxLength={280}
+          onChange={(e) => setDraft({ ...draft, signupsPausedReason: e.target.value })}
+        />
+        <div style={{ height: 12 }} />
+        <button
+          className="btn small"
+          disabled={busy || !reasonChanged || draft.signupsPausedReason.trim().length === 0}
+          onClick={() => save({ signupsPausedReason: draft.signupsPausedReason })}
+        >
+          Save the wording
+        </button>
+      </div>
+
+      <div className="cc-panel">
+        <h3>Platform notice</h3>
+        <p>One line shown to everyone in the app. Leave it empty for no notice.</p>
+        <input
+          className="inp"
+          value={draft.notice}
+          maxLength={280}
+          placeholder="Voice lessons are slow this evening while we upgrade a server."
+          onChange={(e) => setDraft({ ...draft, notice: e.target.value })}
+          aria-label="Platform notice"
+        />
+        <label className="lbl">How it reads</label>
+        <div className="cc-rowacts">
+          {(["info", "warn"] as const).map((l) => (
+            <button
+              key={l}
+              className={`btn small ${draft.noticeLevel === l ? "" : "quiet"}`}
+              onClick={() => setDraft({ ...draft, noticeLevel: l })}
+            >
+              {l === "info" ? "Ordinary" : "Needs attention"}
+            </button>
+          ))}
+        </div>
+        <div style={{ height: 14 }} />
+        <div className="cc-rowacts">
+          <button
+            className="btn"
+            disabled={busy || !noticeChanged}
+            onClick={() => save({ notice: draft.notice, noticeLevel: draft.noticeLevel })}
+          >
+            {live.notice ? "Update the notice" : "Show this notice"}
+          </button>
+          {live.notice && (
+            <button className="btn quiet" disabled={busy} onClick={() => save({ notice: "" })}>
+              Clear it
+            </button>
+          )}
+        </div>
+        {live.notice && (
+          <>
+            <label className="lbl">Live right now</label>
+            <div className={live.noticeLevel === "warn" ? "cc-note" : "notice"}>{live.notice}</div>
+          </>
+        )}
       </div>
     </>
   );

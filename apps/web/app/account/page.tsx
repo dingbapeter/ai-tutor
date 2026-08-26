@@ -60,6 +60,7 @@ export default function Account() {
   const [transcript, setTranscript] = useState<{ studentId: string; messages: Array<{ role: string; content: string; createdAt: string }> } | null>(null);
   const [pushState, setPushState] = useState<"unknown" | "on" | "off" | "unsupported">("unknown");
   const [forgotSent, setForgotSent] = useState(false);
+  const [signupsPaused, setSignupsPaused] = useState<{ paused: boolean; reason: string }>({ paused: false, reason: "" });
   const [emailVerified, setEmailVerified] = useState(true);
   const [verifySent, setVerifySent] = useState(false);
   const [billingOn, setBillingOn] = useState(false);
@@ -71,6 +72,12 @@ export default function Account() {
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
     if (t) setToken(t);
+    // Whether new accounts are open is a Command Centre switch; ask before
+    // showing someone a form that cannot succeed.
+    fetch(`${API}/platform`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && setSignupsPaused({ paused: !!b.signupsPaused, reason: b.signupsPausedReason ?? "" }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -109,7 +116,9 @@ export default function Account() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          mode === "register" ? { email, password, displayName, role } : { email, password },
+          mode === "register"
+            ? { email, password, role, ...(displayName.trim() ? { displayName: displayName.trim() } : {}) }
+            : { email, password },
         ),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
@@ -294,6 +303,9 @@ export default function Account() {
         </div>
         {error && <p className="err">{error}</p>}
         <div className="card fadeUp">
+          {mode === "register" && signupsPaused.paused && (
+            <p className="notice" style={{ marginTop: 0 }}>{signupsPaused.reason}</p>
+          )}
           {mode === "register" && (
             <>
               <label className="lbl">Your name</label>
@@ -322,8 +334,13 @@ export default function Account() {
               children&apos;s learning data being processed to run their tutoring.
             </p>
           )}
-          <button onClick={submit} className="btn big" style={{ marginTop: 18 }}>
-            {mode === "login" ? "Sign in" : "Create account"}
+          <button
+            onClick={submit}
+            className="btn big"
+            style={{ marginTop: 18 }}
+            disabled={mode === "register" && signupsPaused.paused}
+          >
+            {mode === "login" ? "Sign in" : signupsPaused.paused ? "Signups are closed right now" : "Create account"}
           </button>
           <p style={{ textAlign: "center", marginBottom: 0 }}>
             <button onClick={() => setMode(mode === "login" ? "register" : "login")}

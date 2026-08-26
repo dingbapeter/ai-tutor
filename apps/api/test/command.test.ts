@@ -261,6 +261,65 @@ describe("finance and support desks", () => {
   });
 });
 
+describe("safety desk", () => {
+  beforeAll(async () => {
+    const account = await store.getAccountByEmail("parent@family.example");
+    const [learner] = await store.listStudentProfiles(account!.userId);
+    await store.recordIncident({
+      studentId: learner.id,
+      direction: "student",
+      categories: ["self-harm"],
+      severity: "danger",
+      excerpt: "i do not want to be here any more",
+    });
+    await store.recordIncident({
+      studentId: learner.id,
+      direction: "student",
+      categories: ["profanity"],
+      severity: "concern",
+      excerpt: "this stupid homework",
+    });
+  });
+
+  it("shows every flag on the platform without knowing the family first", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/safety", headers: auth("support") });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.incidents.length).toBeGreaterThanOrEqual(2);
+    // Newest first, and each row carries who to contact.
+    const danger = body.incidents.find((i: { severity: string }) => i.severity === "danger");
+    expect(danger.studentName).toBe("Ada");
+    expect(danger.guardianEmail).toBe("parent@family.example");
+    expect(danger.categories).toEqual(["self-harm"]);
+    expect(body.today.danger).toBe(1);
+    expect(body.today.concern).toBe(1);
+    expect(body.week.danger).toBe(1);
+  });
+
+  it("separates danger from concern rather than averaging them", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/safety?severity=danger", headers: auth("support") });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json().incidents as Array<{ severity: string }>;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.severity === "danger")).toBe(true);
+  });
+
+  it("never shows a child's flagged words to finance or an investor", async () => {
+    for (const who of ["finance", "investor"]) {
+      const res = await app.inject({ method: "GET", url: "/command/safety", headers: auth(who) });
+      expect(res.statusCode, who).toBe(403);
+      expect(res.body).not.toContain("i do not want to be here");
+    }
+  });
+
+  it("writes the reading of it to the trail", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/audit?action=safety.read", headers: auth("owner") });
+    const entries = res.json().entries as Array<{ actorEmail: string }>;
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].actorEmail).toBe("support@dingba.ai");
+  });
+});
+
 describe("staff management", () => {
   it("lists the roster with roles and titles", async () => {
     const res = await app.inject({ method: "GET", url: "/command/staff", headers: auth("owner") });
@@ -392,6 +451,115 @@ describe("staff management", () => {
       headers: { authorization: `Bearer ${secondToken}` },
     });
     expect(denied.statusCode).toBe(403);
+  });
+});
+
+describe("platform controls", () => {
+  it("shows the switches to any staff member but lets only config:write flip them", async () => {
+    const read = await app.inject({ method: "GET", url: "/command/controls", headers: auth("support") });
+    expect(read.statusCode).toBe(200);
+    expect(read.json().controls.signupsPaused).toBe(false);
+    expect(read.json().editable).toBe(false); // support cannot change config
+
+    const denied = await app.inject({
+      method: "PUT",
+      url: "/command/controls",
+      headers: auth("support"),
+      payload: { signupsPaused: true },
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+
+  it("actually refuses new accounts while signups are paused", async () => {
+    const before = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "early.bird@example.com", password: "correct-horse-battery" },
+    });
+    expect(before.statusCode).toBe(200);
+
+    const paused = await app.inject({
+      method: "PUT",
+      url: "/command/controls",
+      headers: auth("owner"),
+      payload: { signupsPaused: true, signupsPausedReason: "We are adding capacity, back within the hour." },
+    });
+    expect(paused.statusCode).toBe(200);
+    expect(paused.json().controls.signupsPaused).toBe(true);
+
+    // The switch takes effect on the very next request, not after a cache wait.
+    const refused = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "late.bird@example.com", password: "correct-horse-battery" },
+    });
+    expect(refused.statusCode).toBe(503);
+    expect(refused.json().error).toBe("We are adding capacity, back within the hour.");
+    expect(await store.getAccountByEmail("late.bird@example.com")).toBeNull();
+
+    const publicView = await app.inject({ method: "GET", url: "/platform" });
+    expect(publicView.json().signupsPaused).toBe(true);
+    expect(publicView.json().signupsPausedReason).toBe("We are adding capacity, back within the hour.");
+
+    // And reopening works just as immediately.
+    await app.inject({ method: "PUT", url: "/command/controls", headers: auth("owner"), payload: { signupsPaused: false } });
+    const reopened = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "late.bird@example.com", password: "correct-horse-battery" },
+    });
+    expect(reopened.statusCode).toBe(200);
+  });
+
+  it("names an account from its email when no name is given", async () => {
+    // The account page used to post an empty displayName, which failed schema
+    // validation and showed the person "Bad Request". It now omits the field.
+    const omitted = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "no.name@example.com", password: "correct-horse-battery", role: "parent" },
+    });
+    expect(omitted.statusCode).toBe(200);
+
+    const empty = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "blank.name@example.com", password: "correct-horse-battery", displayName: "" },
+    });
+    expect(empty.statusCode).toBe(400); // still refused, so the client must omit it
+  });
+
+  it("carries a notice to the whole platform and clears it again", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/command/controls",
+      headers: auth("owner"),
+      payload: { notice: "Voice lessons are slow this evening while we upgrade a server.", noticeLevel: "warn" },
+    });
+    const shown = await app.inject({ method: "GET", url: "/platform" });
+    expect(shown.json().notice).toContain("Voice lessons are slow");
+    expect(shown.json().noticeLevel).toBe("warn");
+
+    await app.inject({ method: "PUT", url: "/command/controls", headers: auth("owner"), payload: { notice: "" } });
+    expect((await app.inject({ method: "GET", url: "/platform" })).json().notice).toBe("");
+  });
+
+  it("bounds what can be stored rather than trusting the body", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/command/controls",
+      headers: auth("owner"),
+      payload: { notice: "x".repeat(400) },
+    });
+    expect(res.statusCode).toBe(400); // schema rejects it before it reaches the store
+  });
+
+  it("records every flip in the trail with before and after", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/audit?action=controls.change", headers: auth("owner") });
+    const entries = res.json().entries as Array<{ meta: { before: { signupsPaused: boolean }; after: { signupsPaused: boolean } } }>;
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.some((e) => e.meta.after.signupsPaused === true)).toBe(true);
+    expect(entries.some((e) => e.meta.before.signupsPaused === true && e.meta.after.signupsPaused === false)).toBe(true);
   });
 });
 

@@ -543,6 +543,18 @@ body[data-session="1"] .appbar { display: none; }
   * { animation: none !important; transition: none !important; }
 }
 
+/* A line from the Command Centre, above everything the learner is doing. */
+.platform-notice {
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.platform-notice.warn { background: var(--warn-soft); color: var(--warn-text); }
+body[data-session] .platform-notice { display: none; }
+
 /* ---------- command centre ----------
    The operator's console. Denser than the learner app, calmer in colour, and
    built from the same tokens so it never drifts from the brand. */

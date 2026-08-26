@@ -275,3 +275,15 @@ export const memories = pgTable("memories", {
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+/**
+ * Operational switches the Command Centre can flip without a deploy. One row
+ * per setting, read on the request path, so a change takes effect on the next
+ * request rather than the next release.
+ */
+export const platformSettings = pgTable("platform_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

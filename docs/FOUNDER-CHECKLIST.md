@@ -11,6 +11,12 @@ before real children use it, Part 4 is the horizon.
 
 ## Part 1: make the deploy real (an evening's work)
 
+### 1.0 Migrations
+
+Apply `packages/db/migrations/` in order, 0000 through 0011. The last two add
+the Command Centre: `0010_command_centre.sql` (staff and the audit trail) and
+`0011_platform_settings.sql` (the switches you flip from the Controls tab).
+
 ### 1.1 Postgres on Railway — nothing persists without this
 
 Right now every redeploy wipes accounts, learner profiles, mastery

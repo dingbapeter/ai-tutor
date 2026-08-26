@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Store } from "../store/types.js";
 import { audit } from "./audit.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES, type Capability, type StaffRole } from "./rbac.js";
+import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
 
 /**
  * The Command Centre API: the backend of everything. Metrics, money, people,
@@ -45,6 +46,7 @@ export async function registerCommandCentre(
   store: Store,
   env: Record<string, string | undefined>,
   userFromRequest: (req: FastifyRequest) => Promise<{ userId: string; email: string; role: string } | null>,
+  controls: ControlsReader,
 ) {
   const owners = bootstrapOwners(env);
 
@@ -251,6 +253,69 @@ export async function registerCommandCentre(
       return { userId: account.userId, plan: req.body.plan };
     },
   );
+
+  // ---- Platform controls ----
+
+  /**
+   * The switches, and flipping them. Everything here is honoured on the
+   * request path, so a control that reads "signups paused" means the next
+   * registration is actually refused.
+   */
+  app.get("/command/controls", async (req, reply) => {
+    const actor = await requireCap(req, reply, "metrics:read");
+    if (!actor) return;
+    return { controls: await controls.get(), editable: can(actor.role, "config:write") };
+  });
+
+  app.put<{ Body: Partial<PlatformControls> }>(
+    "/command/controls",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            signupsPaused: { type: "boolean" },
+            signupsPausedReason: { type: "string", maxLength: 280 },
+            notice: { type: "string", maxLength: 280 },
+            noticeLevel: { type: "string", enum: ["info", "warn"] },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const actor = await requireCap(req, reply, "config:write");
+      if (!actor) return;
+      const before = await controls.get();
+      const after = await controls.set(normalize({ ...before, ...req.body } as Record<string, unknown>), actor.userId);
+      await audit(store, actor, "controls.change", { meta: { before, after }, ip: ipOf(req) });
+      return { controls: after };
+    },
+  );
+
+  // ---- Safety desk ----
+
+  /**
+   * Every flag on the platform, without having to know which family to look
+   * for first. On a product children use, this is the screen that matters
+   * most, so danger is separated from concern rather than averaged into it.
+   */
+  app.get<{ Querystring: { severity?: string; limit?: string } }>("/command/safety", async (req, reply) => {
+    const actor = await requireCap(req, reply, "safety:read");
+    if (!actor) return;
+    const severity = req.query.severity === "danger" || req.query.severity === "concern" ? req.query.severity : undefined;
+    const n = Number(req.query.limit);
+    const limit = Number.isFinite(n) ? Math.max(1, Math.min(200, Math.floor(n))) : 50;
+    const now = Date.now();
+    const [incidents, today, week] = await Promise.all([
+      store.listPlatformIncidents(limit, { severity }),
+      store.countIncidentsSince(new Date(now - 24 * 60 * 60 * 1000)),
+      store.countIncidentsSince(new Date(now - 7 * 24 * 60 * 60 * 1000)),
+    ]);
+    // Reading children's flagged words is as privileged as it gets here.
+    await audit(store, actor, "safety.read", { meta: { severity: severity ?? "all", shown: incidents.length }, ip: ipOf(req) });
+    return { severity: severity ?? null, today, week, incidents };
+  });
 
   // ---- Staff and investors ----
 

@@ -319,6 +319,21 @@ export interface Store {
   recordAudit(entry: AuditEntry): Promise<void>;
   listAudit(limit: number, opts?: { action?: string }): Promise<AuditRow[]>;
 
+  /**
+   * Every safety flag across the platform, newest first. Names the learner and
+   * the account behind them, so it is gated on safety:read and nothing less.
+   */
+  listPlatformIncidents(
+    limit: number,
+    opts?: { severity?: "concern" | "danger" },
+  ): Promise<PlatformIncident[]>;
+  /** Flags raised since a moment, split by severity. For the desk's headline. */
+  countIncidentsSince(since: Date): Promise<{ concern: number; danger: number }>;
+
+  /** Operational switches, flipped from the Command Centre without a deploy. */
+  getSetting(key: string): Promise<unknown | null>;
+  setSetting(key: string, value: unknown, updatedBy: string): Promise<void>;
+
   /** Aggregate metrics for the Command Centre. No PII. */
   platformMetrics(days: number): Promise<PlatformMetrics>;
 
@@ -394,6 +409,20 @@ export interface AuditEntry {
 
 export interface AuditRow extends AuditEntry {
   id: string;
+  createdAt: Date;
+}
+
+/** A safety flag with enough context to act on it. Contains PII by design. */
+export interface PlatformIncident {
+  id: string;
+  studentId: string;
+  studentName: string;
+  /** The account that owns this learner, for reaching a guardian. */
+  guardianEmail: string | null;
+  direction: string;
+  categories: string[];
+  severity: string;
+  excerpt: string;
   createdAt: Date;
 }
 

@@ -8,6 +8,7 @@ import {
   type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
+  type PlatformIncident,
   type PlatformMetrics,
   type SessionRecap,
   type StaffMember,
@@ -881,6 +882,75 @@ export class PostgresStore implements Store {
       ip: r.ip ?? undefined,
       createdAt: r.createdAt,
     }));
+  }
+
+  async listPlatformIncidents(limit: number, opts: { severity?: "concern" | "danger" } = {}) {
+    // A learner belongs either to a guardian (parent_user_id) or, for adult
+    // self-learners, to their own account. Either one is who we would contact.
+    const rows = (await this.db.execute(sql`
+      select i.id, i.student_id, st.display_name as student_name,
+             coalesce(g.email, u.email) as guardian_email,
+             i.direction, i.categories, i.severity, i.excerpt, i.created_at
+      from safety_incidents i
+      join students st on st.id = i.student_id
+      left join users g on g.id = st.parent_user_id
+      left join users u on u.id = st.user_id
+      ${opts.severity ? sql`where i.severity = ${opts.severity}` : sql``}
+      order by i.created_at desc
+      limit ${Math.max(1, Math.min(500, Math.floor(limit)))}
+    `)) as unknown as Array<{
+      id: string;
+      student_id: string;
+      student_name: string;
+      guardian_email: string | null;
+      direction: string;
+      categories: string[];
+      severity: string;
+      excerpt: string;
+      created_at: Date;
+    }>;
+    return rows.map((r): PlatformIncident => ({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      // A generated @students.local address is bookkeeping, not a contact.
+      guardianEmail: r.guardian_email && !r.guardian_email.endsWith("@students.local") ? r.guardian_email : null,
+      direction: r.direction,
+      categories: r.categories,
+      severity: r.severity,
+      excerpt: r.excerpt,
+      createdAt: new Date(r.created_at),
+    }));
+  }
+
+  async countIncidentsSince(since: Date) {
+    const rows = (await this.db.execute(sql`
+      select
+        count(*) filter (where severity = 'concern') as concern,
+        count(*) filter (where severity = 'danger') as danger
+      from safety_incidents
+      where created_at >= ${since}
+    `)) as unknown as Array<{ concern: string | number; danger: string | number }>;
+    return { concern: Number(rows[0]?.concern ?? 0), danger: Number(rows[0]?.danger ?? 0) };
+  }
+
+  async getSetting(key: string) {
+    const rows = await this.db
+      .select({ value: schema.platformSettings.value })
+      .from(schema.platformSettings)
+      .where(eq(schema.platformSettings.key, key))
+      .limit(1);
+    return rows[0]?.value ?? null;
+  }
+
+  async setSetting(key: string, value: unknown, updatedBy: string) {
+    await this.db
+      .insert(schema.platformSettings)
+      .values({ key, value, updatedBy, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: schema.platformSettings.key,
+        set: { value, updatedBy, updatedAt: new Date() },
+      });
   }
 
   async platformMetrics(days: number): Promise<PlatformMetrics> {

@@ -19,6 +19,7 @@ import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 import { registerBilling } from "./billing.js";
 import { registerCommandCentre } from "./command/routes.js";
+import { ControlsReader } from "./command/settings.js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -135,6 +136,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
   const PLANS = plans ?? loadPlans();
+  // Operational switches, read on the request path (see command/settings.ts).
+  const controls = new ControlsReader(store);
   const limitsFor = (plan: string): PlanLimits => PLANS[plan] ?? PLANS.free;
   // "Daily" allowances use a rolling 24h window: fair in every timezone,
   // instead of resetting at the server's midnight.
@@ -316,6 +319,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     "/auth/register",
     { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } } },
     async (req, reply) => {
+      // Honour the Command Centre's signup pause before anything else.
+      const live = await controls.get();
+      if (live.signupsPaused) return reply.code(503).send({ error: live.signupsPausedReason });
       const { email, password, displayName, role } = req.body;
       const account = await store.createAccount(
         email,
@@ -2074,11 +2080,26 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     };
   });
 
+  /**
+   * The one line the whole platform reads: whether signups are open and
+   * whether there is a notice to show. Public on purpose, so the sign-up
+   * screen can say why it is closed before someone fills the form in.
+   */
+  app.get("/platform", async () => {
+    const live = await controls.get();
+    return {
+      signupsPaused: live.signupsPaused,
+      signupsPausedReason: live.signupsPaused ? live.signupsPausedReason : "",
+      notice: live.notice,
+      noticeLevel: live.noticeLevel,
+    };
+  });
+
   // ---- Billing (Sprint 6b) ----
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
 
   // ---- Command Centre (Sprint 15) ----
-  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store));
+  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls);
 
   return app;
 }
