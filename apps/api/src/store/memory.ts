@@ -207,6 +207,10 @@ export class MemoryStore implements Store {
     this.pushSubs.delete(endpoint);
   }
 
+  async listAccounts() {
+    return [...this.accounts.entries()].map(([email, a]) => ({ userId: a.userId, email }));
+  }
+
   async listAllPushSubscriptions() {
     return [...this.pushSubs.values()].map(({ userId, endpoint, p256dh, auth }) => ({ userId, endpoint, p256dh, auth }));
   }

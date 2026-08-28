@@ -549,6 +549,16 @@ export class PostgresStore implements Store {
     await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, endpoint));
   }
 
+  async listAccounts() {
+    // Guest-session learners get generated @students.local bookkeeping
+    // accounts; nobody reads that inbox, so the digest never writes to it.
+    const rows = (await this.db.execute(sql`
+      select id as user_id, email from users
+      where email not like '%@students.local' and password_hash is not null
+    `)) as unknown as Array<{ user_id: string; email: string }>;
+    return rows.map((r) => ({ userId: r.user_id, email: r.email }));
+  }
+
   async listAllPushSubscriptions() {
     return this.db
       .select({

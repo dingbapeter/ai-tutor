@@ -93,6 +93,10 @@ ADMIN_KEY=<long random string, for /admin endpoints>
 #   curl -X POST https://<api-domain>/admin/nudge-plans -H "x-admin-key: $ADMIN_KEY"
 # Each subscribed family gets one notification per learner who actually has
 # something to do today, with the specific item. Free days stay silent.
+# Weekly guardian digest: same idea, once a week (Sunday evening works well):
+#   curl -X POST https://<api-domain>/admin/weekly-digest -H "x-admin-key: $ADMIN_KEY"
+# Verified guardians with an active week get one plain email: sessions,
+# streak, what is due, safety flags, and the week ahead. Quiet weeks send nothing.
 ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>
 ```
 

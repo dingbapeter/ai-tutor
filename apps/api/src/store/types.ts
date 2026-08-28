@@ -253,6 +253,10 @@ export interface Store {
 
   savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
   listPushSubscriptions(userId: string): Promise<Array<{ endpoint: string; p256dh: string; auth: string }>>;
+  /** Every real account, for the weekly digest run. Generated learner
+   *  bookkeeping accounts are not included. */
+  listAccounts(): Promise<Array<{ userId: string; email: string }>>;
+
   /** Every device on the platform that asked for reminders, with its owner. */
   listAllPushSubscriptions(): Promise<Array<{ userId: string; endpoint: string; p256dh: string; auth: string }>>;
   deletePushSubscription(endpoint: string): Promise<void>;

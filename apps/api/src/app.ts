@@ -16,7 +16,7 @@ import {
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
-import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
+import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 import { registerBilling } from "./billing.js";
 import { registerCommandCentre } from "./command/routes.js";
@@ -2144,6 +2144,67 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       }
     }
     return { users: byUser.size, sent, quiet, stale };
+  });
+
+  /**
+   * The weekly digest run, for a cron hitting it once a week. Each guardian
+   * with a verified email and at least one learner gets one plain email:
+   * sessions, streak, what is due, safety flags, and the week ahead. An
+   * account with a completely quiet week is left in peace.
+   */
+  app.post("/admin/weekly-digest", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    let composed = 0;
+    let delivered = 0;
+    let quiet = 0;
+    let unverified = 0;
+
+    for (const account of await store.listAccounts()) {
+      const students = await store.listStudentProfiles(account.userId);
+      if (students.length === 0) continue;
+      if (!(await store.isEmailVerified(account.userId))) {
+        unverified += 1; // recaps and alerts already require this; so does the digest
+        continue;
+      }
+
+      const learners: DigestLearner[] = [];
+      for (const s of students) {
+        const [sessions, streakDays, due, incidents, plan] = await Promise.all([
+          store.listSessionSummaries(s.id, 30),
+          store.getStreakDays(s.id),
+          store.getDueSkills(s.id, 4),
+          store.listIncidents(s.id, 20),
+          planFor(s.id),
+        ]);
+        learners.push({
+          name: s.displayName,
+          sessionsThisWeek: sessions.filter((x) => x.startedAt >= weekAgo).length,
+          streakDays,
+          dueSkills: due.map((d) => skillTitle(d.skillId)),
+          safetyFlags: incidents.filter((i) => i.createdAt >= weekAgo).length,
+          planHeadline: plan.headline,
+        });
+      }
+
+      const anythingToSay = learners.some(
+        (l) => l.sessionsThisWeek > 0 || l.dueSkills.length > 0 || l.safetyFlags > 0,
+      );
+      if (!anythingToSay) {
+        quiet += 1;
+        continue;
+      }
+
+      composed += 1;
+      try {
+        if ((await sendWeeklyDigest({ to: account.email, learners })) === "sent") delivered += 1;
+      } catch (err) {
+        req.log.error({ err, to: account.email }, "weekly digest failed");
+      }
+    }
+    return { composed, delivered, quiet, unverified };
   });
 
   /** Usage summary for the signed-in account (today + this month). */
