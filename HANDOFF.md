@@ -28,13 +28,18 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 ## State: what is DONE and VERIFIED
 
 See the honesty table in `README.md` — it is the single source of truth and
-you MUST keep it updated. Summary: Sprints 1–6a complete + 6b core
-(billing, email verification) + Sprint 7 (rebrand, adult verticals, app
-shell, live presence) + Brain v1 + homepage + adaptive engine v1.
-68 API + 7 gateway + 7 mathcheck tests pass. Show Dingba (photo input) and routine upload shipped. The stack was live-verified
-against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
-to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
-full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
+you MUST keep it updated. Summary as of 2026-08-28: Sprints 1–23 complete.
+On top of the original tutor stack (personas, voice, memory, verified math,
+safety, billing, 91 languages) the platform now has: the Command Centre at
+`/command` (RBAC with investors on the smallest capability surface, staff +
+HR with an org chart, safety desk, platform controls that bite, audit trail,
+CSV exports, the money ledger with failed payments and refunds), study plans
+(deterministic weekly planner), plan-aware push reminders and a guardian
+weekly digest (both cron-triggered), and lessons (structured briefs the
+personas deliver, problems only from the verified bank). 180 TypeScript +
+7 Python tests, all CI-green on branch `claude/ai-tutor-continuation-dwrohy`
+(runs 30–39). WhatsApp and full-duplex LiveKit voice/video are NOT built:
+WhatsApp needs credentials, LiveKit needs the founder's interface code.
 
 ## House rules (the founder's standing instructions)
 
@@ -90,17 +95,19 @@ rebrand → new homepage → Brain v1 → adaptive engine v1 (the scoped
 warm-ups/scheduling work folds in here) → Ask/Show Dingba. The founder's
 infrastructure (Contabo, SMTP, etc.) is confirmed available.
 
-1. ~~Push (step zero), then set up CI~~ DONE 2026-08-24: GitHub Actions
-   (`.github/workflows/ci.yml`) runs typecheck + all three test suites on
-   every push and PR.
-2. ~~Sprint 6b core~~ BUILT 2026-08-24: Stripe/Paystack billing (checkout,
-   signature-verified webhooks → plan flips, cancellation downgrade) and
-   email verification. Needs live keys + a real checkout at deploy.
-   Remaining 6b: study plans & scheduling, WhatsApp nudges.
-3. Deploy per `deploy/DEPLOY.md` (7B model minimum — 0.5B was only a
-   protocol test; pedagogy quality demands the bigger model).
-4. Phase 2: LiveKit full-duplex voice, whiteboard, homework camera, avatar
-   v1, group voice classes, cartoon formats (IDEAS.md #001/#006).
+1. ~~CI~~ DONE. ~~Sprint 6b core (billing, verification)~~ DONE.
+   ~~Command Centre~~ DONE (sprints 15–19). ~~Study plans, reminders,
+   digest, lessons~~ DONE (sprints 20–23).
+2. NEXT: the founder deploys per `deploy/DEPLOY.md` and
+   `docs/FOUNDER-CHECKLIST.md` (migrations through 0013,
+   COMMAND_OWNER_EMAILS, plan prices, two cron curls for
+   /admin/nudge-plans and /admin/weekly-digest, 7B model minimum).
+3. THEN: judge everything marked "quality rides the real model" against the
+   deployed 7B (greeting, attunement, lesson narration, vision
+   transcription) and iterate on prompts, not plumbing.
+4. Phase 2, blocked on the founder: LiveKit full-duplex voice/video (needs
+   their interface code), WhatsApp nudges (needs Business API credentials).
+   Parked in IDEAS.md: whiteboard, avatar v1, cartoon formats (#001/#006).
 
 Keep the energy: this project moves in decisive, fully-tested sprints with
 honest reporting. The founder says "go" and means it.
