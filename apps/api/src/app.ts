@@ -290,6 +290,16 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
   }
 
+  /**
+   * Whether a machine can grade this problem: a symbolic check the verifier
+   * understands, or an exact answer on file. Rubric problems (visa answers,
+   * coaching reflections) are the tutor's to judge in conversation, so no
+   * timed or scored surface may include them.
+   */
+  const machineVerifiable = (p: { check?: unknown; answer?: unknown }) =>
+    ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) ||
+    p.answer !== undefined;
+
   /** TTS cache: identical text+voice never hits the engine twice. */
   const ttsCache = new Map<string, { audio: Uint8Array; mimeType: string }>();
   async function cachedSpeak(text: string, voiceId: string) {
@@ -1049,6 +1059,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         speaksAloud: Boolean(findLanguage(language)?.voices),
         remembered: memoryLines.length,
         greeting,
+        // Whether this pack can run scored surfaces (level check, mock exam).
+        // Rubric-only packs are tutor-judged in conversation, so the client
+        // should show no scored doors at all rather than doors that refuse.
+        examinable: pack.problems.some((p) => machineVerifiable(p)),
         // Answers stay server-side; the client sees the shape, never the keys.
         lesson: lesson
           ? { skillId: lesson.skillId, title: lesson.title, objective: lesson.objective, practiceCount: lesson.practice.length }
@@ -1651,13 +1665,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const pack = loadPack(session.packId);
 
     // Up to 2 machine-verifiable problems per skill, in curriculum order.
-    const verifiable = (p: (typeof pack.problems)[number]) =>
-      ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) || p.answer !== undefined;
     const problemIndexes: number[] = [];
     for (const skill of pack.skills) {
       const picked = pack.problems
         .map((p, i) => ({ p, i }))
-        .filter(({ p }) => p.skillId === skill.id && verifiable(p))
+        .filter(({ p }) => p.skillId === skill.id && machineVerifiable(p))
         .slice(0, 2)
         .map(({ i }) => i);
       problemIndexes.push(...picked);
@@ -1789,12 +1801,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
     if (session.exam) return reply.code(409).send({ error: "an exam is already in progress" });
     const pack = loadPack(session.packId);
+    // A scored exam may only contain problems a machine can actually grade.
+    // Before this filter, a learner could sit a timed mock on a rubric-only
+    // pack and score zero no matter what they wrote.
     const problemIndexes = pack.problems
       .map((p, i) => ({ p, i }))
-      .filter(({ p }) => p.skillId)
+      .filter(({ p }) => p.skillId && machineVerifiable(p))
       .slice(0, 8)
       .map(({ i }) => i);
-    if (problemIndexes.length === 0) return reply.code(400).send({ error: "this pack has no exam problems" });
+    if (problemIndexes.length === 0) {
+      return reply.code(400).send({ error: "this subject has no timed mock yet, practice with your tutor instead" });
+    }
     session.exam = { problemIndexes, answers: new Map(), startedAt: Date.now() };
     await meter(session, "exam");
     return {
@@ -1850,18 +1867,22 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const results = exam.problemIndexes.map((i) => {
       const p = pack.problems[i];
       const a = exam.answers.get(i);
-      return { index: i, prompt: p.prompt, skillId: p.skillId, answer: a?.answer ?? null, correct: a?.correct ?? false };
+      // Blank in a timed exam is wrong; answered-but-unverifiable (the
+      // checker down mid-exam) is unscored, and must never read as wrong.
+      const correct = a === undefined ? false : a.correct;
+      return { index: i, prompt: p.prompt, skillId: p.skillId, answer: a?.answer ?? null, correct };
     });
     for (const r of results) {
-      if (r.skillId && r.answer !== null) {
-        await store.recordAttempt(session.studentId, String(r.skillId), Boolean(r.correct));
+      if (r.skillId && r.answer !== null && r.correct !== null) {
+        await store.recordAttempt(session.studentId, String(r.skillId), r.correct);
         const o = session.skillOutcomes.get(String(r.skillId)) ?? { correct: 0, total: 0 };
         o.total += 1;
         if (r.correct) o.correct += 1;
         session.skillOutcomes.set(String(r.skillId), o);
       }
     }
-    const correctCount = results.filter((r) => r.correct).length;
+    const unscored = results.filter((r) => r.correct === null).length;
+    const correctCount = results.filter((r) => r.correct === true).length;
     const durationSec = Math.round((Date.now() - exam.startedAt) / 1000);
 
     let postMortem = "";
@@ -1871,8 +1892,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         {
           role: "user",
           content:
-            `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length} in ${durationSec}s. Results: ` +
-            results.map((r) => `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct ? "✓" : "✗"}]`).join(" ") +
+            `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length - unscored} in ${durationSec}s.` +
+            (unscored ? ` ${unscored} answer(s) could not be machine-checked; judge those yourself, kindly.` : "") +
+            ` Results: ` +
+            results.map((r) => `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct === null ? "?" : r.correct ? "✓" : "✗"}]`).join(" ") +
             ` As the tutor, write a short post-mortem: celebrate what went right, name the pattern behind the misses, and give the single highest-impact thing to practice before the real exam.`,
         },
       ],
@@ -1882,7 +1905,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     session.history.push({ role: "assistant", content: postMortem });
     await store.saveMessage(session.id, "assistant", postMortem);
 
-    return { score: correctCount, of: results.length, durationSec, results, postMortem };
+    return { score: correctCount, of: results.length - unscored, unscored, durationSec, results, postMortem };
   });
 
   // ---- Orgs (schools): seats, roster, teacher dashboard ----
@@ -2161,7 +2184,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const subs = await store.listPushSubscriptions(account.userId);
       const webpush = (await import("web-push")).default;
       webpush.setVapidDetails(
-        env.VAPID_SUBJECT ?? "mailto:tutor@example.com",
+        env.VAPID_SUBJECT ?? "mailto:tutor@dingba.ai",
         env.VAPID_PUBLIC_KEY,
         env.VAPID_PRIVATE_KEY,
       );
@@ -2233,7 +2256,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
     const webpush = (await import("web-push")).default;
     webpush.setVapidDetails(
-      env.VAPID_SUBJECT ?? "mailto:tutor@example.com",
+      env.VAPID_SUBJECT ?? "mailto:tutor@dingba.ai",
       env.VAPID_PUBLIC_KEY,
       env.VAPID_PRIVATE_KEY,
     );

@@ -1,5 +1,5 @@
 {
-  "note": "Entitlements per plan. Limits are per-day unless stated. Billing flips users.plan later; until then the admin endpoint sets it.",
+  "note": "Entitlements per plan. Limits are per-day unless stated. Billing webhooks flip users.plan automatically; /admin/plan remains the manual override.",
   "plans": {
     "free": {
       "dailyMessages": 30,

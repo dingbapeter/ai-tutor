@@ -104,6 +104,7 @@ export default function Home() {
   const [showPractice, setShowPractice] = useState(false);
   const [lessonSkillId, setLessonSkillId] = useState<string | null>(null);
   const [lessonTitle, setLessonTitle] = useState<string | null>(null);
+  const [examinable, setExaminable] = useState(true);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [verdicts, setVerdicts] = useState<Record<number, boolean | null>>({});
@@ -199,6 +200,7 @@ export default function Home() {
       const json = await res.json();
       setSessionId(json.sessionId);
       setLessonTitle(json.lesson?.title ?? null);
+      setExaminable(json.examinable !== false);
       setVerdicts({});
       if (json.greeting) {
         // The tutor speaks first, like a person would.
@@ -342,7 +344,13 @@ export default function Home() {
       setMessages((m) => [
         ...m,
         { role: "user", content: `Finished the mock exam.` },
-        { role: "assistant", content: `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.\n\n${json.postMortem}` },
+        {
+          role: "assistant",
+          content:
+            `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.` +
+            (json.unscored ? ` ${json.unscored} answer${json.unscored === 1 ? "" : "s"} need${json.unscored === 1 ? "s" : ""} your tutor's judgement.` : "") +
+            `\n\n${json.postMortem}`,
+        },
       ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not finish exam");
@@ -726,9 +734,9 @@ export default function Home() {
           </button>
           {!participantId && (
             <>
-              <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>
+              {examinable && <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>}
               <button onClick={inviteFriend} className="btn quiet small">Invite</button>
-              <button onClick={startExam} className="btn quiet small">Mock exam</button>
+              {examinable && <button onClick={startExam} className="btn quiet small">Mock exam</button>}
               <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>
               <button onClick={endSession} className="btn ghost small">End</button>
             </>

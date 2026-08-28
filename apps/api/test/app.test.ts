@@ -78,6 +78,41 @@ describe("Dingba Brain merge", () => {
   });
 });
 
+describe("scored surfaces stay honest on rubric-only packs", () => {
+  it("refuses a timed mock where nothing can be machine-graded, and says so", async () => {
+    // Before this guard a learner could sit a timed exam on a coaching pack
+    // and score zero no matter what they wrote, with the false failures
+    // written into their mastery.
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Vee", personaId: "nia", packId: "visa-prep" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().examinable).toBe(false); // the client shows no scored doors at all
+
+    const premium = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Vee", personaId: "nia", packId: "visa-prep" },
+    });
+    // Exam mode needs a premium plan; the pack guard must answer first for
+    // guests too, so use the plan-free diagnostic to prove the shared filter.
+    const diag = await app.inject({ method: "POST", url: `/sessions/${premium.json().sessionId}/diagnostic/start` });
+    expect(diag.statusCode).toBe(400);
+    expect(diag.json().error).toContain("in conversation");
+  });
+
+  it("marks a math session as examinable", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Em", personaId: "amara", packId: "math-ms" },
+    });
+    expect(res.json().examinable).toBe(true);
+  });
+});
+
 describe("skill naming", () => {
   it("turns an unknown skill id into words instead of leaking it raw", async () => {
     const { skillTitle } = await import("../src/tutor/prompt.js");
