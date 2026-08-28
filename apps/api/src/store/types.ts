@@ -332,6 +332,15 @@ export interface Store {
   /** Flags raised since a moment, split by severity. For the desk's headline. */
   countIncidentsSince(since: Date): Promise<{ concern: number; danger: number }>;
 
+  /**
+   * The money ledger. record returns false when the event was already seen
+   * (processors retry webhooks), so the caller can skip re-applying it.
+   */
+  recordBillingEvent(event: BillingEventRecord): Promise<boolean>;
+  listBillingEvents(limit: number, opts?: { type?: string }): Promise<BillingEventRow[]>;
+  /** Failures and refunds since a moment, for the Money tab's warning tiles. */
+  countBillingTroubleSince(since: Date): Promise<{ failed: number; refunded: number }>;
+
   /** Operational switches, flipped from the Command Centre without a deploy. */
   getSetting(key: string): Promise<unknown | null>;
   setSetting(key: string, value: unknown, updatedBy: string): Promise<void>;
@@ -432,6 +441,25 @@ export interface AuditEntry {
 }
 
 export interface AuditRow extends AuditEntry {
+  id: string;
+  createdAt: Date;
+}
+
+/** One verified processor webhook, as recorded. */
+export interface BillingEventRecord {
+  provider: string;
+  eventRef: string;
+  type: "activated" | "canceled" | "payment_failed" | "refunded";
+  email?: string;
+  customerRef?: string;
+  subscriptionRef?: string;
+  plan?: string;
+  amountMinor?: number;
+  currency?: string;
+  matched: boolean;
+}
+
+export interface BillingEventRow extends BillingEventRecord {
   id: string;
   createdAt: Date;
 }

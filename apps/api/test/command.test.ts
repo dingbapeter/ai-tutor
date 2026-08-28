@@ -321,6 +321,47 @@ describe("safety desk", () => {
   });
 });
 
+describe("the money ledger in the console", () => {
+  beforeAll(async () => {
+    await store.recordBillingEvent({
+      provider: "mock", eventRef: "cc_fail_1", type: "payment_failed",
+      email: "parent@family.example", amountMinor: 1900, currency: "USD", matched: true,
+    });
+    await store.recordBillingEvent({
+      provider: "mock", eventRef: "cc_ref_1", type: "refunded",
+      email: "parent@family.example", amountMinor: 900, currency: "USD", matched: true,
+    });
+  });
+
+  it("shows the investor honest trouble counts but never a payer", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/finance", headers: auth("investor") });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.trouble.week.failed).toBeGreaterThanOrEqual(1);
+    expect(body.trouble.week.refunded).toBeGreaterThanOrEqual(1);
+    expect(body.events).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain("@");
+  });
+
+  it("gives finance the full ledger with amounts and who", async () => {
+    const res = await app.inject({ method: "GET", url: "/command/finance", headers: auth("finance") });
+    const events = res.json().events as Array<{ type: string; email?: string; amountMinor?: number; matched: boolean }>;
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    const fail = events.find((e) => e.type === "payment_failed");
+    expect(fail).toMatchObject({ email: "parent@family.example", amountMinor: 1900, matched: true });
+  });
+
+  it("exports the ledger only to finance:detail", async () => {
+    const denied = await app.inject({ method: "GET", url: "/command/export/payments.csv", headers: auth("investor") });
+    expect(denied.statusCode).toBe(403);
+    const ok = await app.inject({ method: "GET", url: "/command/export/payments.csv", headers: auth("finance") });
+    expect(ok.statusCode).toBe(200);
+    const lines = ok.body.split("\r\n").filter(Boolean);
+    expect(lines[0]).toContain("at,provider,type,account,plan,amount_minor,currency,matched");
+    expect(lines.some((l: string) => l.includes("payment_failed") && l.includes("1900"))).toBe(true);
+  });
+});
+
 describe("staff management", () => {
   it("lists the roster with roles and titles", async () => {
     const res = await app.inject({ method: "GET", url: "/command/staff", headers: auth("owner") });

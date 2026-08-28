@@ -54,7 +54,40 @@ interface Finance {
   activeSubscriptions: number;
   freeAccounts: number;
   lines: Array<{ plan: string; subscribers: number; monthlyPrice: number | null; monthlyRevenue: number | null }>;
+  trouble: {
+    week: { failed: number; refunded: number };
+    month: { failed: number; refunded: number };
+  };
   subscriptions?: Array<{ userId: string; email: string; provider: string; plan: string; status: string; subscriptionRef: string; updatedAt: string }>;
+  events?: Array<{
+    id: string;
+    provider: string;
+    type: string;
+    email?: string;
+    plan?: string;
+    amountMinor?: number;
+    currency?: string;
+    matched: boolean;
+    subscriptionRef?: string;
+    customerRef?: string;
+    createdAt: string;
+  }>;
+}
+
+const EVENT_WORDS: Record<string, string> = {
+  activated: "started paying",
+  canceled: "canceled",
+  payment_failed: "payment failed",
+  refunded: "refunded",
+};
+
+function minor(amount: number | undefined, currency: string | undefined): string {
+  if (amount === undefined || !currency) return "";
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount / 100);
+  } catch {
+    return `${currency} ${(amount / 100).toLocaleString()}`;
+  }
 }
 
 interface AccountHit {
@@ -629,6 +662,7 @@ function Money({ call, me, token }: { call: Call; me: Me; token: string }) {
         <div className="cc-rowacts">
           <Download token={token} dataset="finance" label="Download the plan mix" />
           {detail && <Download token={token} dataset="subscriptions" label="Download subscriptions" />}
+          {detail && <Download token={token} dataset="payments" label="Download the money ledger" />}
         </div>
       </div>
       <p className="cc-lede">
@@ -647,6 +681,18 @@ function Money({ call, me, token }: { call: Call; me: Me; token: string }) {
         <Stat k="Monthly revenue" v={data.mrr === null ? "not set" : money(data.mrr, data.currency)} n="from active subscriptions" />
         <Stat k="Yearly run rate" v={data.arr === null ? "not set" : money(data.arr, data.currency)} n="monthly revenue, twelve times" />
         <Stat k="Paying accounts" v={num(data.activeSubscriptions)} n={`${num(data.freeAccounts)} on free`} />
+        <Stat
+          k="Failed payments, 7 days"
+          v={num(data.trouble.week.failed)}
+          n={`${num(data.trouble.month.failed)} in 30 days`}
+          alert={data.trouble.week.failed > 0}
+        />
+        <Stat
+          k="Refunds, 7 days"
+          v={num(data.trouble.week.refunded)}
+          n={`${num(data.trouble.month.refunded)} in 30 days`}
+          alert={data.trouble.week.refunded > 0}
+        />
       </div>
 
       <div className="cc-panel">
@@ -675,6 +721,51 @@ function Money({ call, me, token }: { call: Call; me: Me; token: string }) {
           </table>
         </div>
       </div>
+
+      {detail && (
+        <div className="cc-panel">
+          <h3>The money ledger</h3>
+          <p>
+            Every verified event the processor sent, newest first. A row marked unmatched is money that moved
+            for an account we could not find, which deserves a look the same day.
+          </p>
+          {data.events && data.events.length > 0 ? (
+            <div className="cc-table-wrap">
+              <table className="cc-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>What</th>
+                    <th>Account</th>
+                    <th>Amount</th>
+                    <th>Processor</th>
+                    <th>Matched</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.events.map((e) => (
+                    <tr key={e.id}>
+                      <td style={{ whiteSpace: "nowrap" }}>{when(e.createdAt)}</td>
+                      <td>
+                        <span className={`cc-tag ${e.type === "activated" ? "ok" : e.type === "canceled" ? "" : "bad"}`}>
+                          {EVENT_WORDS[e.type] ?? e.type}
+                        </span>
+                        {e.plan && <span style={{ marginLeft: 6, textTransform: "capitalize" }}>{e.plan}</span>}
+                      </td>
+                      <td>{e.email ?? <span className="mono">{e.customerRef ?? e.subscriptionRef ?? ""}</span>}</td>
+                      <td className="num">{minor(e.amountMinor, e.currency)}</td>
+                      <td className="mono">{e.provider}</td>
+                      <td>{e.matched ? <span className="cc-tag ok">yes</span> : <span className="cc-tag bad">NO</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="cc-empty">No processor events recorded yet.</p>
+          )}
+        </div>
+      )}
 
       {detail && (
         <div className="cc-panel">

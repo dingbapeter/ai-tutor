@@ -91,6 +91,32 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
 });
 
 /**
+ * The money ledger: every webhook the payment processors send us, verified
+ * and then recorded before it is acted on. Activations and cancellations
+ * also flip plans; failures and refunds are recorded so finance can see
+ * trouble coming instead of discovering it in the processor dashboard.
+ */
+export const billingEvents = pgTable("billing_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  /** The processor's own id for the event, for exact-once handling. */
+  eventRef: text("event_ref").notNull(),
+  type: text("type", {
+    enum: ["activated", "canceled", "payment_failed", "refunded"],
+  }).notNull(),
+  email: text("email"),
+  customerRef: text("customer_ref"),
+  subscriptionRef: text("subscription_ref"),
+  plan: text("plan"),
+  /** Minor units (kobo, cents) as reported by the processor; null if absent. */
+  amountMinor: integer("amount_minor"),
+  currency: text("currency"),
+  /** Whether the event matched an account we know. */
+  matched: boolean("matched").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
  * Command Centre staff. A staff member is a user with elevated access; the
  * role decides which capabilities they hold (see apps/api/src/command/rbac.ts).
  * Investors live here too, on a role that can only ever see aggregates.

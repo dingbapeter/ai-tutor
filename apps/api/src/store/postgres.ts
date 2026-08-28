@@ -4,6 +4,8 @@ import {
   mergeProfile,
   scheduleAttempt,
   type AuditEntry,
+  type BillingEventRecord,
+  type BillingEventRow,
   type AuditRow,
   type CareContact,
   type LearnerProfile,
@@ -961,6 +963,61 @@ export class PostgresStore implements Store {
       where created_at >= ${since}
     `)) as unknown as Array<{ concern: string | number; danger: string | number }>;
     return { concern: Number(rows[0]?.concern ?? 0), danger: Number(rows[0]?.danger ?? 0) };
+  }
+
+  async recordBillingEvent(event: BillingEventRecord) {
+    // The unique (provider, event_ref) index makes retried webhooks a no-op.
+    const rows = await this.db
+      .insert(schema.billingEvents)
+      .values({
+        provider: event.provider,
+        eventRef: event.eventRef,
+        type: event.type,
+        email: event.email,
+        customerRef: event.customerRef,
+        subscriptionRef: event.subscriptionRef,
+        plan: event.plan,
+        amountMinor: event.amountMinor,
+        currency: event.currency,
+        matched: event.matched,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.billingEvents.id });
+    return rows.length > 0;
+  }
+
+  async listBillingEvents(limit: number, opts: { type?: string } = {}): Promise<BillingEventRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.billingEvents)
+      .where(opts.type ? eq(schema.billingEvents.type, opts.type as "activated") : undefined)
+      .orderBy(desc(schema.billingEvents.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      provider: r.provider,
+      eventRef: r.eventRef,
+      type: r.type,
+      email: r.email ?? undefined,
+      customerRef: r.customerRef ?? undefined,
+      subscriptionRef: r.subscriptionRef ?? undefined,
+      plan: r.plan ?? undefined,
+      amountMinor: r.amountMinor ?? undefined,
+      currency: r.currency ?? undefined,
+      matched: r.matched,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async countBillingTroubleSince(since: Date) {
+    const rows = (await this.db.execute(sql`
+      select
+        count(*) filter (where type = 'payment_failed') as failed,
+        count(*) filter (where type = 'refunded') as refunded
+      from billing_events
+      where created_at >= ${since}
+    `)) as unknown as Array<{ failed: string | number; refunded: string | number }>;
+    return { failed: Number(rows[0]?.failed ?? 0), refunded: Number(rows[0]?.refunded ?? 0) };
   }
 
   async getSetting(key: string) {

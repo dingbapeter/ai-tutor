@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Store } from "./store/types.js";
 
@@ -24,6 +24,8 @@ export type BillingEvent =
       plan: PaidPlan;
       customerRef: string;
       subscriptionRef: string;
+      /** The processor's own id for the event, for exact-once recording. */
+      eventRef?: string;
     }
   | {
       type: "canceled";
@@ -31,6 +33,31 @@ export type BillingEvent =
       email?: string;
       customerRef?: string;
       subscriptionRef?: string;
+      eventRef?: string;
+    }
+  /**
+   * A renewal that did not go through. The processor retries on its own and
+   * sends a cancellation if it finally gives up, so this is recorded and
+   * surfaced to finance rather than downgrading anyone mid-retry.
+   */
+  | {
+      type: "payment_failed";
+      email?: string;
+      customerRef?: string;
+      subscriptionRef?: string;
+      amountMinor?: number;
+      currency?: string;
+      eventRef?: string;
+    }
+  /** Money went back. Recorded for finance; entitlements follow cancellation. */
+  | {
+      type: "refunded";
+      email?: string;
+      customerRef?: string;
+      subscriptionRef?: string;
+      amountMinor?: number;
+      currency?: string;
+      eventRef?: string;
     };
 
 export interface BillingProvider {
@@ -49,6 +76,14 @@ export interface BillingProvider {
 }
 
 export class WebhookSignatureError extends Error {}
+
+/**
+ * Paystack (and the mock) send no event id, so the body's hash stands in.
+ * A retried webhook resends identical bytes, so the ref stays stable.
+ */
+function bodyRef(rawBody: Buffer): string {
+  return createHash("sha256").update(rawBody).digest("hex").slice(0, 32);
+}
 
 function safeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a);
@@ -111,6 +146,7 @@ export class StripeProvider implements BillingProvider {
     if (!Number.isFinite(age) || age > 5 * 60) throw new WebhookSignatureError("stale stripe signature");
 
     const event = JSON.parse(rawBody.toString("utf8")) as {
+      id?: string;
       type: string;
       data: { object: Record<string, unknown> };
     };
@@ -131,11 +167,47 @@ export class StripeProvider implements BillingProvider {
         plan,
         customerRef: o.customer ?? "",
         subscriptionRef: o.subscription ?? "",
+        eventRef: event.id,
       };
     }
     if (event.type === "customer.subscription.deleted") {
       const o = event.data.object as { id?: string; customer?: string };
-      return { type: "canceled", customerRef: o.customer, subscriptionRef: o.id };
+      return { type: "canceled", customerRef: o.customer, subscriptionRef: o.id, eventRef: event.id };
+    }
+    if (event.type === "invoice.payment_failed") {
+      const o = event.data.object as {
+        customer?: string;
+        subscription?: string;
+        customer_email?: string;
+        amount_due?: number;
+        currency?: string;
+      };
+      return {
+        type: "payment_failed",
+        email: o.customer_email ?? undefined,
+        customerRef: o.customer,
+        subscriptionRef: o.subscription,
+        amountMinor: typeof o.amount_due === "number" ? o.amount_due : undefined,
+        currency: o.currency?.toUpperCase(),
+        eventRef: event.id,
+      };
+    }
+    if (event.type === "charge.refunded") {
+      const o = event.data.object as {
+        customer?: string;
+        amount_refunded?: number;
+        currency?: string;
+        receipt_email?: string;
+        billing_details?: { email?: string };
+      };
+      return {
+        type: "refunded",
+        email: o.receipt_email ?? o.billing_details?.email ?? undefined,
+        customerRef: o.customer,
+        amountMinor: typeof o.amount_refunded === "number" ? o.amount_refunded : undefined,
+        currency: o.currency?.toUpperCase(),
+        eventRef: event.id,
+      };
     }
     return null;
   }
@@ -207,6 +279,41 @@ export class PaystackProvider implements BillingProvider {
         email: d.customer?.email,
         customerRef: d.customer?.customer_code,
         subscriptionRef: d.subscription_code,
+        eventRef: bodyRef(rawBody),
+      };
+    }
+    if (event.event === "invoice.payment_failed") {
+      const d = event.data as {
+        customer?: { email?: string; customer_code?: string };
+        subscription?: { subscription_code?: string };
+        amount?: number;
+        currency?: string;
+      };
+      return {
+        type: "payment_failed",
+        email: d.customer?.email,
+        customerRef: d.customer?.customer_code,
+        subscriptionRef: d.subscription?.subscription_code,
+        amountMinor: typeof d.amount === "number" ? d.amount : undefined,
+        currency: d.currency ?? "NGN",
+        eventRef: bodyRef(rawBody),
+      };
+    }
+    if (event.event === "refund.processed") {
+      const d = event.data as {
+        customer?: { email?: string; customer_code?: string };
+        amount?: number;
+        currency?: string;
+        transaction_reference?: string;
+      };
+      return {
+        type: "refunded",
+        email: d.customer?.email,
+        customerRef: d.customer?.customer_code,
+        subscriptionRef: d.transaction_reference,
+        amountMinor: typeof d.amount === "number" ? d.amount : undefined,
+        currency: d.currency ?? "NGN",
+        eventRef: bodyRef(rawBody),
       };
     }
     return null;
@@ -233,7 +340,8 @@ export class MockBillingProvider implements BillingProvider {
     const sig = headers["x-mock-signature"] ?? "";
     const expected = createHmac("sha256", this.secret).update(rawBody).digest("hex");
     if (!sig || !safeEqual(expected, sig)) throw new WebhookSignatureError("bad mock signature");
-    return JSON.parse(rawBody.toString("utf8")) as BillingEvent;
+    const event = JSON.parse(rawBody.toString("utf8")) as BillingEvent;
+    return { ...event, eventRef: event.eventRef ?? bodyRef(rawBody) };
   }
 }
 
@@ -270,8 +378,33 @@ export function billingFromEnv(env: Record<string, string | undefined>): Billing
   return null;
 }
 
+/** Finds the account behind an event's email or processor refs. */
+async function accountBehind(
+  store: Store,
+  provider: string,
+  event: { email?: string; customerRef?: string; subscriptionRef?: string },
+): Promise<{ userId: string; email: string } | null> {
+  if (event.email) {
+    const a = await store.getAccountByEmail(event.email);
+    return a ? { userId: a.userId, email: event.email } : null;
+  }
+  if (event.customerRef || event.subscriptionRef) {
+    return store.findSubscriptionByRef(provider, {
+      customerRef: event.customerRef,
+      subscriptionRef: event.subscriptionRef,
+    });
+  }
+  return null;
+}
+
 /** Apply a verified event to the store. Exported for direct testing. */
 export async function applyBillingEvent(store: Store, provider: string, event: BillingEvent): Promise<boolean> {
+  if (event.type === "payment_failed" || event.type === "refunded") {
+    // Recorded, never acted on: the processor retries a failed renewal on its
+    // own and sends a cancellation if it gives up, and a refund's entitlement
+    // change arrives the same way. Downgrading here would race both.
+    return (await accountBehind(store, provider, event)) !== null;
+  }
   if (event.type === "activated") {
     const flipped = await store.setUserPlan(event.email, event.plan);
     if (!flipped) return false; // paid with an email we don't know — surfaced by the route
@@ -289,12 +422,7 @@ export async function applyBillingEvent(store: Store, provider: string, event: B
     return true;
   }
   // Cancellation: prefer the email if the payload had one, else map refs back.
-  const found = event.email
-    ? await store.getAccountByEmail(event.email).then((a) => (a ? { userId: a.userId, email: event.email! } : null))
-    : await store.findSubscriptionByRef(provider, {
-        customerRef: event.customerRef,
-        subscriptionRef: event.subscriptionRef,
-      });
+  const found = await accountBehind(store, provider, event);
   if (!found) return false;
   await store.setUserPlan(found.email, "free");
   if (event.subscriptionRef || event.customerRef) {
@@ -381,13 +509,28 @@ export async function registerBilling(
         return reply.code(400).send({ error: "bad payload" });
       }
       if (!event) return { received: true, handled: false };
+      // Apply first (plan flips are idempotent), then record. A replayed
+      // event re-applies harmlessly and the ledger's unique ref keeps the
+      // record itself exactly-once.
       const applied = await applyBillingEvent(store, provider.name, event);
+      const fresh = await store.recordBillingEvent({
+        provider: provider.name,
+        eventRef: event.eventRef ?? bodyRef(req.body as Buffer),
+        type: event.type,
+        email: event.email,
+        customerRef: event.customerRef,
+        subscriptionRef: event.subscriptionRef,
+        plan: "plan" in event ? event.plan : undefined,
+        amountMinor: "amountMinor" in event ? event.amountMinor : undefined,
+        currency: "currency" in event ? event.currency : undefined,
+        matched: applied,
+      });
       if (!applied) {
         // Authentic payment for an unknown account: log loudly, still 200 so
         // the provider stops retrying — the money trail lives in their dashboard.
         req.log.error({ event }, "billing event did not match any account");
       }
-      return { received: true, handled: applied };
+      return { received: true, handled: applied, recorded: fresh };
     });
   });
 }

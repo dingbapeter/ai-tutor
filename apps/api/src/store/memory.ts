@@ -2,6 +2,8 @@ import {
   mergeProfile,
   scheduleAttempt,
   type AuditEntry,
+  type BillingEventRecord,
+  type BillingEventRow,
   type AuditRow,
   type CareContact,
   type LearnerProfile,
@@ -662,6 +664,32 @@ export class MemoryStore implements Store {
   }
 
   private settings = new Map<string, unknown>();
+  private billingEvents: BillingEventRow[] = [];
+  private billingEventRefs = new Set<string>();
+
+  async recordBillingEvent(event: BillingEventRecord) {
+    const key = `${event.provider}::${event.eventRef}`;
+    // Processors retry webhooks; the same event lands exactly once.
+    if (this.billingEventRefs.has(key)) return false;
+    this.billingEventRefs.add(key);
+    this.billingEvents.push({ ...event, id: crypto.randomUUID(), createdAt: new Date() });
+    return true;
+  }
+
+  async listBillingEvents(limit: number, opts: { type?: string } = {}) {
+    return this.billingEvents
+      .filter((e) => !opts.type || e.type === opts.type)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async countBillingTroubleSince(since: Date) {
+    const recent = this.billingEvents.filter((e) => e.createdAt >= since);
+    return {
+      failed: recent.filter((e) => e.type === "payment_failed").length,
+      refunded: recent.filter((e) => e.type === "refunded").length,
+    };
+  }
 
   async getSetting(key: string) {
     return this.settings.has(key) ? this.settings.get(key) : null;

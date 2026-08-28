@@ -175,9 +175,18 @@ export async function registerCommandCentre(
       lines,
     };
 
+    // Trouble is aggregate: how many renewals failed and refunds went out,
+    // with nobody named. Investors deserve the honest number too.
+    const now = Date.now();
+    body.trouble = {
+      week: await store.countBillingTroubleSince(new Date(now - 7 * 86_400_000)),
+      month: await store.countBillingTroubleSince(new Date(now - 30 * 86_400_000)),
+    };
+
     // Only finance:detail sees who is paying. Investors stop at the totals.
     if (can(actor.role, "finance:detail")) {
       body.subscriptions = await store.listSubscriptions(50);
+      body.events = await store.listBillingEvents(50);
       await audit(store, actor, "finance.detail.read", { ip: ipOf(req) });
     }
     return body;
@@ -403,6 +412,7 @@ export async function registerCommandCentre(
     metrics: "metrics:read",
     finance: "finance:aggregate",
     subscriptions: "finance:detail",
+    payments: "finance:detail",
     safety: "safety:read",
     staff: "staff:read",
     audit: "audit:read",
@@ -434,6 +444,12 @@ export async function registerCommandCentre(
         headers = ["account", "plan", "status", "processor", "reference", "updated_at"];
         rows = (await store.listSubscriptions(1000)).map((r) => [
           r.email, r.plan, r.status, r.provider, r.subscriptionRef, r.updatedAt,
+        ]);
+      } else if (dataset === "payments") {
+        headers = ["at", "provider", "type", "account", "plan", "amount_minor", "currency", "matched", "reference"];
+        rows = (await store.listBillingEvents(1000)).map((e) => [
+          e.createdAt, e.provider, e.type, e.email ?? "", e.plan ?? "",
+          e.amountMinor ?? "", e.currency ?? "", e.matched ? "yes" : "NO", e.subscriptionRef ?? e.customerRef ?? "",
         ]);
       } else if (dataset === "safety") {
         const severity = req.query.severity === "danger" || req.query.severity === "concern" ? req.query.severity : undefined;
