@@ -227,6 +227,15 @@ export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id").notNull().references(() => students.id),
   packId: text("pack_id").notNull(),
+  /** ---- Resume metadata: everything needed to pick a session back up on a
+   *  fresh process, so a restart or a second API instance can continue the
+   *  conversation instead of losing it. ---- */
+  personaId: text("persona_id").notNull().default("amara"),
+  language: text("language").notNull().default("en"),
+  plan: text("plan").notNull().default("free"),
+  ownerUserId: uuid("owner_user_id"),
+  parentEmail: text("parent_email"),
+  apiKeyId: uuid("api_key_id"),
   startedAt: timestamp("started_at").notNull().defaultNow(),
   endedAt: timestamp("ended_at"),
   /** Auto-generated after the session: recap, mistakes, plan for next time. */

@@ -13,11 +13,14 @@ before real children use it, Part 4 is the horizon.
 
 ### 1.0 Migrations
 
-Apply `packages/db/migrations/` in order, 0000 through 0013. The last three add
+Apply `packages/db/migrations/` in order, 0000 through 0014. The last three add
 the Command Centre: `0010_command_centre.sql` (staff and the audit trail),
 `0011_platform_settings.sql` (the switches you flip from the Controls tab) and
 `0012_staff_hr.sql` (employment records and reporting lines) and
-`0013_billing_events.sql` (the money ledger behind the Money tab).
+`0013_billing_events.sql` (the money ledger behind the Money tab) and
+`0014_session_resume.sql` (sessions survive restarts and scale across
+instances; with more than one api instance, keep sticky sessions on for the
+smoothest turns, though any instance can now serve any session).
 
 ### 1.1 Postgres on Railway — nothing persists without this
 

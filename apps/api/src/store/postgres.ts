@@ -12,6 +12,7 @@ import {
   type LearnerRoutine,
   type PlatformIncident,
   type PlatformMetrics,
+  type SessionMeta,
   type SessionRecap,
   type StaffHr,
   type StaffMember,
@@ -83,12 +84,63 @@ export class PostgresStore implements Store {
     return { id: student.id };
   }
 
-  async createSession(studentId: string, _personaId: string, packId: string) {
+  async createSession(meta: SessionMeta) {
     const [row] = await this.db
       .insert(schema.sessions)
-      .values({ studentId, packId })
+      .values({
+        studentId: meta.studentId,
+        packId: meta.packId,
+        personaId: meta.personaId,
+        language: meta.language,
+        plan: meta.plan,
+        ownerUserId: meta.ownerUserId,
+        parentEmail: meta.parentEmail,
+        apiKeyId: meta.apiKeyId,
+      })
       .returning({ id: schema.sessions.id });
     return row.id;
+  }
+
+  async getSessionMeta(sessionId: string) {
+    const rows = await this.db
+      .select({
+        studentId: schema.sessions.studentId,
+        personaId: schema.sessions.personaId,
+        packId: schema.sessions.packId,
+        language: schema.sessions.language,
+        plan: schema.sessions.plan,
+        ownerUserId: schema.sessions.ownerUserId,
+        parentEmail: schema.sessions.parentEmail,
+        apiKeyId: schema.sessions.apiKeyId,
+        endedAt: schema.sessions.endedAt,
+      })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, sessionId))
+      .limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      studentId: r.studentId,
+      personaId: r.personaId,
+      packId: r.packId,
+      language: r.language,
+      plan: r.plan,
+      ownerUserId: r.ownerUserId ?? undefined,
+      parentEmail: r.parentEmail ?? undefined,
+      apiKeyId: r.apiKeyId ?? undefined,
+      endedAt: r.endedAt,
+    };
+  }
+
+  async listSessionMessages(sessionId: string) {
+    const rows = await this.db
+      .select({ role: schema.messages.role, content: schema.messages.content })
+      .from(schema.messages)
+      .where(eq(schema.messages.sessionId, sessionId))
+      .orderBy(schema.messages.createdAt);
+    return rows.filter(
+      (m): m is { role: "user" | "assistant"; content: string } => m.role !== "system",
+    );
   }
 
   async saveMessage(sessionId: string, role: "user" | "assistant", content: string) {

@@ -3,6 +3,18 @@
  * talks to this interface only. `memory` runs anywhere with zero setup;
  * `postgres` is production. Selected by DATABASE_URL presence.
  */
+/** What a session needs to be picked back up by any process. */
+export interface SessionMeta {
+  studentId: string;
+  personaId: string;
+  packId: string;
+  language: string;
+  plan: string;
+  ownerUserId?: string;
+  parentEmail?: string;
+  apiKeyId?: string;
+}
+
 export interface SessionRecap {
   summary: string;
   nextFocus: string;
@@ -141,7 +153,11 @@ export interface Store {
   /** Find-or-create a student by display name (auth comes later). */
   ensureStudent(name: string, parentEmail?: string): Promise<{ id: string }>;
 
-  createSession(studentId: string, personaId: string, packId: string): Promise<string>;
+  createSession(meta: SessionMeta): Promise<string>;
+  /** Everything needed to rehydrate a live session on a fresh process. */
+  getSessionMeta(sessionId: string): Promise<(SessionMeta & { endedAt: Date | null }) | null>;
+  /** The session's saved turns, oldest first, for rebuilding history. */
+  listSessionMessages(sessionId: string): Promise<Array<{ role: "user" | "assistant"; content: string }>>;
   saveMessage(sessionId: string, role: "user" | "assistant", content: string): Promise<void>;
   endSession(sessionId: string, recap: SessionRecap): Promise<void>;
 

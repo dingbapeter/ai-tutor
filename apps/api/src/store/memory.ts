@@ -11,6 +11,7 @@ import {
   type MasteryState,
   type PlatformIncident,
   type PlatformMetrics,
+  type SessionMeta,
   type SessionRecap,
   type StaffHr,
   type StaffMember,
@@ -29,7 +30,7 @@ export class MemoryStore implements Store {
   private mastery = new Map<string, Map<string, MasteryState>>();
   private sessions = new Map<
     string,
-    { studentId: string; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
+    { meta: SessionMeta; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
   >();
   private accounts = new Map<
     string,
@@ -63,10 +64,21 @@ export class MemoryStore implements Store {
     return { id };
   }
 
-  async createSession(studentId: string, _personaId: string, _packId: string) {
+  async createSession(meta: SessionMeta) {
     const id = crypto.randomUUID();
-    this.sessions.set(id, { studentId, startedAt: new Date(), endedAt: null });
+    this.sessions.set(id, { meta, startedAt: new Date(), endedAt: null });
     return id;
+  }
+
+  async getSessionMeta(sessionId: string) {
+    const s = this.sessions.get(sessionId);
+    return s ? { ...s.meta, endedAt: s.endedAt } : null;
+  }
+
+  async listSessionMessages(sessionId: string) {
+    return (this.sessionMessages.get(sessionId) ?? [])
+      .filter((m): m is { role: "user" | "assistant"; content: string; createdAt: Date } => m.role !== "system")
+      .map(({ role, content }) => ({ role, content }));
   }
 
   async saveMessage(sessionId: string, role: "user" | "assistant", content: string) {
@@ -301,7 +313,7 @@ export class MemoryStore implements Store {
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);
       for (const [id, s] of this.sessions) {
-        if (s.studentId === sid) {
+        if (s.meta.studentId === sid) {
           this.sessions.delete(id);
           this.sessionMessages.delete(id);
         }
@@ -326,7 +338,7 @@ export class MemoryStore implements Store {
   async listRecentMessages(studentId: string, limit: number) {
     const out: Array<{ role: string; content: string; createdAt: Date }> = [];
     for (const [sessionId, s] of this.sessions) {
-      if (s.studentId === studentId) out.push(...(this.sessionMessages.get(sessionId) ?? []));
+      if (s.meta.studentId === studentId) out.push(...(this.sessionMessages.get(sessionId) ?? []));
     }
     return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit).reverse();
   }
@@ -334,7 +346,7 @@ export class MemoryStore implements Store {
   async getStreakDays(studentId: string) {
     const days = new Set(
       [...this.sessions.values()]
-        .filter((s) => s.studentId === studentId)
+        .filter((s) => s.meta.studentId === studentId)
         .map((s) => s.startedAt.toISOString().slice(0, 10)),
     );
     let streak = 0;
@@ -398,7 +410,7 @@ export class MemoryStore implements Store {
 
   async listSessionSummaries(studentId: string, limit: number) {
     return [...this.sessions.values()]
-      .filter((s) => s.studentId === studentId)
+      .filter((s) => s.meta.studentId === studentId)
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
       .slice(0, limit)
       .map((s) => ({
@@ -716,7 +728,7 @@ export class MemoryStore implements Store {
 
     const allSessions = [...this.sessions.values()];
     const activeSince = (from: Date) =>
-      new Set(allSessions.filter((s) => s.startedAt >= from).map((s) => s.studentId)).size;
+      new Set(allSessions.filter((s) => s.startedAt >= from).map((s) => s.meta.studentId)).size;
 
     let messages = 0;
     for (const list of this.sessionMessages.values()) messages += list.length;

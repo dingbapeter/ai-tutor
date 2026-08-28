@@ -684,6 +684,77 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   // Live sessions are in-memory conversation state; sweep abandoned ones so a
   // long-running server doesn't accumulate them forever.
+  /**
+   * Finds a live session, rebuilding it from the store when this process has
+   * never seen it: a restart, a TTL eviction, or another instance behind the
+   * same database. The conversation continues where it left off; only
+   * in-flight exam/diagnostic state and this session's practice tallies are
+   * process-local and start fresh, which degrades a recap, never a learner's
+   * conversation.
+   */
+  async function sessionFor(sessionId: string): Promise<LiveSession | undefined> {
+    const hot = live.get(sessionId);
+    if (hot) return hot;
+    const meta = await store.getSessionMeta(sessionId);
+    if (!meta || meta.endedAt) return undefined;
+    const persona = loadPersonas().find((p) => p.id === meta.personaId) ?? loadPersonas()[0];
+    let pack;
+    try {
+      pack = loadPack(meta.packId);
+    } catch {
+      return undefined; // a pack retired since the session started
+    }
+    const studentName = (await store.getStudentName(meta.studentId)) ?? "Student";
+    const [memoryLines, learnerProfile, routine, due, messages] = await Promise.all([
+      store.getMemories(meta.studentId),
+      store.getProfile(meta.studentId),
+      store.getRoutine(meta.studentId),
+      store.getDueSkills(meta.studentId, 10),
+      store.listSessionMessages(sessionId),
+    ]);
+    const warmupSkills = due
+      .map((d) => pack.skills.find((sk) => sk.id === d.skillId)?.title)
+      .filter((t): t is string => Boolean(t))
+      .slice(0, 3);
+    // A B2B session must come back with its quota cap, or a restart would
+    // quietly turn a metered key into an unmetered one.
+    let apiKeyQuota: number | undefined;
+    if (meta.apiKeyId && meta.ownerUserId) {
+      apiKeyQuota = (await store.listApiKeys(meta.ownerUserId)).find((k) => k.id === meta.apiKeyId)?.monthlyQuota;
+    }
+    const session: LiveSession = {
+      id: sessionId,
+      studentId: meta.studentId,
+      studentName,
+      parentEmail: meta.parentEmail,
+      personaId: persona.id,
+      packId: meta.packId,
+      language: meta.language,
+      history: [
+        {
+          role: "system",
+          content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language: meta.language }),
+        },
+        ...messages,
+      ],
+      busy: false,
+      practiceTotal: 0,
+      practiceCorrect: 0,
+      skillOutcomes: new Map(),
+      ownerUserId: meta.ownerUserId,
+      apiKeyId: meta.apiKeyId,
+      plan: meta.plan,
+      participants: new Map(),
+      createdAt: Date.now(),
+      apiKeyQuota,
+    };
+    // Two concurrent requests can race the rebuild; the first one in wins.
+    const raced = live.get(sessionId);
+    if (raced) return raced;
+    live.set(sessionId, session);
+    return session;
+  }
+
   const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
   const sweeper = setInterval(() => {
     const cutoff = Date.now() - SESSION_TTL_MS;
@@ -884,7 +955,16 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         .map((d) => pack.skills.find((s) => s.id === d.skillId)?.title)
         .filter((t): t is string => Boolean(t))
         .slice(0, 3);
-      const sessionId = await store.createSession(studentIdResolved, personaId, packId);
+      const sessionId = await store.createSession({
+        studentId: studentIdResolved,
+        personaId,
+        packId,
+        language,
+        plan,
+        ownerUserId,
+        parentEmail,
+        apiKeyId,
+      });
 
       live.set(sessionId, {
         id: sessionId,
@@ -979,7 +1059,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
 
@@ -1104,7 +1184,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const pack = loadPack(session.packId);
@@ -1172,7 +1252,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     "/sessions/:id/voice",
     { bodyLimit: 4 << 20 },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const audioIn = req.body as Buffer;
@@ -1246,7 +1326,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     "/sessions/:id/see",
     { bodyLimit: 6 << 20 },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const imageIn = req.body as Buffer;
@@ -1339,7 +1419,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * learner model; parent gets the recap by email (mailcow) when we have one.
    */
   app.post<{ Params: { id: string } }>("/sessions/:id/end", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     live.delete(session.id); // claim it — a double /end must 404, not double-email
     const persona = loadPersonas().find((p) => p.id === session.personaId)!;
@@ -1471,7 +1551,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   /** Host mints an invite code (paid plans only; capped seats per plan). */
   app.post<{ Params: { id: string } }>("/sessions/:id/invite", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     const seats = limitsFor(session.plan).classInvites;
     if (seats === 0) {
@@ -1549,7 +1629,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * adaptive engine starts from reality instead of assumptions.
    */
   app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/start", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     if (session.diagnostic) return reply.code(409).send({ error: "a level check is already in progress" });
     const pack = loadPack(session.packId);
@@ -1596,7 +1676,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
       if (!session.diagnostic.problemIndexes.includes(req.body.problemIndex)) {
         return reply.code(400).send({ error: "not part of this level check" });
@@ -1614,7 +1694,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/finish", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
     const pack = loadPack(session.packId);
     const diag = session.diagnostic;
@@ -1686,7 +1766,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/exam/start", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     if (!limitsFor(session.plan).examMode) {
       return reply.code(402).send({ error: "Exam mode is a premium feature. Upgrade to unlock timed mocks with a full post-mortem.", upgrade: true });
@@ -1727,7 +1807,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
       if (!session.exam.problemIndexes.includes(req.body.problemIndex)) {
         return reply.code(400).send({ error: "not part of this exam" });
@@ -1745,7 +1825,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   app.post<{ Params: { id: string } }>("/sessions/:id/exam/finish", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
     const pack = loadPack(session.packId);
     const exam = session.exam;
