@@ -102,6 +102,8 @@ export default function Home() {
   const [format, setFormat] = useState<Format>("plain");
   const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
+  const [lessonSkillId, setLessonSkillId] = useState<string | null>(null);
+  const [lessonTitle, setLessonTitle] = useState<string | null>(null);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [verdicts, setVerdicts] = useState<Record<number, boolean | null>>({});
@@ -119,8 +121,19 @@ export default function Home() {
     const savedLang = localStorage.getItem("dingba_language");
     if (savedLang) setLanguage(savedLang);
     // A question typed into the homepage ask box lands in the composer here.
-    const ask = new URLSearchParams(window.location.search).get("ask");
+    const params = new URLSearchParams(window.location.search);
+    const ask = params.get("ask");
     if (ask) setInput(ask.slice(0, 2000));
+    // A plan item tapped on the dashboard arrives as a lesson to start:
+    // the pack is preselected and the session opens on that skill.
+    const lessonParam = params.get("lesson");
+    const packParam = params.get("pack");
+    const studentParam = params.get("student");
+    if (lessonParam && packParam) {
+      setLessonSkillId(lessonParam);
+      setPackId(packParam);
+      if (studentParam) setStudentId(studentParam);
+    }
     const t = localStorage.getItem("tutor_token");
     if (t) {
       setToken(t);
@@ -175,15 +188,17 @@ export default function Home() {
           "content-type": "application/json",
           ...(token && studentId ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(
-          token && studentId
+        body: JSON.stringify({
+          ...(token && studentId
             ? { studentId, personaId, packId, language }
-            : { studentName: name || "Student", personaId, packId, language, ...(parentEmail ? { parentEmail } : {}) },
-        ),
+            : { studentName: name || "Student", personaId, packId, language, ...(parentEmail ? { parentEmail } : {}) }),
+          ...(lessonSkillId ? { lessonSkillId } : {}),
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
       setSessionId(json.sessionId);
+      setLessonTitle(json.lesson?.title ?? null);
       setVerdicts({});
       if (json.greeting) {
         // The tutor speaks first, like a person would.
@@ -600,6 +615,12 @@ export default function Home() {
             </>
           )}
 
+          {lessonSkillId && (
+            <p className="notice" style={{ marginTop: 0 }}>
+              Starting from your plan: this session opens as a lesson. Pick your tutor and go.
+            </p>
+          )}
+
           <label className="lbl">Pick your tutor</label>
           <div className="grid2">
             {personas.map((p) => (
@@ -693,7 +714,10 @@ export default function Home() {
           </span>
           <div>
             <h2>{persona?.name}</h2>
-            <div className="status">{speaking ? "speaking…" : busy ? "thinking…" : "listening"}</div>
+            <div className="status">
+              {lessonTitle ? `Lesson: ${lessonTitle} · ` : ""}
+              {speaking ? "speaking…" : busy ? "thinking…" : "listening"}
+            </div>
           </div>
         </div>
         <div className="session-actions">

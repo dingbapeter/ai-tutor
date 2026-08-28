@@ -24,6 +24,8 @@ interface LearnerRoutine {
 }
 interface PlanItem {
   kind: "review" | "practice" | "exam-prep" | "rest";
+  skillId?: string;
+  packId?: string;
   title: string;
   why: string;
 }
@@ -585,11 +587,22 @@ export default function Account() {
                       {d.load === "busy" && <span className="plan-load">busy day</span>}
                     </div>
                     {d.examLabel && <div className="plan-exam">{d.examLabel}</div>}
-                    {d.items.map((item, i) => (
-                      <div className={`plan-item ${item.kind}`} key={i} title={item.why}>
-                        {item.title}
-                      </div>
-                    ))}
+                    {d.items.map((item, i) =>
+                      item.skillId && item.packId ? (
+                        <a
+                          className={`plan-item link ${item.kind}`}
+                          key={i}
+                          title={`${item.why}. Tap to start this as a lesson.`}
+                          href={`/learn?lesson=${encodeURIComponent(item.skillId)}&pack=${encodeURIComponent(item.packId)}&student=${encodeURIComponent(s.id)}`}
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        <div className={`plan-item ${item.kind}`} key={i} title={item.why}>
+                          {item.title}
+                        </div>
+                      ),
+                    )}
                   </div>
                 ))}
               </div>

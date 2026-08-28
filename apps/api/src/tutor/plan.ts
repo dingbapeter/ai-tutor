@@ -26,9 +26,16 @@ export interface PlanInputs {
 export interface PlanItem {
   kind: "review" | "practice" | "exam-prep" | "rest";
   skillId?: string;
+  /** The pack that teaches the skill, so a plan item can open as a lesson. */
+  packId?: string;
   title: string;
   /** One line saying why this earned its place today. */
   why: string;
+}
+
+/** Skill ids are "<packId>.<area>.<name>" by convention across every pack. */
+function packOf(skillId: string): string {
+  return skillId.split(".")[0];
 }
 
 export interface PlanDay {
@@ -121,6 +128,7 @@ export function buildStudyPlan(inputs: PlanInputs): StudyPlan {
       items.push({
         kind: "exam-prep",
         skillId: target?.skillId,
+        packId: target ? packOf(target.skillId) : undefined,
         title: target ? `Revise ${target.title}` : `Revise for ${examSoon.label}`,
         why: examDay ? `${examSoon.label} is today` : `${examSoon.label} is tomorrow`,
       });
@@ -132,6 +140,7 @@ export function buildStudyPlan(inputs: PlanInputs): StudyPlan {
         items.push({
           kind: fromReview ? "review" : "practice",
           skillId: target.skillId,
+          packId: packOf(target.skillId),
           title: fromReview ? `Review ${target.title}` : `Practise ${target.title}`,
           why: fromReview
             ? "due for review before it fades"

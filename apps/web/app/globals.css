@@ -577,6 +577,8 @@ body[data-session="1"] .appbar { display: none; }
 .plan-item.practice { border-left-color: var(--ok); }
 .plan-item.exam-prep { border-left-color: var(--danger); }
 .plan-item.rest { color: var(--text-dim); }
+.plan-item.link { display: block; color: inherit; text-decoration: none; cursor: pointer; }
+.plan-item.link:hover { border-left-color: var(--brand-strong); background: var(--brand-soft); }
 
 /* A line from the Command Centre, above everything the learner is doing. */
 .platform-notice {

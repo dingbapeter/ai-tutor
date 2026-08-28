@@ -15,6 +15,7 @@ import {
 } from "./tutor/prompt.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
+import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -763,6 +764,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       packId: string;
       parentEmail?: string;
       language?: string;
+      lessonSkillId?: string;
     };
   }>(
     "/sessions",
@@ -781,6 +783,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             packId: { type: "string", maxLength: 40 },
             parentEmail: { type: "string", format: "email", maxLength: 254 },
             language: { type: "string", maxLength: 12 },
+            /** Start as a structured lesson on this skill from the pack. */
+            lessonSkillId: { type: "string", maxLength: 80 },
           },
         },
       },
@@ -799,6 +803,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       } catch (err) {
         if (err instanceof UnknownPackError) return reply.code(400).send({ error: err.message });
         throw err;
+      }
+
+      // A lesson request has to name a skill this pack teaches.
+      let lesson: LessonBrief | null = null;
+      if (req.body.lessonSkillId) {
+        try {
+          lesson = buildLessonBrief(pack, req.body.lessonSkillId);
+        } catch (err) {
+          if (err instanceof UnknownSkillError) return reply.code(400).send({ error: err.message });
+          throw err;
+        }
       }
 
       let studentIdResolved: string;
@@ -880,7 +895,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         packId,
         language,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language }) },
+          {
+            role: "system",
+            content:
+              buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills: lesson ? [] : warmupSkills, routine, language }) +
+              (lesson?.briefText ?? ""),
+          },
         ],
         busy: false,
         practiceTotal: 0,
@@ -896,9 +916,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       // A live tutor speaks first. Generate the opening line in-character;
       // if the model stalls or fails, a warm deterministic line covers it.
       const session = live.get(sessionId)!;
-      const greetInstruction = memoryLines.length
-        ? `[${studentName} has just walked into the session. Greet them warmly by name in one or two short sentences, in your own voice, touching on one thing you remember about them, then ask what they'd like to start with. No lists.]`
-        : `[${studentName} has just walked into their first session with you. Greet them warmly by name in one or two short sentences, introduce yourself in your own voice, and ask one easy question to get started. No lists.]`;
+      const greetInstruction = lesson
+        ? `[${studentName} has just walked in for the lesson on ${lesson.title}. Greet them warmly by name in one or two short sentences and open the lesson at its first step, in your own voice. No lists.]`
+        : memoryLines.length
+          ? `[${studentName} has just walked into the session. Greet them warmly by name in one or two short sentences, in your own voice, touching on one thing you remember about them, then ask what they'd like to start with. No lists.]`
+          : `[${studentName} has just walked into their first session with you. Greet them warmly by name in one or two short sentences, introduce yourself in your own voice, and ask one easy question to get started. No lists.]`;
       let greeting = "";
       try {
         const signal = AbortSignal.timeout(8000);
@@ -912,9 +934,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         greeting = "";
       }
       if (!greeting.trim()) {
-        greeting = memoryLines.length
-          ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
-          : `Hi ${studentName}, I'm ${persona.name}. Glad you're here. What would you like to start with today?`;
+        greeting = lesson
+          ? `Hi ${studentName}, good to see you. Today we're getting comfortable with ${lesson.title.toLowerCase()}. Let's ease in.`
+          : memoryLines.length
+            ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
+            : `Hi ${studentName}, I'm ${persona.name}. Glad you're here. What would you like to start with today?`;
       }
       greeting = greeting.trim();
       session.history.push({ role: "assistant", content: greeting });
@@ -929,6 +953,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         speaksAloud: Boolean(findLanguage(language)?.voices),
         remembered: memoryLines.length,
         greeting,
+        // Answers stay server-side; the client sees the shape, never the keys.
+        lesson: lesson
+          ? { skillId: lesson.skillId, title: lesson.title, objective: lesson.objective, practiceCount: lesson.practice.length }
+          : null,
       };
     },
   );
