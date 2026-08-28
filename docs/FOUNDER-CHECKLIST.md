@@ -199,7 +199,7 @@ PostHog and GlitchTip, both self-hosted on Contabo, both MIT. Until they
 exist, `ERROR_WEBHOOK_URL` is your only alarm. Retention is the metric that
 decides everything about this business, and you cannot see it yet.
 
-### 2.4 Load testing (register item B)
+### 2.4 Load testing (register item B) — BUILT 2026-08-29; see docs/PERF.md
 
 Before any launch push. Expect to add a request queue in front of llama.cpp;
 one 7B model serving many concurrent sessions will be the first bottleneck.
@@ -222,7 +222,17 @@ Sit down with the app and genuinely try to make the tutor say something it
 shouldn't. Then have someone who is not you do it. This is never "done", and
 it is the thing that ends companies in this category.
 
-### 3.3 Pedagogy eval harness (register item I)
+### 3.3 Pedagogy eval harness (register item I) — BUILT 2026-08-29
+
+Run it against the live stack the day the 7B is up; this is the checklist:
+
+```bash
+AI_CHAT_PROVIDER=llamacpp LLAMACPP_URL=http://<contabo-ip>:8080 pnpm evals
+```
+
+Every judge is a deterministic string check you can argue with. Model judges
+(socratic restraint, language discipline, assistant-isms, greeting by name,
+length) become binding automatically on a real provider.
 
 Before and after every model swap: a fixed set of student messages, and a
 human judging whether the tutor taught well. Without it you will swap a model
