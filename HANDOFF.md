@@ -28,18 +28,24 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 ## State: what is DONE and VERIFIED
 
 See the honesty table in `README.md` — it is the single source of truth and
-you MUST keep it updated. Summary as of 2026-08-28: Sprints 1–23 complete.
+you MUST keep it updated. Summary as of 2026-08-29: Sprints 1–28 complete.
 On top of the original tutor stack (personas, voice, memory, verified math,
 safety, billing, 91 languages) the platform now has: the Command Centre at
 `/command` (RBAC with investors on the smallest capability surface, staff +
 HR with an org chart, safety desk, platform controls that bite, audit trail,
 CSV exports, the money ledger with failed payments and refunds), study plans
 (deterministic weekly planner), plan-aware push reminders and a guardian
-weekly digest (both cron-triggered), and lessons (structured briefs the
-personas deliver, problems only from the verified bank). 180 TypeScript +
-7 Python tests, all CI-green on branch `claude/ai-tutor-continuation-dwrohy`
-(runs 30–39). WhatsApp and full-duplex LiveKit voice/video are NOT built:
-WhatsApp needs credentials, LiveKit needs the founder's interface code.
+weekly digest (both cron-triggered), lessons (structured briefs the
+personas deliver, problems only from the verified bank), sessions that
+survive restarts and scale across instances (migration 0014), observability
+(Ops tab + Prometheus at /admin/metrics), a load driver with honest numbers
+in docs/PERF.md, a pedagogy eval harness (`pnpm evals`, binding against the
+real model at deploy), and an evasion-hardened safety floor. 201 TypeScript
++ 7 Python tests, all CI-green on branch
+`claude/ai-tutor-continuation-dwrohy`. Register items B, D, I and the
+machine half of J are closed. WhatsApp and full-duplex LiveKit voice/video
+are NOT built: WhatsApp needs credentials, LiveKit needs the founder's
+interface code.
 
 ## House rules (the founder's standing instructions)
 
@@ -101,9 +107,10 @@ rebrand → new homepage → Brain v1 → adaptive engine v1 (the scoped
 warm-ups/scheduling work folds in here) → Ask/Show Dingba. The founder's
 infrastructure (Contabo, SMTP, etc.) is confirmed available.
 
-1. ~~CI~~ DONE. ~~Sprint 6b core (billing, verification)~~ DONE.
-   ~~Command Centre~~ DONE (sprints 15–19). ~~Study plans, reminders,
-   digest, lessons~~ DONE (sprints 20–23).
+1. ~~CI~~ DONE. ~~Sprint 6b core~~ DONE. ~~Command Centre~~ DONE
+   (15–19). ~~Plans, reminders, digest, lessons~~ DONE (20–23).
+   ~~Session survival, observability, load, evals, safety floor~~ DONE
+   (24–28).
 2. NEXT: the founder deploys per `deploy/DEPLOY.md` and
    `docs/FOUNDER-CHECKLIST.md` (migrations through 0013,
    COMMAND_OWNER_EMAILS, plan prices, two cron curls for
