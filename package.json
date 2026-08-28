@@ -6,7 +6,9 @@
     "dev:web": "pnpm --filter @tutor/web dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "load:boot": "node tools/load/boot.mjs",
+    "load": "node tools/load/run.mjs"
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
