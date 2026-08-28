@@ -216,7 +216,13 @@ must review before launch, specifically:
 - the AI-disclosure requirements now live in several markets
 - the care-call feature: you are storing a third party's phone number
 
-### 3.2 Red-teaming the safety layer (register item J)
+### 3.2 Red-teaming the safety layer (register item J) — machine half BUILT 2026-08-29
+
+The deterministic floor now resists leetspeak, stretched and spaced-out
+letters, zero-width characters and full-width forms, with an adversarial
+test suite pinning it. What remains is the human half: a person trying to
+break the REAL classifier and the tutor prompt in a live session, which no
+suite replaces.
 
 Sit down with the app and genuinely try to make the tutor say something it
 shouldn't. Then have someone who is not you do it. This is never "done", and
