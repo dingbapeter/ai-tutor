@@ -4,6 +4,7 @@ import { audit } from "./audit.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES, type Capability, type StaffRole } from "./rbac.js";
 import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
 import { csvFilename, toCsv } from "./csv.js";
+import type { Metrics } from "../ops/metrics.js";
 
 /**
  * The Command Centre API: the backend of everything. Metrics, money, people,
@@ -48,6 +49,7 @@ export async function registerCommandCentre(
   env: Record<string, string | undefined>,
   userFromRequest: (req: FastifyRequest) => Promise<{ userId: string; email: string; role: string } | null>,
   controls: ControlsReader,
+  metrics: Metrics,
 ) {
   const owners = bootstrapOwners(env);
 
@@ -302,6 +304,17 @@ export async function registerCommandCentre(
       return { controls: after };
     },
   );
+
+  /**
+   * The platform's pulse: request rates, latency, failures, memory, the
+   * event loop. Owner and admin only, because raw error messages can name
+   * internals that nobody else needs to see.
+   */
+  app.get("/command/ops", async (req, reply) => {
+    const actor = await requireCap(req, reply, "config:write");
+    if (!actor) return;
+    return metrics.summary();
+  });
 
   // ---- Safety desk ----
 

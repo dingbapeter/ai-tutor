@@ -188,7 +188,15 @@ interface Controls {
   noticeLevel: "info" | "warn";
 }
 
-type Tab = "overview" | "safety" | "money" | "people" | "team" | "controls" | "trail";
+interface OpsView {
+  uptimeSeconds: number;
+  memory: { rssMb: number; heapUsedMb: number };
+  eventLoop: { lagP50Ms: number; lagMaxMs: number };
+  routes: Array<{ route: string; count: number; errors: number; avgMs: number; p95Ms: number | null }>;
+  recentErrors: Array<{ at: string; route: string; method: string; statusCode: number; message: string }>;
+}
+
+type Tab = "overview" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
 
 const TABS: Array<{ id: Tab; label: string; needs: Capability }> = [
   { id: "overview", label: "Overview", needs: "metrics:read" },
@@ -197,6 +205,7 @@ const TABS: Array<{ id: Tab; label: string; needs: Capability }> = [
   { id: "people", label: "People", needs: "people:read" },
   { id: "team", label: "Team", needs: "staff:read" },
   { id: "controls", label: "Controls", needs: "config:write" },
+  { id: "ops", label: "Ops", needs: "config:write" },
   { id: "trail", label: "Trail", needs: "audit:read" },
 ];
 
@@ -325,6 +334,7 @@ export default function CommandCentre() {
         {tab === "people" && <People call={call} me={me} />}
         {tab === "team" && <Team call={call} me={me} token={token} />}
         {tab === "controls" && <ControlsPanel call={call} />}
+        {tab === "ops" && <Ops call={call} />}
         {tab === "trail" && <Trail call={call} token={token} />}
       </div>
     </div>
@@ -1565,6 +1575,132 @@ function ControlsPanel({ call }: { call: Call }) {
             <div className={live.noticeLevel === "warn" ? "cc-note" : "notice"}>{live.notice}</div>
           </>
         )}
+      </div>
+    </>
+  );
+}
+
+/* ---------- ops ---------- */
+
+function uptimeWords(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function Ops({ call }: { call: Call }) {
+  const [data, setData] = useState<OpsView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setData((await call("/command/ops")) as OpsView);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [call]);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 15_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  if (error) return <div className="err">{error}</div>;
+  if (!data) return <p className="cc-empty">Taking the pulse.</p>;
+
+  const totalErrors = data.routes.reduce((n, r) => n + r.errors, 0);
+
+  return (
+    <>
+      <div className="cc-h">
+        <h2>Ops</h2>
+        <button className="btn quiet small" onClick={load}>Refresh</button>
+      </div>
+      <p className="cc-lede">The platform's pulse, refreshed every fifteen seconds. Slow is the new down.</p>
+
+      <div className="cc-stats">
+        <Stat k="Up for" v={uptimeWords(data.uptimeSeconds)} n="this api process" />
+        <Stat k="Memory" v={`${data.memory.rssMb} MB`} n={`${data.memory.heapUsedMb} MB heap in use`} />
+        <Stat
+          k="Event loop lag"
+          v={`${data.eventLoop.lagMaxMs} ms`}
+          n={`worst of the last minute, typical ${data.eventLoop.lagP50Ms} ms`}
+          alert={data.eventLoop.lagMaxMs > 200}
+        />
+        <Stat k="Failures since start" v={num(totalErrors)} n="responses with a 5xx status" alert={totalErrors > 0} />
+      </div>
+
+      <div className="cc-panel">
+        <h3>Routes by traffic</h3>
+        <p>Latency is per route pattern, so one busy session cannot hide behind another.</p>
+        <div className="cc-table-wrap">
+          <table className="cc-table">
+            <thead>
+              <tr>
+                <th>Route</th>
+                <th className="num">Requests</th>
+                <th className="num">Failures</th>
+                <th className="num">Avg</th>
+                <th className="num">p95</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.routes.slice(0, 20).map((r) => (
+                <tr key={r.route}>
+                  <td className="mono">{r.route}</td>
+                  <td className="num">{num(r.count)}</td>
+                  <td className="num">{r.errors > 0 ? <span className="cc-tag bad">{r.errors}</span> : "0"}</td>
+                  <td className="num">{r.avgMs} ms</td>
+                  <td className="num">{r.p95Ms === null ? "" : r.p95Ms === Infinity ? "over 10 s" : `${r.p95Ms} ms`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="cc-panel">
+        <h3>Recent failures</h3>
+        <p>The last fifty, newest first. Messages only, never anyone's words.</p>
+        {data.recentErrors.length > 0 ? (
+          <div className="cc-table-wrap">
+            <table className="cc-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Route</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentErrors.map((e, i) => (
+                  <tr key={i}>
+                    <td style={{ whiteSpace: "nowrap" }}>{when(e.at)}</td>
+                    <td className="mono">{e.method} {e.route}</td>
+                    <td><span className="cc-tag bad">{e.statusCode}</span></td>
+                    <td className="mono">{e.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="cc-empty">Nothing has failed since this process started.</p>
+        )}
+      </div>
+
+      <div className="cc-panel">
+        <h3>Wiring it to Grafana</h3>
+        <p>
+          The same numbers stream as Prometheus text from /admin/metrics on the api service, with your admin key
+          as a bearer token. Point any Prometheus or Grafana agent at it and nothing else needs installing.
+        </p>
       </div>
     </>
   );

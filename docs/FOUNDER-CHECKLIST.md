@@ -193,7 +193,7 @@ Android:
 - install to home screen, then use it offline
 - layouts at 360px width
 
-### 2.3 Observability (register item D)
+### 2.3 Observability (register item D) — BUILT 2026-08-29
 
 PostHog and GlitchTip, both self-hosted on Contabo, both MIT. Until they
 exist, `ERROR_WEBHOOK_URL` is your only alarm. Retention is the metric that

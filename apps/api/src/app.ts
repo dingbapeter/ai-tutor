@@ -16,6 +16,7 @@ import {
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
+import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -140,6 +141,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const PLANS = plans ?? loadPlans();
   // Operational switches, read on the request path (see command/settings.ts).
   const controls = new ControlsReader(store);
+  // Observability: every request timed, every failure remembered (ops/metrics.ts).
+  const metrics = new Metrics();
+  metrics.startLagSampling();
+  app.addHook("onResponse", async (req, reply) => {
+    // The route pattern, never the raw URL, keeps series cardinality bounded.
+    metrics.record(req.routeOptions.url ?? "unmatched", req.method, reply.statusCode, reply.elapsedTime);
+  });
+  app.addHook("onClose", async () => metrics.stop());
   const limitsFor = (plan: string): PlanLimits => PLANS[plan] ?? PLANS.free;
   // "Daily" allowances use a rolling 24h window: fair in every timezone,
   // instead of resetting at the server's midnight.
@@ -148,6 +157,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   // Optional error reporting: any webhook-compatible sink (GlitchTip, Slack,
   // Discord). Fire-and-forget; absence of the env var disables it.
   app.addHook("onError", async (req, _reply, error) => {
+    metrics.recordError({
+      route: req.routeOptions.url ?? "unmatched",
+      method: req.method,
+      statusCode: error.statusCode ?? 500,
+      // The message, never the body: an error record must not carry a child's words.
+      message: String(error.message ?? error).slice(0, 300),
+    });
     if (!env.ERROR_WEBHOOK_URL) return;
     fetch(env.ERROR_WEBHOOK_URL, {
       method: "POST",
@@ -2315,6 +2331,20 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     return { composed, delivered, quiet, unverified };
   });
 
+  /**
+   * Prometheus scrape target. Point any Grafana agent at it with the admin
+   * key as a bearer token and the platform's pulse shows up in dashboards
+   * with nothing else installed.
+   */
+  app.get("/admin/metrics", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    const bearer = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY && bearer !== env.ADMIN_KEY) {
+      return reply.code(403).send({ error: "forbidden" });
+    }
+    return reply.header("content-type", "text/plain; version=0.0.4; charset=utf-8").send(metrics.prometheus());
+  });
+
   /** Usage summary for the signed-in account (today + this month). */
   app.get("/me/usage", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -2354,7 +2384,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
 
   // ---- Command Centre (Sprint 15) ----
-  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls);
+  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls, metrics);
 
   return app;
 }
