@@ -66,6 +66,12 @@ WhatsApp needs credentials, LiveKit needs the founder's interface code.
    rule in `docs/VISION-DINGBA.md` (no em dashes, no assistant-isms).
 8. **Commit style**: imperative summary + honest body listing what was
    verified vs pending. Small, complete sprints.
+9. **This is a global build.** Founder's standing instruction (2026-08-28):
+   resist the temptation to build for any one exam body or country. The
+   market is the world: Africa, Europe, America and beyond as peers. Local
+   audience tests come first, but curriculum, copy, currencies, names and
+   defaults must never assume one region. Deepen curriculum wide (SAT,
+   GCSE, IB, CFA, visa prep, WAEC/JAMB alongside, never instead).
 
 ## Architecture in 60 seconds
 
