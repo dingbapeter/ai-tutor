@@ -549,6 +549,17 @@ export class PostgresStore implements Store {
     await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, endpoint));
   }
 
+  async listAllPushSubscriptions() {
+    return this.db
+      .select({
+        userId: schema.pushSubscriptions.userId,
+        endpoint: schema.pushSubscriptions.endpoint,
+        p256dh: schema.pushSubscriptions.p256dh,
+        auth: schema.pushSubscriptions.auth,
+      })
+      .from(schema.pushSubscriptions);
+  }
+
   async createPasswordReset(userId: string, tokenHash: string) {
     await this.db.insert(schema.passwordResets).values({ userId, tokenHash });
   }

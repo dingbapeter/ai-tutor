@@ -207,6 +207,10 @@ export class MemoryStore implements Store {
     this.pushSubs.delete(endpoint);
   }
 
+  async listAllPushSubscriptions() {
+    return [...this.pushSubs.values()].map(({ userId, endpoint, p256dh, auth }) => ({ userId, endpoint, p256dh, auth }));
+  }
+
   async createPasswordReset(userId: string, tokenHash: string) {
     this.resets.set(tokenHash, { userId, used: false, createdAt: new Date() });
   }

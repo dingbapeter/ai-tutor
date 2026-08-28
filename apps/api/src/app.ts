@@ -14,7 +14,7 @@ import {
   voiceFor,
 } from "./tutor/prompt.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
-import { buildStudyPlan } from "./tutor/plan.js";
+import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -637,17 +637,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * The week ahead, built from what the platform already knows: due skills,
    * weak skills, the uploaded timetable, and any exam dates on it.
    */
-  app.get<{ Params: { id: string } }>("/students/:id/plan", async (req, reply) => {
-    const user = await userFromRequest(req, store);
-    if (!user) return reply.code(401).send({ error: "sign in required" });
-    if (!(await store.ownsStudent(user.userId, req.params.id))) {
-      return reply.code(403).send({ error: "that student is not in your family" });
-    }
+  async function planFor(studentId: string) {
     const [due, mastery, routine, streakDays] = await Promise.all([
-      store.getDueSkills(req.params.id, 20),
-      store.getMasterySnapshot(req.params.id),
-      store.getRoutine(req.params.id),
-      store.getStreakDays(req.params.id),
+      store.getDueSkills(studentId, 20),
+      store.getMasterySnapshot(studentId),
+      store.getRoutine(studentId),
+      store.getStreakDays(studentId),
     ]);
     return buildStudyPlan({
       dueSkills: due.map((d) => ({ skillId: d.skillId, title: skillTitle(d.skillId), level: d.level })),
@@ -656,6 +651,15 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       streakDays,
       now: new Date(),
     });
+  }
+
+  app.get<{ Params: { id: string } }>("/students/:id/plan", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return planFor(req.params.id);
   });
 
   /** The Dingba Brain, readable by whoever owns the student. */
@@ -2090,6 +2094,57 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return ok ? { email: req.body.email, plan: req.body.plan } : reply.code(404).send({ error: "no such account" });
     },
   );
+
+  /**
+   * The daily reminder run, meant for a cron hitting it once a morning. Each
+   * subscribed family gets one notification per learner who actually has
+   * something to do today, carrying the specific item, never a generic
+   * "come study". Learners with a free day are left in peace.
+   */
+  app.post("/admin/nudge-plans", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+      return reply.code(501).send({ error: "push not configured" });
+    }
+    const webpush = (await import("web-push")).default;
+    webpush.setVapidDetails(
+      env.VAPID_SUBJECT ?? "mailto:tutor@example.com",
+      env.VAPID_PUBLIC_KEY,
+      env.VAPID_PRIVATE_KEY,
+    );
+
+    const byUser = new Map<string, Array<{ endpoint: string; p256dh: string; auth: string }>>();
+    for (const sub of await store.listAllPushSubscriptions()) {
+      byUser.set(sub.userId, [...(byUser.get(sub.userId) ?? []), sub]);
+    }
+
+    let sent = 0;
+    let quiet = 0;
+    let stale = 0;
+    for (const [userId, devices] of byUser) {
+      for (const student of await store.listStudentProfiles(userId)) {
+        const note = planReminder(await planFor(student.id), student.displayName);
+        if (!note) {
+          quiet += 1; // a reminder with nothing to say teaches people to ignore reminders
+          continue;
+        }
+        for (const device of devices) {
+          try {
+            await webpush.sendNotification(
+              { endpoint: device.endpoint, keys: { p256dh: device.p256dh, auth: device.auth } },
+              JSON.stringify(note),
+            );
+            sent += 1;
+          } catch {
+            await store.deletePushSubscription(device.endpoint); // stale device
+            stale += 1;
+          }
+        }
+      }
+    }
+    return { users: byUser.size, sent, quiet, stale };
+  });
 
   /** Usage summary for the signed-in account (today + this month). */
   app.get("/me/usage", async (req, reply) => {

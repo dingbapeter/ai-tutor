@@ -88,6 +88,11 @@ PRICE_CURRENCY=USD
 
 # --- Ops ---
 ADMIN_KEY=<long random string, for /admin endpoints>
+# Daily study reminders: point any cron (Railway cron, GitHub Actions, or
+# crontab on Contabo) at this once a morning, e.g. 7:00 in your users' zone:
+#   curl -X POST https://<api-domain>/admin/nudge-plans -H "x-admin-key: $ADMIN_KEY"
+# Each subscribed family gets one notification per learner who actually has
+# something to do today, with the specific item. Free days stay silent.
 ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>
 ```
 

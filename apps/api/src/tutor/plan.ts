@@ -164,3 +164,29 @@ export function buildStudyPlan(inputs: PlanInputs): StudyPlan {
 
   return { builtAt: now.toISOString(), days, headline };
 }
+
+/**
+ * The one line worth interrupting someone's day with. Built from today's
+ * plan: the exam if there is one, otherwise the first real item. A day with
+ * nothing to do returns null, because a reminder with nothing to say teaches
+ * people to ignore reminders.
+ */
+export function planReminder(plan: StudyPlan, studentName: string): { title: string; body: string } | null {
+  const today = plan.days[0];
+  if (!today) return null;
+  const item = today.items.find((i) => i.kind !== "rest");
+  if (today.examLabel) {
+    return {
+      title: `${today.examLabel} is today`,
+      body: item
+        ? `${studentName}, one calm pass first: ${item.title.toLowerCase()}. Your tutor is ready when you are.`
+        : `${studentName}, you have done the work. One deep breath and in you go.`,
+    };
+  }
+  if (!item) return null;
+  const reason = item.why.charAt(0).toUpperCase() + item.why.slice(1);
+  return {
+    title: `Today's plan for ${studentName}`,
+    body: `${item.title}. ${reason}.`,
+  };
+}

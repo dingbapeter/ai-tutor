@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { buildStudyPlan, type PlanInputs } from "../src/tutor/plan.js";
+import { buildStudyPlan, planReminder, type PlanInputs } from "../src/tutor/plan.js";
 import {
   MockChatProvider,
   MockSttProvider,
@@ -174,6 +174,45 @@ describe("the planning rules", () => {
   });
 });
 
+describe("the reminder line", () => {
+  it("names the actual item, never a generic come-study line", () => {
+    const plan = buildStudyPlan(
+      inputs({ dueSkills: [{ skillId: "s.frac", title: "Adding fractions", level: 0.5 }] }),
+    );
+    const note = planReminder(plan, "Ada");
+    expect(note).toEqual({
+      title: "Today's plan for Ada",
+      body: "Review Adding fractions. Due for review before it fades.",
+    });
+  });
+
+  it("leads with the exam on exam day", () => {
+    const plan = buildStudyPlan(
+      inputs({
+        dueSkills: [{ skillId: "s.alg", title: "Algebra", level: 0.6 }],
+        routine: { subjects: [], weekly: [], examDates: [{ date: "2026-08-31", label: "Maths mid-term" }], notes: "" },
+      }),
+    );
+    const note = planReminder(plan, "Ada")!;
+    expect(note.title).toBe("Maths mid-term is today");
+    expect(note.body).toContain("revise algebra");
+  });
+
+  it("stays silent on a free day, so reminders keep meaning something", () => {
+    expect(planReminder(buildStudyPlan(inputs()), "Ada")).toBeNull();
+  });
+
+  it("never carries an em dash or an internal id", () => {
+    const plan = buildStudyPlan(
+      inputs({ dueSkills: [{ skillId: "math-ms.frac.add", title: "Adding fractions", level: 0.5 }] }),
+    );
+    const note = planReminder(plan, "Ada")!;
+    const text = `${note.title} ${note.body}`;
+    expect(text).not.toContain("\u2014");
+    expect(text).not.toContain("math-ms.");
+  });
+});
+
 describe("the plan endpoint", () => {
   let app: FastifyInstance;
   let store: MemoryStore;
@@ -216,6 +255,48 @@ describe("the plan endpoint", () => {
       headers: { authorization: `Bearer ${other.json().token}` },
     });
     expect(stranger.statusCode).toBe(403);
+  });
+
+  it("guards the reminder run and cleans up dead devices", async () => {
+    // Not configured: refused before anything else.
+    const noKey = await app.inject({ method: "POST", url: "/admin/nudge-plans" });
+    expect(noKey.statusCode).toBe(501);
+
+    const webpush = (await import("web-push")).default;
+    const vapid = webpush.generateVAPIDKeys();
+    const armed = await buildApp({
+      gateway: {
+        chat: new MockChatProvider(), planner: new MockChatProvider(), premiumChat: new MockChatProvider(),
+        stt: new MockSttProvider(), tts: new MockTtsProvider(),
+        vision: new MockVisionProvider(), moderation: new RulesModerationProvider(),
+      },
+      store,
+      env: {
+        NODE_ENV: "test", RATE_LIMIT_MAX: "10000", GUEST_IP_CAP: "100000", AUTH_RATE_LIMIT: "100000",
+        ADMIN_KEY: "secret-admin", VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey,
+      },
+    });
+
+    const wrongKey = await armed.inject({ method: "POST", url: "/admin/nudge-plans", headers: { "x-admin-key": "guess" } });
+    expect(wrongKey.statusCode).toBe(403);
+
+    // A device that no longer exists: the push fails and the run prunes it
+    // instead of failing forever. The learner needs something due first, or
+    // the run stays quiet and never touches the device at all.
+    await store.recordAttempt(studentId, "math-ms.linear-eq.one-step", false);
+    const account = await store.getAccountByEmail("planner@example.com");
+    await store.savePushSubscription(account!.userId, {
+      endpoint: "https://push.invalid/gone-device",
+      p256dh: "BOa1BB6cZTcVvQIzrwuUUyEQ_lBEYo9pV6rtNq1kZTrEbBB4bkgLraQwG1BbCgKcnln0eYdvTsK4kOfVCUt6QW8",
+      auth: "8VbXY8m5nJq9pRs2tUv4Wg",
+    });
+    const run = await armed.inject({ method: "POST", url: "/admin/nudge-plans", headers: { "x-admin-key": "secret-admin" } });
+    expect(run.statusCode).toBe(200);
+    const out = run.json();
+    expect(out.users).toBe(1);
+    expect(out.sent).toBe(0);
+    expect(out.stale).toBe(1); // the dead endpoint is gone from the store now
+    expect(await store.listPushSubscriptions(account!.userId)).toHaveLength(0);
   });
 
   it("builds a real week from the learner's actual state", async () => {

@@ -253,6 +253,8 @@ export interface Store {
 
   savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
   listPushSubscriptions(userId: string): Promise<Array<{ endpoint: string; p256dh: string; auth: string }>>;
+  /** Every device on the platform that asked for reminders, with its owner. */
+  listAllPushSubscriptions(): Promise<Array<{ userId: string; endpoint: string; p256dh: string; auth: string }>>;
   deletePushSubscription(endpoint: string): Promise<void>;
 
   /** Store sha256(raw); raw goes to the user by email. 1h validity, single use. */
