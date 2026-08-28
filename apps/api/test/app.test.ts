@@ -78,6 +78,14 @@ describe("Dingba Brain merge", () => {
   });
 });
 
+describe("skill naming", () => {
+  it("turns an unknown skill id into words instead of leaking it raw", async () => {
+    const { skillTitle } = await import("../src/tutor/prompt.js");
+    expect(skillTitle("math-ms.integers.add-sub")).toBe("Integers add sub");
+    expect(skillTitle("math-ms.linear-eq.one-step")).toBe("One-step equations"); // real pack title wins
+  });
+});
+
 describe("adaptive engine", () => {
   it("stretches intervals on recall and resets to due-now on a miss", () => {
     const now = new Date("2026-08-24T12:00:00Z");

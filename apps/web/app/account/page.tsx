@@ -22,6 +22,23 @@ interface LearnerRoutine {
   examDates: Array<{ date: string; label: string }>;
   notes: string;
 }
+interface PlanItem {
+  kind: "review" | "practice" | "exam-prep" | "rest";
+  title: string;
+  why: string;
+}
+interface PlanDay {
+  date: string;
+  weekday: string;
+  load: "free" | "light" | "busy";
+  items: PlanItem[];
+  examLabel?: string;
+}
+interface StudyPlan {
+  headline: string;
+  days: PlanDay[];
+}
+
 interface StudentRow {
   id: string;
   displayName: string;
@@ -32,6 +49,7 @@ interface StudentRow {
   profile?: LearnerProfile | null;
   routine?: LearnerRoutine | null;
   careContact?: { name: string; phone: string; relationship?: string } | null;
+  plan?: StudyPlan | null;
 }
 
 const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
@@ -93,7 +111,19 @@ export default function Account() {
         return;
       }
       const dash = await res.json();
-      setStudents(dash.students);
+      // The week ahead, per learner. A plan that fails to load is simply not
+      // shown; the dashboard never breaks over it.
+      const withPlans = await Promise.all(
+        (dash.students as StudentRow[]).map(async (s) => {
+          try {
+            const p = await fetch(`${API}/students/${s.id}/plan`, { headers: { authorization: `Bearer ${t}` } });
+            return p.ok ? { ...s, plan: (await p.json()) as StudyPlan } : s;
+          } catch {
+            return s;
+          }
+        }),
+      );
+      setStudents(withPlans);
       const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
       if (me.ok) {
         const meJson = await me.json();
@@ -541,6 +571,30 @@ export default function Account() {
                 : "A photo or screenshot of their timetable teaches Dingba their week."}
             </small>
           </div>
+
+          {s.plan && (
+            <div style={{ marginTop: 14 }}>
+              <h4 style={{ marginBottom: 2 }}>The week ahead</h4>
+              <p style={{ color: "var(--text-dim)", fontSize: 13.5, margin: "0 0 10px" }}>{s.plan.headline}</p>
+              <div className="plan-week">
+                {s.plan.days.map((d) => (
+                  <div className={`plan-day${d.examLabel ? " exam" : ""}`} key={d.date}>
+                    <div className="plan-day-head">
+                      <b>{d.weekday.slice(0, 3)}</b>
+                      <span>{d.date.slice(8)}</span>
+                      {d.load === "busy" && <span className="plan-load">busy day</span>}
+                    </div>
+                    {d.examLabel && <div className="plan-exam">{d.examLabel}</div>}
+                    {d.items.map((item, i) => (
+                      <div className={`plan-item ${item.kind}`} key={i} title={item.why}>
+                        {item.title}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {s.routine && (s.routine.subjects.length > 0 || s.routine.weekly.length > 0 || s.routine.examDates.length > 0 || s.routine.notes) && (
             <>

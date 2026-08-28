@@ -14,6 +14,7 @@ import {
   voiceFor,
 } from "./tutor/prompt.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
+import { buildStudyPlan } from "./tutor/plan.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
@@ -630,6 +631,31 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         dueAt: d.dueAt,
       })),
     };
+  });
+
+  /**
+   * The week ahead, built from what the platform already knows: due skills,
+   * weak skills, the uploaded timetable, and any exam dates on it.
+   */
+  app.get<{ Params: { id: string } }>("/students/:id/plan", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    const [due, mastery, routine, streakDays] = await Promise.all([
+      store.getDueSkills(req.params.id, 20),
+      store.getMasterySnapshot(req.params.id),
+      store.getRoutine(req.params.id),
+      store.getStreakDays(req.params.id),
+    ]);
+    return buildStudyPlan({
+      dueSkills: due.map((d) => ({ skillId: d.skillId, title: skillTitle(d.skillId), level: d.level })),
+      mastery: mastery.map((m) => ({ skillId: m.skillId, title: skillTitle(m.skillId), level: m.level, attempts: m.attempts })),
+      routine,
+      streakDays,
+      now: new Date(),
+    });
   });
 
   /** The Dingba Brain, readable by whoever owns the student. */

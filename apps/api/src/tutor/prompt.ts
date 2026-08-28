@@ -119,7 +119,13 @@ export function skillTitle(skillId: string): string {
       for (const s of loadPack(packId).skills) skillTitleCache.set(s.id, s.title);
     }
   }
-  return skillTitleCache.get(skillId) ?? skillId;
+  const known = skillTitleCache.get(skillId);
+  if (known) return known;
+  // An id the packs don't know still has to read as words, never as
+  // "math-ms.integers.add-sub" in front of a learner: drop the pack prefix,
+  // break the segments apart, and capitalize.
+  const words = skillId.split(".").slice(1).join(" ").replace(/-/g, " ").trim() || skillId;
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /**
