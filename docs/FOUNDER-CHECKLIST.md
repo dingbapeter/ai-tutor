@@ -13,11 +13,12 @@ before real children use it, Part 4 is the horizon.
 
 ### 1.0 Migrations
 
-Apply `packages/db/migrations/` in order, 0000 through 0014. The last three add
-the Command Centre: `0010_command_centre.sql` (staff and the audit trail),
-`0011_platform_settings.sql` (the switches you flip from the Controls tab) and
-`0012_staff_hr.sql` (employment records and reporting lines) and
-`0013_billing_events.sql` (the money ledger behind the Money tab) and
+Apply `packages/db/migrations/` in order, 0000 through 0014 (fifteen files).
+The last five build the Command Centre and the scaling layer:
+`0010_command_centre.sql` (staff and the audit trail),
+`0011_platform_settings.sql` (the switches on the Controls tab),
+`0012_staff_hr.sql` (employment records and reporting lines),
+`0013_billing_events.sql` (the money ledger behind the Money tab),
 `0014_session_resume.sql` (sessions survive restarts and scale across
 instances; with more than one api instance, keep sticky sessions on for the
 smoothest turns, though any instance can now serve any session).
@@ -35,7 +36,7 @@ you can spend.
    ```bash
    for f in packages/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
    ```
-   There are 10 (0000 through 0009). They are idempotent, safe to re-run.
+   There are 15 (0000 through 0014). They are idempotent, safe to re-run.
 5. Confirm: `https://<api-domain>/health` should now say `"store":"postgres"`
    instead of `"memory"`.
 
@@ -193,16 +194,23 @@ Android:
 - install to home screen, then use it offline
 - layouts at 360px width
 
-### 2.3 Observability (register item D) — BUILT 2026-08-29
+### 2.3 Observability (register item D) — ops half BUILT 2026-08-29
 
-PostHog and GlitchTip, both self-hosted on Contabo, both MIT. Until they
-exist, `ERROR_WEBHOOK_URL` is your only alarm. Retention is the metric that
-decides everything about this business, and you cannot see it yet.
+Ops observability is in the product now: the Ops tab in the Command Centre
+(request rates, latency, failures, memory, event loop) and a Prometheus feed
+at `/admin/metrics` any Grafana can scrape with your admin key. What remains
+yours: PRODUCT analytics. Retention is the metric that decides everything
+about this business, and the Ops tab does not show it. PostHog self-hosted
+on Contabo (MIT) is the plan when you want that lens.
 
-### 2.4 Load testing (register item B) — BUILT 2026-08-29; see docs/PERF.md
+### 2.4 Load testing (register item B) — driver BUILT 2026-08-29; see docs/PERF.md
 
-Before any launch push. Expect to add a request queue in front of llama.cpp;
-one 7B model serving many concurrent sessions will be the first bottleneck.
+The platform numbers are measured (flat to 150 concurrent users on one
+process). Your half: run the driver against the DEPLOYED stack before any
+launch push — `pnpm load -- --base https://api.dingba.ai --vus 30` — because
+that run measures the GPU box too, and one 7B serving many concurrent
+sessions will be the first bottleneck. Expect to add a request queue in
+front of llama.cpp when it is.
 
 ---
 
@@ -262,15 +270,22 @@ and silently ship worse teaching.
 
 ## What is already done, for your peace of mind
 
-Pushed, tested, CI-green: 72 API + 9 gateway + 7 mathcheck tests.
+Pushed, tested, CI-green: 203 TypeScript + 7 Python tests, twenty-plus
+consecutive green CI runs, and a full stub sweep behind it.
 
-Sessions with a tutor who greets you first and speaks. Cross-session memory.
-The Dingba Brain (goals, strengths, struggles, interests). Adaptive spaced
-repetition with a mastery ladder. Diagnostic level checks. Verified maths.
-Show Dingba (photos). Routine upload (timetables). Attunement. The care call.
-91 languages, 52 speaking. Safety gate, incident log, guardian alerts.
-Accounts, family profiles, parent dashboard, org accounts, API keys, exam
-mode, live classes, metering, entitlements, billing wiring, PWA, push
-notifications, password reset, email verification, GDPR deletion.
+Sessions with a tutor who greets you first and speaks, and that survive
+restarts and scale across instances. Cross-session memory and the Dingba
+Brain. Adaptive spaced repetition, diagnostic level checks, verified maths,
+lessons the personas deliver from the verified bank. Show Dingba (photos).
+Routine upload. Study plans, plan-aware push reminders, the guardian weekly
+digest. Attunement and the care call. 91 languages, 52 speaking. Safety gate
+hardened against evasion, incident log, guardian alerts. The Command Centre:
+roles with investors on the smallest surface, staff and HR with an org
+chart, safety desk, money ledger, platform controls, audit trail, CSV
+exports, the Ops tab. Accounts, family profiles, parent dashboard, org
+accounts, API keys, exam mode, live classes, metering, entitlements,
+billing wiring, PWA, push notifications, password reset, email
+verification, GDPR deletion. A load driver and a pedagogy eval harness
+waiting for your deployed model.
 
 The gap between this list and a live product is the list above, not more code.
