@@ -87,7 +87,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Parent dashboard (mastery bars, session recaps, flagged moments) | ✅ built + live-verified |
 | Safety gate: rules engine on every message, canned safe replies, incident log, guardian alerts | ✅ tested (danger/jailbreak/normal paths) |
 | Claude API moderation adapter (rules floor + classifier, fail-safe merge) | ⚠️ code-complete; needs ANTHROPIC_API_KEY at deploy |
-| Generated curriculum: 58 SymPy-verified problems with derived misconceptions | ✅ verified at build time |
+| Generated curriculum: 272 SymPy-verified problems across 33 skills (math-ms 25, exam-prep 3, pro-finance 5) with derived misconceptions | ✅ verified at build time AND against the live checker (tools/curriculum/verify_bank.py) |
 | Credits system (/credits + page), KaTeX math rendering, TTS cache | ✅ built |
 | Usage metering + plan entitlements (daily caps → 402 upsell, family seats) | ✅ tested + live-verified |
 | Exam mode: timed mocks, sealed verdicts, post-mortem, premium-gated | ✅ tested + live-verified |

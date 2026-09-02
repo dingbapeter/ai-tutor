@@ -65,6 +65,9 @@ class CompareCheck(BaseModel):
 class EquivCheck(BaseModel):
     expression: str = Field(max_length=MAX_LEN)
     student_expression: str = Field(max_length=MAX_LEN)
+    # Simplify/expand tasks ask for a bracket-free form; without this rule a
+    # student could type the question back and be "equivalent".
+    no_parentheses: bool = False
 
 
 @app.get("/health")
@@ -99,6 +102,8 @@ def check_compare(body: CompareCheck):
 
 @app.post("/check/equivalent")
 def check_equivalent(body: EquivCheck):
+    if body.no_parentheses and "(" in body.student_expression:
+        return {"correct": False, "reason": "answer must be written without brackets"}
     try:
         diff = simplify(parse(body.expression) - parse(body.student_expression))
     except HTTPException:

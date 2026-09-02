@@ -23,212 +23,721 @@
   "problems": [
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 3(x − 2) = 24, what is the value of x?",
-      "answer": "10",
+      "prompt": "If 4(x − 2) = 16, what is the value of x?",
+      "answer": "6",
       "check": {
         "type": "solve",
-        "equation": "3*(x - 2) = 24",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "8",
-          "diagnosis": "Divided by 3 but forgot to add 2 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 7(x − 7) = 28, what is the value of x?",
-      "answer": "11",
-      "check": {
-        "type": "solve",
-        "equation": "7*(x - 7) = 28",
+        "equation": "4*(x - 2) = 16",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
           "answer": "4",
-          "diagnosis": "Divided by 7 but forgot to add 7 back."
+          "diagnosis": "Divided by 4 but forgot to add 2 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 6(x − 1) = 66, what is the value of x?",
-      "answer": "12",
+      "prompt": "If 6(x − 1) = 24, what is the value of x?",
+      "answer": "5",
       "check": {
         "type": "solve",
-        "equation": "6*(x - 1) = 66",
+        "equation": "6*(x - 1) = 24",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
-          "answer": "11",
+          "answer": "4",
           "diagnosis": "Divided by 6 but forgot to add 1 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 6(x − 6) = 18, what is the value of x?",
-      "answer": "9",
-      "check": {
-        "type": "solve",
-        "equation": "6*(x - 6) = 18",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "3",
-          "diagnosis": "Divided by 6 but forgot to add 6 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 4(x − 1) = 36, what is the value of x?",
-      "answer": "10",
-      "check": {
-        "type": "solve",
-        "equation": "4*(x - 1) = 36",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "9",
-          "diagnosis": "Divided by 4 but forgot to add 1 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 6(x − 3) = 6, what is the value of x?",
-      "answer": "4",
-      "check": {
-        "type": "solve",
-        "equation": "6*(x - 3) = 6",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "1",
-          "diagnosis": "Divided by 6 but forgot to add 3 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 3(x − 7) = 6, what is the value of x?",
-      "answer": "9",
-      "check": {
-        "type": "solve",
-        "equation": "3*(x - 7) = 6",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "2",
-          "diagnosis": "Divided by 3 but forgot to add 7 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 5(x − 9) = 15, what is the value of x?",
-      "answer": "12",
-      "check": {
-        "type": "solve",
-        "equation": "5*(x - 9) = 15",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "3",
-          "diagnosis": "Divided by 5 but forgot to add 9 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 2(x − 3) = 4, what is the value of x?",
-      "answer": "5",
-      "check": {
-        "type": "solve",
-        "equation": "2*(x - 3) = 4",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "2",
-          "diagnosis": "Divided by 2 but forgot to add 3 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 5(x − 7) = 5, what is the value of x?",
+      "prompt": "If 3(x − 1) = 21, what is the value of x?",
       "answer": "8",
       "check": {
         "type": "solve",
-        "equation": "5*(x - 7) = 5",
-        "variable": "x"
-      },
-      "timeLimitSec": 75,
-      "misconceptions": [
-        {
-          "answer": "1",
-          "diagnosis": "Divided by 5 but forgot to add 7 back."
-        }
-      ]
-    },
-    {
-      "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 7(x − 2) = 49, what is the value of x?",
-      "answer": "9",
-      "check": {
-        "type": "solve",
-        "equation": "7*(x - 2) = 49",
+        "equation": "3*(x - 1) = 21",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
           "answer": "7",
-          "diagnosis": "Divided by 7 but forgot to add 2 back."
+          "diagnosis": "Divided by 3 but forgot to add 1 back."
         }
       ]
     },
     {
       "skillId": "exam.sat-math.heart-of-algebra",
-      "prompt": "If 2(x − 6) = 4, what is the value of x?",
+      "prompt": "If 8(x − 2) = 32, what is the value of x?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "8*(x - 2) = 32",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "Divided by 8 but forgot to add 2 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 2(x − 5) = 6, what is the value of x?",
       "answer": "8",
       "check": {
         "type": "solve",
-        "equation": "2*(x - 6) = 4",
+        "equation": "2*(x - 5) = 6",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "Divided by 2 but forgot to add 5 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x − 4) = 6, what is the value of x?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x - 4) = 6",
         "variable": "x"
       },
       "timeLimitSec": 75,
       "misconceptions": [
         {
           "answer": "2",
-          "diagnosis": "Divided by 2 but forgot to add 6 back."
+          "diagnosis": "Divided by 3 but forgot to add 4 back."
         }
       ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x − 8) = 12, what is the value of x?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x - 8) = 12",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "Divided by 3 but forgot to add 8 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 4(x − 5) = 16, what is the value of x?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x - 5) = 16",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "Divided by 4 but forgot to add 5 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 3(x − 7) = 3, what is the value of x?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x - 7) = 3",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "Divided by 3 but forgot to add 7 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 6(x − 7) = 12, what is the value of x?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "6*(x - 7) = 12",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "Divided by 6 but forgot to add 7 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "If 5(x − 1) = 15, what is the value of x?",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x - 1) = 15",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "Divided by 5 but forgot to add 1 back."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 6x + 9 = 1x + 29",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 9 = 1*x + 29",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 7x + 10 = 2x + 45",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 10 = 2*x + 45",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 10x + 6 = 3x + 20",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "10*x + 6 = 3*x + 20",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 6x + 12 = 4x + 24",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 12 = 4*x + 24",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 8x + 1 = 6x + 21",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "8*x + 1 = 6*x + 21",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.heart-of-algebra",
+      "prompt": "Solve for x: 6x + 4 = 4x + 14",
+      "answer": "5",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 4 = 4*x + 14",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "When 4x crosses to the other side its sign flips: 6x MINUS 4x on the left, giving 2x."
+        }
+      ],
+      "timeLimitSec": 75
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a tablet priced at 150 is reduced by 30%. What is the sale price?",
+      "answer": "105",
+      "check": {
+        "type": "solve",
+        "equation": "x = 150 - 150*30/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "120",
+          "diagnosis": "Took 30 off instead of 30%. Work out 30% of 150 first, then subtract it."
+        },
+        {
+          "answer": "45",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a laptop priced at 400 is reduced by 40%. What is the sale price?",
+      "answer": "240",
+      "check": {
+        "type": "solve",
+        "equation": "x = 400 - 400*40/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "360",
+          "diagnosis": "Took 40 off instead of 40%. Work out 40% of 400 first, then subtract it."
+        },
+        {
+          "answer": "160",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a bicycle priced at 500 is reduced by 20%. What is the sale price?",
+      "answer": "400",
+      "check": {
+        "type": "solve",
+        "equation": "x = 500 - 500*20/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "480",
+          "diagnosis": "Took 20 off instead of 20%. Work out 20% of 500 first, then subtract it."
+        },
+        {
+          "answer": "100",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a laptop priced at 400 is reduced by 20%. What is the sale price?",
+      "answer": "320",
+      "check": {
+        "type": "solve",
+        "equation": "x = 400 - 400*20/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "380",
+          "diagnosis": "Took 20 off instead of 20%. Work out 20% of 400 first, then subtract it."
+        },
+        {
+          "answer": "80",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a laptop priced at 150 is reduced by 40%. What is the sale price?",
+      "answer": "90",
+      "check": {
+        "type": "solve",
+        "equation": "x = 150 - 150*40/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "110",
+          "diagnosis": "Took 40 off instead of 40%. Work out 40% of 150 first, then subtract it."
+        },
+        {
+          "answer": "60",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a laptop priced at 240 is reduced by 25%. What is the sale price?",
+      "answer": "180",
+      "check": {
+        "type": "solve",
+        "equation": "x = 240 - 240*25/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "215",
+          "diagnosis": "Took 25 off instead of 25%. Work out 25% of 240 first, then subtract it."
+        },
+        {
+          "answer": "60",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a pair of trainers priced at 500 is reduced by 10%. What is the sale price?",
+      "answer": "450",
+      "check": {
+        "type": "solve",
+        "equation": "x = 500 - 500*10/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "490",
+          "diagnosis": "Took 10 off instead of 10%. Work out 10% of 500 first, then subtract it."
+        },
+        {
+          "answer": "50",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "In a sale, a laptop priced at 500 is reduced by 30%. What is the sale price?",
+      "answer": "350",
+      "check": {
+        "type": "solve",
+        "equation": "x = 500 - 500*30/100",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "470",
+          "diagnosis": "Took 30 off instead of 30%. Work out 30% of 500 first, then subtract it."
+        },
+        {
+          "answer": "150",
+          "diagnosis": "That's the discount itself. The sale price is the original minus the discount."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 56 bottles in 7 minutes at a steady rate. How many bottles does it fill in 11 minutes?",
+      "answer": "88",
+      "check": {
+        "type": "solve",
+        "equation": "x = (56/7)*11",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "67",
+          "diagnosis": "Added instead of scaling. Find how many per unit first (56 ÷ 7 = 8), then multiply by 11."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 21 bottles in 3 minutes at a steady rate. How many bottles does it fill in 11 minutes?",
+      "answer": "77",
+      "check": {
+        "type": "solve",
+        "equation": "x = (21/3)*11",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "Added instead of scaling. Find how many per unit first (21 ÷ 3 = 7), then multiply by 11."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 28 bottles in 4 minutes at a steady rate. How many bottles does it fill in 5 minutes?",
+      "answer": "35",
+      "check": {
+        "type": "solve",
+        "equation": "x = (28/4)*5",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "33",
+          "diagnosis": "Added instead of scaling. Find how many per unit first (28 ÷ 4 = 7), then multiply by 5."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 30 bottles in 5 minutes at a steady rate. How many bottles does it fill in 6 minutes?",
+      "answer": "36",
+      "check": {
+        "type": "solve",
+        "equation": "x = (30/5)*6",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 30 bottles in 5 minutes at a steady rate. How many bottles does it fill in 12 minutes?",
+      "answer": "72",
+      "check": {
+        "type": "solve",
+        "equation": "x = (30/5)*12",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "42",
+          "diagnosis": "Added instead of scaling. Find how many per unit first (30 ÷ 5 = 6), then multiply by 12."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.sat-math.problem-solving",
+      "prompt": "A machine fills 21 bottles in 7 minutes at a steady rate. How many bottles does it fill in 11 minutes?",
+      "answer": "33",
+      "check": {
+        "type": "solve",
+        "equation": "x = (21/7)*11",
+        "variable": "x"
+      },
+      "timeLimitSec": 75,
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "Added instead of scaling. Find how many per unit first (21 ÷ 7 = 3), then multiply by 11."
+        }
+      ]
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Simplify by collecting like terms: 7x + 7x + 1 (write the answer without brackets)",
+      "answer": "14x + 1",
+      "check": {
+        "type": "equivalent",
+        "expression": "7*x + 7*x + 1",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Expand the bracket: 8(x + 8) (write the answer without brackets)",
+      "answer": "8x + 64",
+      "check": {
+        "type": "equivalent",
+        "expression": "8*(x + 8)",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Simplify by collecting like terms: 2x + 6x + 3 (write the answer without brackets)",
+      "answer": "8x + 3",
+      "check": {
+        "type": "equivalent",
+        "expression": "2*x + 6*x + 3",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Expand the bracket: 7(x + 5) (write the answer without brackets)",
+      "answer": "7x + 35",
+      "check": {
+        "type": "equivalent",
+        "expression": "7*(x + 5)",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Simplify by collecting like terms: 6x + 7x + 6 (write the answer without brackets)",
+      "answer": "13x + 6",
+      "check": {
+        "type": "equivalent",
+        "expression": "6*x + 7*x + 6",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Expand the bracket: 5(x + 8) (write the answer without brackets)",
+      "answer": "5x + 40",
+      "check": {
+        "type": "equivalent",
+        "expression": "5*(x + 8)",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Simplify by collecting like terms: 2x + 6x + 5 (write the answer without brackets)",
+      "answer": "8x + 5",
+      "check": {
+        "type": "equivalent",
+        "expression": "2*x + 6*x + 5",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Expand the bracket: 5(x + 3) (write the answer without brackets)",
+      "answer": "5x + 15",
+      "check": {
+        "type": "equivalent",
+        "expression": "5*(x + 3)",
+        "noParentheses": true
+      },
+      "timeLimitSec": 90,
+      "misconceptions": []
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 7x + 5 = 3x + 17",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 5 = 3*x + 17",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 90
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 7x + 3 = 3x + 27",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 3 = 3*x + 27",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 90
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 8x + 3 = 2x + 63",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "8*x + 3 = 2*x + 63",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "When 2x crosses to the other side its sign flips: 8x MINUS 2x on the left, giving 6x."
+        }
+      ],
+      "timeLimitSec": 90
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 8x + 5 = 5x + 23",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "8*x + 5 = 5*x + 23",
+        "variable": "x"
+      },
+      "misconceptions": [],
+      "timeLimitSec": 90
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 6x + 5 = 2x + 21",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 5 = 2*x + 21",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "When 2x crosses to the other side its sign flips: 6x MINUS 2x on the left, giving 4x."
+        }
+      ],
+      "timeLimitSec": 90
+    },
+    {
+      "skillId": "exam.waec-math.algebraic-processes",
+      "prompt": "Solve for x: 8x + 5 = 6x + 19",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "8*x + 5 = 6*x + 19",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "When 6x crosses to the other side its sign flips: 8x MINUS 6x on the left, giving 2x."
+        }
+      ],
+      "timeLimitSec": 90
     }
   ],
   "generated": {
     "tool": "tools/curriculum/generate.py",
-    "count": 12,
-    "verified": "sympy-at-build"
+    "count": 45,
+    "verified": "sympy-at-build",
+    "handAuthoredRubric": 0
   }
 }

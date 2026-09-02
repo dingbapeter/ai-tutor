@@ -4,30 +4,280 @@
   "vertical": "professional",
   "description": "Professional exam pack. Numeric problems are verified exactly by the mathcheck service; concept and ethics questions are graded on rubric. Timing metadata feeds mock-exam mode.",
   "skills": [
-    { "id": "fin.tvm.basics", "title": "Time value of money", "prerequisites": [] },
-    { "id": "fin.statements.reading", "title": "Reading the three statements", "prerequisites": [] },
-    { "id": "fin.ratios.core", "title": "Core ratios", "prerequisites": ["fin.statements.reading"] },
-    { "id": "fin.ethics.standards", "title": "Professional ethics", "prerequisites": [] },
-    { "id": "fin.exam.technique", "title": "Exam technique under time", "prerequisites": ["fin.tvm.basics", "fin.ratios.core"] }
+    {
+      "id": "fin.tvm.basics",
+      "title": "Time value of money",
+      "prerequisites": []
+    },
+    {
+      "id": "fin.statements.reading",
+      "title": "Reading the three statements",
+      "prerequisites": []
+    },
+    {
+      "id": "fin.ratios.core",
+      "title": "Core ratios",
+      "prerequisites": [
+        "fin.statements.reading"
+      ]
+    },
+    {
+      "id": "fin.ethics.standards",
+      "title": "Professional ethics",
+      "prerequisites": []
+    },
+    {
+      "id": "fin.exam.technique",
+      "title": "Exam technique under time",
+      "prerequisites": [
+        "fin.tvm.basics",
+        "fin.ratios.core"
+      ]
+    }
   ],
   "problems": [
     {
       "skillId": "fin.tvm.basics",
-      "prompt": "You invest 1,000 at 8% simple interest. How much interest have you earned after 3 years?",
-      "answer": "240",
-      "check": { "type": "solve", "equation": "x = 1000*0.08*3", "variable": "x" }
+      "prompt": "You invest 500 at 4% simple interest per year. How much interest have you earned after 3 years?",
+      "answer": "60",
+      "check": {
+        "type": "solve",
+        "equation": "x = 500*4*3/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "20",
+          "diagnosis": "That's one year's interest. Simple interest repeats every year, so multiply by the 3 years."
+        }
+      ]
     },
     {
       "skillId": "fin.tvm.basics",
-      "prompt": "1,000 invested at 10%, compounded annually. What is the future value after 2 years?",
+      "prompt": "You invest 4,000 at 5% simple interest per year. How much interest have you earned after 4 years?",
+      "answer": "800",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4000*5*4/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "200",
+          "diagnosis": "That's one year's interest. Simple interest repeats every year, so multiply by the 4 years."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 1,000 at 5% simple interest per year. How much interest have you earned after 5 years?",
+      "answer": "250",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1000*5*5/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "50",
+          "diagnosis": "That's one year's interest. Simple interest repeats every year, so multiply by the 5 years."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 5,000 at 6% simple interest per year. How much interest have you earned after 2 years?",
+      "answer": "600",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5000*6*2/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "300",
+          "diagnosis": "That's one year's interest. Simple interest repeats every year, so multiply by the 2 years."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 2,000 at 10% compound interest per year. What is the investment worth after 3 years?",
+      "answer": "2662",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2000*(1 + 10/100)^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2600",
+          "diagnosis": "That's simple interest. Compound interest earns interest ON the interest: multiply by 1.1 once per year, not add the same amount each year."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 1,000 at 10% compound interest per year. What is the investment worth after 2 years?",
       "answer": "1210",
-      "check": { "type": "solve", "equation": "x = 1000*(1 + 10/100)**2", "variable": "x" }
+      "check": {
+        "type": "solve",
+        "equation": "x = 1000*(1 + 10/100)^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1200",
+          "diagnosis": "That's simple interest. Compound interest earns interest ON the interest: multiply by 1.1 once per year, not add the same amount each year."
+        }
+      ]
     },
     {
       "skillId": "fin.tvm.basics",
-      "prompt": "What is the present value of 1,210 due in 2 years, discounted at 10% a year?",
-      "answer": "1000",
-      "check": { "type": "solve", "equation": "x = 1210/(1 + 10/100)**2", "variable": "x" }
+      "prompt": "You invest 10,000 at 10% compound interest per year. What is the investment worth after 2 years?",
+      "answer": "12100",
+      "check": {
+        "type": "solve",
+        "equation": "x = 10000*(1 + 10/100)^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12000",
+          "diagnosis": "That's simple interest. Compound interest earns interest ON the interest: multiply by 1.1 once per year, not add the same amount each year."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.tvm.basics",
+      "prompt": "You invest 5,000 at 10% compound interest per year. What is the investment worth after 3 years?",
+      "answer": "6655",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5000*(1 + 10/100)^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6500",
+          "diagnosis": "That's simple interest. Compound interest earns interest ON the interest: multiply by 1.1 once per year, not add the same amount each year."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A company has current assets of 100,000 and current liabilities of 40,000. What is its current ratio?",
+      "answer": "2.5",
+      "check": {
+        "type": "solve",
+        "equation": "x = 100000/40000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A business earns a net profit of 160,000 on revenue of 800,000. What is its net profit margin, as a percentage?",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x = 100*160000/800000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A company has current assets of 40,000 and current liabilities of 20,000. What is its current ratio?",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x = 40000/20000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A business earns a net profit of 80,000 on revenue of 800,000. What is its net profit margin, as a percentage?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "x = 100*80000/800000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A company has current assets of 30,000 and current liabilities of 10,000. What is its current ratio?",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "x = 30000/10000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.ratios.core",
+      "prompt": "A business earns a net profit of 160,000 on revenue of 800,000. What is its net profit margin, as a percentage?",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x = 100*160000/800000",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.exam.technique",
+      "prompt": "A product sells for 46 with a variable cost of 6 per unit. Fixed costs are 18,000. How many units must be sold to break even?",
+      "answer": "450",
+      "check": {
+        "type": "solve",
+        "equation": "x = 18000/(46 - 6)",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.exam.technique",
+      "prompt": "A product sells for 46 with a variable cost of 21 per unit. Fixed costs are 30,000. How many units must be sold to break even?",
+      "answer": "1200",
+      "check": {
+        "type": "solve",
+        "equation": "x = 30000/(46 - 21)",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "fin.exam.technique",
+      "prompt": "A product sells for 25 with a variable cost of 5 per unit. Fixed costs are 18,000. How many units must be sold to break even?",
+      "answer": "900",
+      "check": {
+        "type": "solve",
+        "equation": "x = 18000/(25 - 5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "720",
+          "diagnosis": "Divided by the selling price. Each unit only CONTRIBUTES 25 - 5 = 20 after its own variable cost, so divide fixed costs by 20."
+        }
+      ]
+    },
+    {
+      "skillId": "fin.exam.technique",
+      "prompt": "A product sells for 33 with a variable cost of 9 per unit. Fixed costs are 12,000. How many units must be sold to break even?",
+      "answer": "500",
+      "check": {
+        "type": "solve",
+        "equation": "x = 12000/(33 - 9)",
+        "variable": "x"
+      },
+      "misconceptions": []
     },
     {
       "skillId": "fin.tvm.basics",
@@ -41,12 +291,6 @@
           "under 100 words"
         ]
       }
-    },
-    {
-      "skillId": "fin.ratios.core",
-      "prompt": "Current assets are 150,000 and current liabilities are 60,000. What is the current ratio?",
-      "answer": "2.5",
-      "check": { "type": "solve", "equation": "x = 150000/60000", "variable": "x" }
     },
     {
       "skillId": "fin.statements.reading",
@@ -73,13 +317,12 @@
           "professional, non-preachy tone"
         ]
       }
-    },
-    {
-      "skillId": "fin.exam.technique",
-      "prompt": "Timed. Fixed costs are 40,000. Price is 25 per unit, variable cost 15 per unit. How many units to break even?",
-      "answer": "4000",
-      "timeLimitSec": 90,
-      "check": { "type": "solve", "equation": "x = 40000/(25 - 15)", "variable": "x" }
     }
-  ]
+  ],
+  "generated": {
+    "tool": "tools/curriculum/generate.py",
+    "count": 18,
+    "verified": "sympy-at-build",
+    "handAuthoredRubric": 3
+  }
 }

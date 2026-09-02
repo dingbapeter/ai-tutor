@@ -11,7 +11,7 @@
   "problems": [
     {
       "skillId": "lang.en.introductions",
-      "prompt": "Scenario: You meet a new classmate. Introduce yourself — name, where you're from, one hobby.",
+      "prompt": "Scenario: You meet a new classmate. Introduce yourself: your name, where you're from, and one hobby.",
       "check": { "type": "rubric", "criteria": ["states name", "states origin", "mentions a hobby", "grammatically coherent"] }
     }
   ]

@@ -112,6 +112,7 @@ infrastructure (Contabo, SMTP, etc.) is confirmed available.
    (15–19). ~~Plans, reminders, digest, lessons~~ DONE (20–23).
    ~~Session survival, observability, load, evals, safety floor~~ DONE
    (24–28). ~~Full-platform stub sweep~~ DONE (29).
+   ~~Curriculum depth: 272-problem verified bank, spread sampling~~ DONE (31).
 2. NEXT: the founder deploys per `deploy/DEPLOY.md` and
    `docs/FOUNDER-CHECKLIST.md` (migrations through 0013,
    COMMAND_OWNER_EMAILS, plan prices, two cron curls for

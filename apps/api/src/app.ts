@@ -4,6 +4,7 @@ import rateLimit from "@fastify/rate-limit";
 import type { AiGateway, ChatMessage } from "@tutor/ai-gateway";
 import {
   buildSystemPrompt,
+  type CurriculumPack,
   loadPack,
   loadPersonas,
   loadLanguages,
@@ -299,6 +300,46 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const machineVerifiable = (p: { check?: unknown; answer?: unknown }) =>
     ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) ||
     p.answer !== undefined;
+
+  /**
+   * Round-robin sampler for scored surfaces: one machine-verifiable problem
+   * per skill (curriculum order), then further laps until the cap. Keeps a
+   * deep pack's mocks and level checks spread across the whole ladder.
+   */
+  function sampleAcrossSkills(pack: CurriculumPack, cap: number, maxPerSkill = Infinity): number[] {
+    const bySkill = new Map<string, number[]>();
+    for (const [i, p] of pack.problems.entries()) {
+      if (!p.skillId || !machineVerifiable(p)) continue;
+      const list = bySkill.get(String(p.skillId)) ?? [];
+      list.push(i);
+      bySkill.set(String(p.skillId), list);
+    }
+    const ladder = pack.skills.filter((s) => bySkill.has(s.id));
+    if (ladder.length >= cap) {
+      // More skills than places: evenly spaced rungs across the whole
+      // ladder, so the mock touches early, middle, and late curriculum
+      // instead of only the first rungs.
+      const out: number[] = [];
+      for (let k = 0; k < cap; k++) {
+        const skill = ladder[Math.floor((k * ladder.length) / cap)];
+        out.push(bySkill.get(skill.id)![0]);
+      }
+      return out;
+    }
+    const out: number[] = [];
+    for (let lap = 0; out.length < cap && lap < maxPerSkill; lap++) {
+      let tookAny = false;
+      for (const skill of ladder) {
+        const list = bySkill.get(skill.id)!;
+        if (list.length <= lap) continue;
+        out.push(list[lap]);
+        tookAny = true;
+        if (out.length >= cap) break;
+      }
+      if (!tookAny) break;
+    }
+    return out;
+  }
 
   /** TTS cache: identical text+voice never hits the engine twice. */
   const ttsCache = new Map<string, { audio: Uint8Array; mimeType: string }>();
@@ -1664,17 +1705,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     if (session.diagnostic) return reply.code(409).send({ error: "a level check is already in progress" });
     const pack = loadPack(session.packId);
 
-    // Up to 2 machine-verifiable problems per skill, in curriculum order.
-    const problemIndexes: number[] = [];
-    for (const skill of pack.skills) {
-      const picked = pack.problems
-        .map((p, i) => ({ p, i }))
-        .filter(({ p }) => p.skillId === skill.id && machineVerifiable(p))
-        .slice(0, 2)
-        .map(({ i }) => i);
-      problemIndexes.push(...picked);
-      if (problemIndexes.length >= 12) break;
-    }
+    // Breadth first: one machine-verifiable problem per skill in curriculum
+    // order, then a second lap, capped at 12. A deep pack's level check
+    // should sweep the whole ladder, not drill its first rungs.
+    const problemIndexes = sampleAcrossSkills(pack, 12, 2);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no checkable problems yet, your tutor will place you in conversation instead" });
     }
@@ -1803,12 +1837,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const pack = loadPack(session.packId);
     // A scored exam may only contain problems a machine can actually grade.
     // Before this filter, a learner could sit a timed mock on a rubric-only
-    // pack and score zero no matter what they wrote.
-    const problemIndexes = pack.problems
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => p.skillId && machineVerifiable(p))
-      .slice(0, 8)
-      .map(({ i }) => i);
+    // pack and score zero no matter what they wrote. Sampling is one problem
+    // per skill, then further laps, so a mock spans the curriculum instead of
+    // asking eight variants of the first skill.
+    const problemIndexes = sampleAcrossSkills(pack, 8);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no timed mock yet, practice with your tutor instead" });
     }

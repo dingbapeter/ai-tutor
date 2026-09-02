@@ -1467,3 +1467,133 @@ describe("session lifecycle", () => {
     expect(res.rawPayload.subarray(0, 4).toString()).toBe("RIFF");
   });
 });
+
+describe("curriculum depth (sprint 31)", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../../../curriculum");
+  const packIds = ["math-ms", "exam-prep", "language", "visa-prep", "pro-finance", "career-coach"];
+  const packs = packIds.map((id) => ({
+    id,
+    pack: JSON.parse(readFileSync(join(root, id, "pack.json"), "utf8")) as {
+      skills: Array<{ id: string; prerequisites: string[] }>;
+      problems: Array<{
+        skillId?: string;
+        prompt: string;
+        answer?: string;
+        check: { type: string };
+        misconceptions?: Array<{ answer: string; diagnosis: string }>;
+      }>;
+    },
+  }));
+
+  it("every problem belongs to a real skill and every prerequisite exists", () => {
+    for (const { id, pack } of packs) {
+      const skillIds = new Set(pack.skills.map((s) => s.id));
+      for (const p of pack.problems) {
+        expect(p.skillId, `${id}: problem without skillId: ${p.prompt}`).toBeTruthy();
+        expect(skillIds.has(String(p.skillId)), `${id}: orphan skillId ${p.skillId}`).toBe(true);
+      }
+      for (const s of pack.skills) {
+        for (const pre of s.prerequisites) {
+          expect(skillIds.has(pre), `${id}: ${s.id} requires unknown ${pre}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("machine-verifiable packs cover every skill with problems, and deeply", () => {
+    for (const id of ["math-ms", "exam-prep", "pro-finance"]) {
+      const { pack } = packs.find((p) => p.id === id)!;
+      const bySkill = new Map<string, number>();
+      for (const p of pack.problems) bySkill.set(String(p.skillId), (bySkill.get(String(p.skillId)) ?? 0) + 1);
+      for (const s of pack.skills) {
+        expect(bySkill.get(s.id) ?? 0, `${id}: skill ${s.id} has no problems`).toBeGreaterThan(0);
+      }
+    }
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    expect(math.skills.length).toBeGreaterThanOrEqual(25);
+    expect(math.problems.length).toBeGreaterThanOrEqual(200);
+  });
+
+  it("every verifiable problem stores an exact answer so grading survives the checker being down", () => {
+    for (const { id, pack } of packs) {
+      for (const p of pack.problems) {
+        if (["solve", "compare", "equivalent"].includes(p.check.type)) {
+          expect(p.answer, `${id}: ${p.prompt} has no stored answer`).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("no learner-facing curriculum text carries an em dash", () => {
+    for (const { id, pack } of packs) {
+      for (const p of pack.problems) {
+        expect(p.prompt.includes("—"), `${id}: em dash in prompt: ${p.prompt}`).toBe(false);
+        for (const m of p.misconceptions ?? []) {
+          expect(m.diagnosis.includes("—"), `${id}: em dash in diagnosis: ${m.diagnosis}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("a mock exam on the deep math pack spans the curriculum, not eight variants of one skill", async () => {
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", ADMIN_KEY: "sesame" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "spread@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const up = await isolated.inject({
+      method: "POST",
+      url: "/admin/plan",
+      headers: { "x-admin-key": "sesame" },
+      payload: { email: "spread@example.com", plan: "premium" },
+    });
+    expect(up.statusCode).toBe(200);
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Femi" } });
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId: kid.json().id, personaId: "kofi", packId: "math-ms" },
+    });
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${s.json().sessionId}/exam/start` });
+    expect(exam.statusCode).toBe(200);
+    const problems = exam.json().problems as Array<{ index: number }>;
+    expect(problems).toHaveLength(8);
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    const skills = new Set(problems.map((p) => math.problems[p.index].skillId));
+    expect(skills.size).toBe(8); // one per skill until the ladder is covered
+    await isolated.close();
+  });
+
+  it("a level check on the deep pack sweeps twelve different skills", async () => {
+    const { sessionId } = await createSession("Bola");
+    const diag = await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/start` });
+    expect(diag.statusCode).toBe(200);
+    const problems = diag.json().problems as Array<{ index: number; skillId: string }>;
+    expect(problems).toHaveLength(12);
+    expect(new Set(problems.map((p) => p.skillId)).size).toBe(12);
+  });
+
+  it("simplify/expand problems grade through the stored-answer fallback when the checker is down", async () => {
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    const idx = math.problems.findIndex((p) => p.check.type === "equivalent");
+    expect(idx).toBeGreaterThan(-1);
+    const { sessionId } = await createSession("Efe");
+    // No mathcheck service in unit tests: verifyAnswer returns null and the
+    // exact stored answer (whitespace-insensitive) decides.
+    const typed = String(math.problems[idx].answer).replace(/\s/g, "");
+    const right = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/practice`,
+      payload: { problemIndex: idx, answer: typed },
+    });
+    expect(right.statusCode).toBe(200);
+    expect(right.json().correct).toBe(true);
+  });
+});
