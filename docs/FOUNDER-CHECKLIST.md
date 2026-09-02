@@ -195,6 +195,10 @@ right default for Nigerian cards.
 Nothing substitutes for this. On an actual iPhone and an actual budget
 Android:
 - hold-to-talk voice: does it record, does it play back
+- conversation mode (the speech-bubble button): talk without pressing
+  anything, get a spoken reply, then interrupt it by talking over it.
+  The voice-detection thresholds were tuned against a synthetic mic;
+  a noisy classroom on a cheap phone is the real test
 - the care call button: does it open the dialer
 - camera capture in Show Dingba
 - install to home screen, then use it offline
@@ -204,10 +208,11 @@ Android:
 
 Ops observability is in the product now: the Ops tab in the Command Centre
 (request rates, latency, failures, memory, event loop) and a Prometheus feed
-at `/admin/metrics` any Grafana can scrape with your admin key. What remains
-yours: PRODUCT analytics. Retention is the metric that decides everything
-about this business, and the Ops tab does not show it. PostHog self-hosted
-on Contabo (MIT) is the plan when you want that lens.
+at `/admin/metrics` any Grafana can scrape with your admin key. Retention is now
+in the product too (2026-09-02): the Growth tab shows the activation
+funnel and weekly cohort retention, and investors can read it. PostHog
+self-hosted on Contabo (MIT) remains the option if you later want
+event-level analytics (which button, which screen) on top.
 
 ### 2.4 Load testing (register item B) — driver BUILT 2026-08-29; see docs/PERF.md
 

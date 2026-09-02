@@ -146,7 +146,7 @@ pnpm load -- --base https://api.dingba.ai --vus 30
 
 ### Try it on real phones
 
-One iPhone and one cheap Android. Hold the talk button and hear your voice played back. Press the care-call button and see the phone's dialler open. Point the camera at homework in "Show Dingba". Add the app to the home screen, turn on airplane mode, and see it still open. Nothing should look squashed.
+One iPhone and one cheap Android. Hold the talk button and hear your voice played back. Try the speech-bubble button too: it opens a hands-free conversation where you just talk, and you can interrupt the tutor by speaking over it. Press the care-call button and see the phone's dialler open. Point the camera at homework in "Show Dingba". Add the app to the home screen, turn on airplane mode, and see it still open. Nothing should look squashed.
 
 ### Open your Command Centre
 
