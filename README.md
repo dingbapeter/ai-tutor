@@ -92,6 +92,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Usage metering + plan entitlements (daily caps → 402 upsell, family seats) | ✅ tested + live-verified |
 | Bounded request queue in front of the model box (shared across chat/vision, busy events + 503 Retry-After, ops panel + Prometheus) | ✅ tested + verified under a 30-client blast |
 | Rubric mock exams: visa/coaching/language answers judged against each problem's criteria by the model, unparseable verdicts honestly unscored, doors gated on a real judge | ✅ tested + live-verified (judge quality rides the real model) |
+| Conversation mode: open mic with browser VAD, utterances auto-sent, tutor interruptible by speaking over it (barge-in), silence never buffered unbounded | ✅ FSM unit-tested + live-verified with a fake microphone |
 | Exam mode: timed mocks, sealed verdicts, post-mortem, premium-gated | ✅ tested + live-verified |
 | Org/school accounts: seats, roster import, teacher dashboard | ✅ tested |
 | B2B API keys (scoped, hashed, quota'd, metered) + Tutor-as-a-Service sessions | ✅ tested + live-verified |

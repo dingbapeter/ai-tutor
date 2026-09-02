@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
+import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -109,10 +110,18 @@ export default function Home() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [verdicts, setVerdicts] = useState<Record<number, boolean | null>>({});
+  const [convo, setConvo] = useState<ConversationState>("off");
   const bottom = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const photoInput = useRef<HTMLInputElement>(null);
+  const convoLoop = useRef<ConversationLoop | null>(null);
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const busyRef = useRef(false);
+  const speakingRef = useRef(false);
+  // At most one utterance waits while the tutor is mid-reply; a newer one
+  // replaces it (the learner's latest words are what they mean now).
+  const pendingSegment = useRef<Blob | null>(null);
 
   const persona = personas.find((p) => p.id === personaId);
 
@@ -155,15 +164,80 @@ export default function Home() {
     return () => { delete document.body.dataset.session; };
   }, [sessionId]);
 
+  // The open mic never outlives the session it was opened for.
+  useEffect(() => {
+    if (!sessionId && convoLoop.current) {
+      convoLoop.current.stop();
+      convoLoop.current = null;
+      pendingSegment.current = null;
+    }
+    return () => {
+      convoLoop.current?.stop();
+      convoLoop.current = null;
+    };
+  }, [sessionId]);
+
   function playAudio(src: Blob | string) {
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
+    currentAudio.current = audio;
     setSpeaking(true);
+    speakingRef.current = true;
     audio.onended = audio.onerror = () => {
       setSpeaking(false);
+      speakingRef.current = false;
+      if (currentAudio.current === audio) currentAudio.current = null;
       if (typeof src !== "string") URL.revokeObjectURL(url);
     };
-    audio.play().catch(() => setSpeaking(false));
+    audio.play().catch(() => {
+      setSpeaking(false);
+      speakingRef.current = false;
+    });
+  }
+
+  /** Barge-in: the learner spoke over the tutor, so the tutor stops talking. */
+  function stopSpeaking() {
+    const audio = currentAudio.current;
+    if (audio) {
+      audio.pause();
+      currentAudio.current = null;
+    }
+    setSpeaking(false);
+    speakingRef.current = false;
+  }
+
+  function stopConversation() {
+    convoLoop.current?.stop();
+    convoLoop.current = null;
+    pendingSegment.current = null;
+  }
+
+  async function toggleConversation() {
+    if (convoLoop.current) {
+      stopConversation();
+      return;
+    }
+    if (!conversationSupported()) {
+      setError("This browser can't hold an open conversation. Use hold-to-talk instead.");
+      return;
+    }
+    setError(null);
+    const loop = new ConversationLoop({
+      onSegment: (blob) => {
+        if (busyRef.current) pendingSegment.current = blob;
+        else void sendVoice(blob);
+      },
+      onState: (s) => setConvo(s),
+      isTutorSpeaking: () => speakingRef.current,
+      onBargeIn: () => stopSpeaking(),
+      onError: (m) => setError(m),
+    });
+    convoLoop.current = loop;
+    try {
+      await loop.start();
+    } catch {
+      convoLoop.current = null;
+    }
   }
 
   async function speakMessage(text: string) {
@@ -470,6 +544,7 @@ export default function Home() {
   async function sendVoice(blob: Blob) {
     if (!sessionId) return;
     setBusy(true);
+    busyRef.current = true;
     setMessages((m) => [...m, { role: "user", content: "🎤 …" }]);
     try {
       const res = await fetch(`${API}/sessions/${sessionId}/voice`, {
@@ -492,6 +567,14 @@ export default function Home() {
       setMessages((m) => (m[m.length - 1]?.content === "🎤 …" ? m.slice(0, -1) : m));
     } finally {
       setBusy(false);
+      busyRef.current = false;
+      // In conversation mode, anything said while the tutor was replying
+      // goes out now.
+      const next = pendingSegment.current;
+      if (next && convoLoop.current) {
+        pendingSegment.current = null;
+        void sendVoice(next);
+      }
     }
   }
 
@@ -729,7 +812,15 @@ export default function Home() {
             <h2>{persona?.name}</h2>
             <div className="status">
               {lessonTitle ? `Lesson: ${lessonTitle} · ` : ""}
-              {speaking ? "speaking…" : busy ? "thinking…" : "listening"}
+              {speaking
+                ? convo !== "off" ? "speaking, talk over me any time" : "speaking…"
+                : busy
+                  ? "thinking…"
+                  : convo === "hearing"
+                    ? "hearing you…"
+                    : convo === "listening"
+                      ? "in conversation, just talk"
+                      : "listening"}
             </div>
           </div>
         </div>
@@ -888,7 +979,7 @@ export default function Home() {
       </div>
 
       <div className="composer">
-        {!participantId && <button
+        {!participantId && convo === "off" && <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
           onMouseLeave={() => recording && stopRecording()}
@@ -899,6 +990,13 @@ export default function Home() {
           title="Hold to talk"
           style={{ minWidth: 52, padding: "12px 14px" }}>
           🎤
+        </button>}
+        {!participantId && <button
+          onClick={toggleConversation}
+          className={`btn${convo !== "off" ? (convo === "hearing" ? " danger rec-pulse" : "") : " quiet"}`}
+          title={convo === "off" ? "Open conversation: your tutor listens, and you can talk over it" : "End the open conversation"}
+          style={{ minWidth: 52, padding: "12px 14px" }}>
+          {convo === "off" ? "💬" : convo === "hearing" ? "👂" : "💬 on"}
         </button>}
         {!participantId && (
           <>
