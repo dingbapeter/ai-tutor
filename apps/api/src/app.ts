@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import type { AiGateway, ChatMessage } from "@tutor/ai-gateway";
+import { TutorBusyError, type AiGateway, type ChatMessage } from "@tutor/ai-gateway";
 import {
   buildSystemPrompt,
   type CurriculumPack,
@@ -174,6 +174,18 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         content: `API error: ${req.method} ${req.url} — ${error.message}`,
       }),
     }).catch(() => {});
+  });
+
+  // The model box refusing work is load, not a crash: answer 503 with an
+  // honest retry hint instead of a 500. (SSE routes handle it in-stream.)
+  app.setErrorHandler((error, _req, reply) => {
+    if (error instanceof TutorBusyError) {
+      return reply
+        .code(503)
+        .header("retry-after", String(error.retryAfterSec))
+        .send({ error: error.message, retryAfterSec: error.retryAfterSec });
+    }
+    return reply.send(error);
   });
 
   // Guest abuse guard: rotating names for fresh free allowances is capped
@@ -1226,7 +1238,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // Keep the user's turn and any partial reply so the conversation
         // survives a provider hiccup instead of silently losing context.
         if (full) session.history.push({ role: "assistant", content: full });
-        reply.raw.write(`data: ${JSON.stringify({ error: "generation failed" })}\n\n`);
+        // Headers are already streaming, so "at capacity" travels as an SSE
+        // event the client can show honestly, with a real retry hint.
+        const payload =
+          err instanceof TutorBusyError
+            ? { error: err.message, busy: true, retryAfterSec: err.retryAfterSec }
+            : { error: "generation failed" };
+        reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
       } finally {
         session.busy = false;
       }
@@ -2397,7 +2415,28 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     if (req.headers["x-admin-key"] !== env.ADMIN_KEY && bearer !== env.ADMIN_KEY) {
       return reply.code(403).send({ error: "forbidden" });
     }
-    return reply.header("content-type", "text/plain; version=0.0.4; charset=utf-8").send(metrics.prometheus());
+    let text = metrics.prometheus();
+    const q = gateway.queue?.stats();
+    if (q) {
+      text += [
+        "",
+        "# HELP dingba_ai_queue_running Generations running on the model box right now",
+        "# TYPE dingba_ai_queue_running gauge",
+        `dingba_ai_queue_running ${q.running}`,
+        "# TYPE dingba_ai_queue_waiting gauge",
+        `dingba_ai_queue_waiting ${q.queued}`,
+        "# TYPE dingba_ai_queue_served_total counter",
+        `dingba_ai_queue_served_total ${q.served}`,
+        "# TYPE dingba_ai_queue_rejected_total counter",
+        `dingba_ai_queue_rejected_total ${q.rejected}`,
+        "# TYPE dingba_ai_queue_timed_out_total counter",
+        `dingba_ai_queue_timed_out_total ${q.timedOut}`,
+        "# TYPE dingba_ai_queue_wait_ms_avg gauge",
+        `dingba_ai_queue_wait_ms_avg ${q.avgWaitMs}`,
+        "",
+      ].join("\n");
+    }
+    return reply.header("content-type", "text/plain; version=0.0.4; charset=utf-8").send(text);
   });
 
   /** Usage summary for the signed-in account (today + this month). */
@@ -2439,7 +2478,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
 
   // ---- Command Centre (Sprint 15) ----
-  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls, metrics);
+  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls, metrics, gateway.queue ?? null);
 
   return app;
 }

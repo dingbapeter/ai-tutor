@@ -194,6 +194,18 @@ interface OpsView {
   eventLoop: { lagP50Ms: number; lagMaxMs: number };
   routes: Array<{ route: string; count: number; errors: number; avgMs: number; p95Ms: number | null }>;
   recentErrors: Array<{ at: string; route: string; method: string; statusCode: number; message: string }>;
+  aiQueue: {
+    running: number;
+    queued: number;
+    maxConcurrent: number;
+    maxQueue: number;
+    served: number;
+    rejected: number;
+    timedOut: number;
+    peakQueued: number;
+    avgWaitMs: number;
+    longestWaitMs: number;
+  } | null;
 }
 
 type Tab = "overview" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
@@ -1634,6 +1646,38 @@ function Ops({ call }: { call: Call }) {
         />
         <Stat k="Failures since start" v={num(totalErrors)} n="responses with a 5xx status" alert={totalErrors > 0} />
       </div>
+
+      {data.aiQueue && (
+        <div className="cc-panel">
+          <h3>The line at the AI brain</h3>
+          <p>
+            The model box takes {data.aiQueue.maxConcurrent} conversations at once; up to {data.aiQueue.maxQueue} wait
+            in line behind them, and past that learners are asked to retry. Rejections here mean it is time for a
+            bigger box or a second one.
+          </p>
+          <div className="cc-stats">
+            <Stat k="Talking now" v={num(data.aiQueue.running)} n={`of ${data.aiQueue.maxConcurrent} slots`} />
+            <Stat
+              k="Waiting in line"
+              v={num(data.aiQueue.queued)}
+              n={`worst so far ${data.aiQueue.peakQueued}`}
+              alert={data.aiQueue.queued >= data.aiQueue.maxQueue / 2}
+            />
+            <Stat
+              k="Typical wait"
+              v={`${data.aiQueue.avgWaitMs} ms`}
+              n={`longest ${data.aiQueue.longestWaitMs} ms`}
+              alert={data.aiQueue.avgWaitMs > 5000}
+            />
+            <Stat
+              k="Turned away"
+              v={num(data.aiQueue.rejected + data.aiQueue.timedOut)}
+              n={`${num(data.aiQueue.served)} served since start`}
+              alert={data.aiQueue.rejected + data.aiQueue.timedOut > 0}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="cc-panel">
         <h3>Routes by traffic</h3>

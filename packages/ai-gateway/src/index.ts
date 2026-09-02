@@ -6,4 +6,5 @@ export { WhisperSttProvider } from "./providers/whisper.js";
 export { KokoroTtsProvider } from "./providers/kokoro.js";
 export { RoutingTtsProvider } from "./providers/tts-router.js";
 export { RulesModerationProvider } from "./providers/moderation-rules.js";
+export { AiRequestQueue, TutorBusyError, queuedChat, queuedVision, type QueueStats } from "./queue.js";
 export { AnthropicModerationProvider } from "./providers/moderation-anthropic.js";

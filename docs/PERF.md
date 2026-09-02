@@ -50,3 +50,20 @@ production, run it with care and never against real families' data.
 
 The driver exits non-zero when more than 1% of requests fail, so a load
 check can sit in a pipeline.
+
+## The line at the AI brain
+
+Every llama.cpp-backed capability (chat, planner, premium chat, vision)
+shares one bounded queue, because they share one GPU. `AI_MAX_CONCURRENT`
+generations run at once (match it to llama.cpp's `-np` slots), up to
+`AI_QUEUE_DEPTH` wait behind them, and a wait longer than
+`AI_QUEUE_TIMEOUT_MS` or a full line answers honestly: SSE clients get a
+`busy` event with a retry hint, JSON routes get a 503 with a Retry-After
+header. Nobody hangs.
+
+Verified with a 30-client blast against a 2-slot, 4-deep preview queue:
+every request either served or refused in bounded time, zero hangs, zero
+5xx, and the Command Centre Ops tab ("The line at the AI brain") plus
+`/admin/metrics` (`dingba_ai_queue_*`) showed the exact counts. When
+"turned away" grows on real traffic, that is the signal to raise `-np`,
+add a second box, or upgrade the GPU.

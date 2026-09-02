@@ -61,6 +61,12 @@ TTS_URL=http://<contabo-ip>:8082
 PIPER_TTS_URL=http://<contabo-ip>:8083   # unlocks 43 more speaking languages
 MATHCHECK_URL=http://<contabo-ip>:8090
 
+# The line in front of the model box (optional; these are the defaults).
+# Match AI_MAX_CONCURRENT to llama.cpp's parallel slots (-np).
+AI_MAX_CONCURRENT=4
+AI_QUEUE_DEPTH=32
+AI_QUEUE_TIMEOUT_MS=30000
+
 # --- Email, your existing mailcow ---
 SMTP_HOST=<mail.yourdomain>
 SMTP_PORT=587

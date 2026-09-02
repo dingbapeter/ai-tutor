@@ -50,6 +50,7 @@ export async function registerCommandCentre(
   userFromRequest: (req: FastifyRequest) => Promise<{ userId: string; email: string; role: string } | null>,
   controls: ControlsReader,
   metrics: Metrics,
+  aiQueue?: { stats(): unknown } | null,
 ) {
   const owners = bootstrapOwners(env);
 
@@ -313,7 +314,9 @@ export async function registerCommandCentre(
   app.get("/command/ops", async (req, reply) => {
     const actor = await requireCap(req, reply, "config:write");
     if (!actor) return;
-    return metrics.summary();
+    // aiQueue is the bounded line in front of the model box; null means the
+    // configured providers need no queue (mock, or a paid API).
+    return { ...metrics.summary(), aiQueue: aiQueue ? aiQueue.stats() : null };
   });
 
   // ---- Safety desk ----

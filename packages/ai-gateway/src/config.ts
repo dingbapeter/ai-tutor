@@ -11,6 +11,7 @@ import { KokoroTtsProvider } from "./providers/kokoro.js";
 import { RoutingTtsProvider } from "./providers/tts-router.js";
 import { RulesModerationProvider } from "./providers/moderation-rules.js";
 import { AnthropicModerationProvider } from "./providers/moderation-anthropic.js";
+import { AiRequestQueue, queuedChat, queuedVision } from "./queue.js";
 
 /**
  * Builds the gateway from environment config. This file is the ONLY place
@@ -92,7 +93,7 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
   };
 
   const planner = chatFor(env.AI_CHAT_PLANNER_PROVIDER ?? env.AI_CHAT_PROVIDER);
-  return {
+  const gateway = {
     chat: chatFor(env.AI_CHAT_PROVIDER),
     planner,
     premiumChat: env.AI_PREMIUM_CHAT_PROVIDER ? chatFor(env.AI_PREMIUM_CHAT_PROVIDER) : planner,
@@ -100,5 +101,27 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
     tts: tts(),
     vision: vision(),
     moderation: moderation(),
-  };
+  } as AiGateway;
+
+  // Every llama.cpp-backed capability shares ONE bounded line, because they
+  // share one GPU. Concurrency should match the server's parallel slots
+  // (llama.cpp -np). Tune with AI_MAX_CONCURRENT / AI_QUEUE_DEPTH /
+  // AI_QUEUE_TIMEOUT_MS.
+  const anyLlama = [env.AI_CHAT_PROVIDER, env.AI_CHAT_PLANNER_PROVIDER, env.AI_PREMIUM_CHAT_PROVIDER, env.AI_VISION_PROVIDER]
+    .includes("llamacpp");
+  if (anyLlama) {
+    const queue = new AiRequestQueue({
+      maxConcurrent: env.AI_MAX_CONCURRENT ? Number(env.AI_MAX_CONCURRENT) : undefined,
+      maxQueue: env.AI_QUEUE_DEPTH ? Number(env.AI_QUEUE_DEPTH) : undefined,
+      queueTimeoutMs: env.AI_QUEUE_TIMEOUT_MS ? Number(env.AI_QUEUE_TIMEOUT_MS) : undefined,
+    });
+    const guard = (p: import("./types.js").ChatProvider) =>
+      p.name.startsWith("llamacpp") ? queuedChat(p, queue) : p;
+    gateway.chat = guard(gateway.chat);
+    gateway.planner = guard(gateway.planner);
+    gateway.premiumChat = guard(gateway.premiumChat);
+    if (gateway.vision.name.startsWith("llamacpp")) gateway.vision = queuedVision(gateway.vision, queue);
+    gateway.queue = queue;
+  }
+  return gateway;
 }

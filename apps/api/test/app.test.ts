@@ -8,6 +8,7 @@ import {
   MockTtsProvider,
   MockVisionProvider,
   RulesModerationProvider,
+  TutorBusyError,
 } from "@tutor/ai-gateway";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -1595,5 +1596,118 @@ describe("curriculum depth (sprint 31)", () => {
     });
     expect(right.statusCode).toBe(200);
     expect(right.json().correct).toBe(true);
+  });
+});
+
+describe("the line at the AI brain (sprint 32)", () => {
+  class BusyChatProvider {
+    readonly name = "busy";
+    // eslint-disable-next-line require-yield
+    async *chat(): AsyncIterable<string> {
+      throw new TutorBusyError(7);
+    }
+  }
+
+  async function busyApp(extraEnv: Record<string, string> = {}) {
+    const g = gateway();
+    const busy = new BusyChatProvider();
+    return buildApp({
+      gateway: { ...g, chat: busy as never, planner: busy as never, premiumChat: busy as never },
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", GUEST_IP_CAP: "100000", AUTH_RATE_LIMIT: "100000", ...extraEnv },
+    });
+  }
+
+  it("a busy brain surfaces mid-stream as an honest SSE event with a retry hint", async () => {
+    const isolated = await busyApp();
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Busy", personaId: "amara", packId: "math-ms" },
+    });
+    const res = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${s.json().sessionId}/message`,
+      payload: { text: "hello there" },
+    });
+    expect(res.statusCode).toBe(200); // headers were already streaming
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    const events = res.payload.split("\n\n").filter(Boolean).map((l) => JSON.parse(l.replace(/^data: /, "")));
+    const busyEvt = events.find((e) => e.busy);
+    expect(busyEvt).toBeTruthy();
+    expect(busyEvt.retryAfterSec).toBe(7);
+    expect(busyEvt.error).toContain("Give it a few seconds");
+    await isolated.close();
+  });
+
+  it("a busy brain on a JSON route answers 503 with a retry-after header, not a 500", async () => {
+    const isolated = await busyApp();
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Busy", personaId: "amara", packId: "math-ms" },
+    });
+    const res = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${s.json().sessionId}/practice`,
+      payload: { problemIndex: 0, answer: RIGHT_ANSWER },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.headers["retry-after"]).toBe("7");
+    expect(res.json().retryAfterSec).toBe(7);
+    await isolated.close();
+  });
+
+  it("the ops view shows the queue when one is configured, and says so when not", async () => {
+    const g = gateway();
+    const stats = {
+      running: 2, queued: 3, maxConcurrent: 4, maxQueue: 32, served: 100,
+      rejected: 1, timedOut: 0, peakQueued: 9, avgWaitMs: 120, longestWaitMs: 900,
+    };
+    const isolated = await buildApp({
+      gateway: { ...g, queue: { stats: () => stats } },
+      store: new MemoryStore(),
+      env: {
+        NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000",
+        COMMAND_OWNER_EMAILS: "boss@dingba.ai", ADMIN_KEY: "sesame",
+      },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "boss@dingba.ai", password: "password12", role: "parent" },
+    });
+    const ops = await isolated.inject({
+      method: "GET",
+      url: "/command/ops",
+      headers: { authorization: `Bearer ${reg.json().token}` },
+    });
+    expect(ops.statusCode).toBe(200);
+    expect(ops.json().aiQueue).toEqual(stats);
+
+    // Prometheus carries the same numbers for dashboards.
+    const prom = await isolated.inject({ method: "GET", url: "/admin/metrics", headers: { "x-admin-key": "sesame" } });
+    expect(prom.payload).toContain("dingba_ai_queue_running 2");
+    expect(prom.payload).toContain("dingba_ai_queue_rejected_total 1");
+    await isolated.close();
+
+    // No queue configured (mock providers): the field is an honest null.
+    const bare = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000", COMMAND_OWNER_EMAILS: "boss2@dingba.ai" },
+    });
+    const reg2 = await bare.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "boss2@dingba.ai", password: "password12", role: "parent" },
+    });
+    const ops2 = await bare.inject({
+      method: "GET",
+      url: "/command/ops",
+      headers: { authorization: `Bearer ${reg2.json().token}` },
+    });
+    expect(ops2.json().aiQueue).toBeNull();
+    await bare.close();
   });
 });

@@ -406,6 +406,9 @@ export default function Home() {
           if (!data) continue;
           try {
             const evt = JSON.parse(data);
+            // At capacity is different from broken: show the server's own
+            // wording, which carries the real wait hint.
+            if (evt.busy && typeof evt.error === "string") throw new Error(evt.error);
             if (evt.error) throw new Error("Your tutor had trouble replying. Try that again.");
             // The tutor saw real distress: offer the trusted person, one tap.
             if (evt.care) setCare(evt.care);

@@ -90,6 +90,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Generated curriculum: 272 SymPy-verified problems across 33 skills (math-ms 25, exam-prep 3, pro-finance 5) with derived misconceptions | ✅ verified at build time AND against the live checker (tools/curriculum/verify_bank.py) |
 | Credits system (/credits + page), KaTeX math rendering, TTS cache | ✅ built |
 | Usage metering + plan entitlements (daily caps → 402 upsell, family seats) | ✅ tested + live-verified |
+| Bounded request queue in front of the model box (shared across chat/vision, busy events + 503 Retry-After, ops panel + Prometheus) | ✅ tested + verified under a 30-client blast |
 | Exam mode: timed mocks, sealed verdicts, post-mortem, premium-gated | ✅ tested + live-verified |
 | Org/school accounts: seats, roster import, teacher dashboard | ✅ tested |
 | B2B API keys (scoped, hashed, quota'd, metered) + Tutor-as-a-Service sessions | ✅ tested + live-verified |
