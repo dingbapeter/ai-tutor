@@ -143,8 +143,9 @@ export default function Home() {
     if (lessonParam && packParam) {
       setLessonSkillId(lessonParam);
       setPackId(packParam);
-      if (studentParam) setStudentId(studentParam);
     }
+    // A learner opened from the school portal (or a plan) arrives preselected.
+    if (studentParam) setStudentId(studentParam);
     const t = localStorage.getItem("tutor_token");
     if (t) {
       setToken(t);

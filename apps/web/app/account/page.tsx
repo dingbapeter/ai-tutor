@@ -719,6 +719,9 @@ export default function Account() {
           )}
         </div>
       ))}
+      <p className="footlinks">
+        Teaching a class or running a school? <a href="/school">Open the school portal</a>
+      </p>
     </main>
   );
 }

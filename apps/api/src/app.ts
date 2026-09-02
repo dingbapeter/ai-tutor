@@ -2090,7 +2090,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       students: await Promise.all(
         students.map(async (s) => ({
           ...s,
-          mastery: await store.getMasterySnapshot(s.id),
+          // Teachers read skill titles, never raw ids.
+          mastery: (await store.getMasterySnapshot(s.id)).map((m) => ({ ...m, title: skillTitle(m.skillId) })),
           sessions: await store.listSessionSummaries(s.id, 3),
           safety: await store.listIncidents(s.id, 5),
         })),

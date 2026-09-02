@@ -1877,3 +1877,53 @@ describe("rubric mock exams (sprint 33)", () => {
     for (const s of pack.skills) expect(bySkill.get(s.id) ?? 0, `${s.id} has no scenarios`).toBeGreaterThan(0);
   });
 });
+
+describe("school portal backing (sprint 35)", () => {
+  it("a roster learner's practice shows up in the teacher dashboard with mastery and sessions", async () => {
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "teacher@school.example", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    await isolated.inject({ method: "POST", url: "/orgs", headers: auth, payload: { name: "Hillside School", seats: 5 } });
+    const roster = await isolated.inject({
+      method: "POST",
+      url: "/orgs/roster",
+      headers: auth,
+      payload: { names: ["Chidi A."] },
+    });
+    const studentId = roster.json().added[0].id as string;
+
+    // The teacher opens the tutor for that learner and they practice.
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "amara", packId: "math-ms" },
+    });
+    const sid = s.json().sessionId as string;
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sid}/practice`,
+      payload: { problemIndex: 0, answer: RIGHT_ANSWER },
+    });
+    await isolated.inject({ method: "POST", url: `/sessions/${sid}/end` });
+
+    const dash = await isolated.inject({ method: "GET", url: "/orgs/dashboard", headers: auth });
+    expect(dash.statusCode).toBe(200);
+    const student = dash.json().students.find((x: { id: string }) => x.id === studentId);
+    expect(student).toBeTruthy();
+    const worked = student.mastery.filter((m: { attempts: number }) => m.attempts > 0);
+    expect(worked.length).toBe(1);
+    expect(worked[0].skillId).toBe(FIRST_SKILL);
+    expect(worked[0].level).toBeGreaterThan(0);
+    expect(student.sessions.length).toBeGreaterThanOrEqual(1);
+    await isolated.close();
+  });
+});
