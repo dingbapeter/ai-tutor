@@ -105,6 +105,7 @@ export default function Home() {
   const [lessonSkillId, setLessonSkillId] = useState<string | null>(null);
   const [lessonTitle, setLessonTitle] = useState<string | null>(null);
   const [examinable, setExaminable] = useState(true);
+  const [assessable, setAssessable] = useState(true);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [verdicts, setVerdicts] = useState<Record<number, boolean | null>>({});
@@ -201,6 +202,7 @@ export default function Home() {
       setSessionId(json.sessionId);
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
+      setAssessable(json.assessable !== false);
       setVerdicts({});
       if (json.greeting) {
         // The tutor speaks first, like a person would.
@@ -737,7 +739,7 @@ export default function Home() {
           </button>
           {!participantId && (
             <>
-              {examinable && <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>}
+              {assessable && <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>}
               <button onClick={inviteFriend} className="btn quiet small">Invite</button>
               {examinable && <button onClick={startExam} className="btn quiet small">Mock exam</button>}
               <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>

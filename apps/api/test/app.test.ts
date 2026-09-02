@@ -1711,3 +1711,169 @@ describe("the line at the AI brain (sprint 32)", () => {
     await bare.close();
   });
 });
+
+describe("rubric mock exams (sprint 33)", () => {
+  /** A deterministic judge: passes any answer containing 'confident'. */
+  class ScriptedJudgeProvider {
+    readonly name = "scripted-judge";
+    async *chat(messages: Array<{ role: string; content: string }>): AsyncIterable<string> {
+      const last = messages[messages.length - 1]?.content ?? "";
+      if (last.includes("grading one exam answer")) {
+        const m = last.match(/"""\n([\s\S]*?)\n"""/);
+        const answer = m?.[1] ?? "";
+        const pass = answer.includes("confident");
+        yield JSON.stringify({ pass, met: pass ? 4 : 1, of: 4, note: pass ? "Clear and complete." : "Say what you want and why." });
+        return;
+      }
+      yield "Alright, let's look at how you did.";
+    }
+  }
+
+  class GarbageJudgeProvider {
+    readonly name = "garbage-judge";
+    async *chat(): AsyncIterable<string> {
+      yield "hmm, it seems fine to me";
+    }
+  }
+
+  async function appWithJudge(judge: { name: string }) {
+    return buildApp({
+      gateway: { ...gateway(), planner: judge as never, premiumChat: judge as never },
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000", ADMIN_KEY: "sesame" },
+    });
+  }
+
+  async function premiumSession(isolated: FastifyInstance, packId: string, email: string) {
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password: "password12", role: "parent" },
+    });
+    await isolated.inject({
+      method: "POST",
+      url: "/admin/plan",
+      headers: { "x-admin-key": "sesame" },
+      payload: { email, plan: "premium" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Vee" } });
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId: kid.json().id, personaId: "obi", packId },
+    });
+    return s.json() as { sessionId: string; examinable: boolean };
+  }
+
+  it("with the mock provider, rubric packs honestly refuse timed mocks", async () => {
+    const { sessionId, examinable } = await (async () => {
+      const s = await app.inject({
+        method: "POST",
+        url: "/sessions",
+        payload: { studentName: "NoJudge", personaId: "obi", packId: "visa-prep" },
+      });
+      return s.json() as { sessionId: string; examinable: boolean };
+    })();
+    expect(examinable).toBe(false);
+    const exam = await app.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    expect([400, 402]).toContain(exam.statusCode); // free plan gets the paywall first; premium would get 400
+  });
+
+  it("with a real judge behind the gateway, a visa mock is scored against the rubric", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const { sessionId, examinable } = await premiumSession(isolated, "visa-prep", "visa@example.com");
+    expect(examinable).toBe(true);
+
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    expect(exam.statusCode).toBe(200);
+    const problems = exam.json().problems as Array<{ index: number; written?: boolean; timeLimitSec: number }>;
+    expect(problems.length).toBeGreaterThanOrEqual(4);
+    expect(problems.every((p) => p.written)).toBe(true);
+    // Unauthored limits default to a written 240s; authored ones (like the
+    // 15-second composure drill) are respected as written.
+    expect(problems.every((p) => p.timeLimitSec > 0)).toBe(true);
+    expect(problems.some((p) => p.timeLimitSec === 240)).toBe(true);
+
+    // One passing answer, one failing, the rest blank.
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/exam/answer`,
+      payload: { problemIndex: problems[0].index, answer: "I am confident about my study plans and my ties back home." },
+    });
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/exam/answer`,
+      payload: { problemIndex: problems[1].index, answer: "err maybe" },
+    });
+    const finish = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/finish` });
+    const report = finish.json();
+    expect(report.unscored).toBe(0);
+    expect(report.score).toBe(1);
+    expect(report.of).toBe(problems.length); // blanks count, as in any timed exam
+    const first = report.results.find((r: { index: number }) => r.index === problems[0].index);
+    expect(first.correct).toBe(true);
+    expect(first.judge).toEqual({ met: 4, of: 4, note: "Clear and complete." });
+    const second = report.results.find((r: { index: number }) => r.index === problems[1].index);
+    expect(second.correct).toBe(false);
+    expect(second.judge.note).toContain("Say what you want");
+    await isolated.close();
+  });
+
+  it("a judge reply that does not parse leaves the answer unscored, never wrong", async () => {
+    const isolated = await appWithJudge(new GarbageJudgeProvider());
+    const { sessionId } = await premiumSession(isolated, "visa-prep", "garbled@example.com");
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    const problems = exam.json().problems as Array<{ index: number }>;
+    for (const p of problems) {
+      await isolated.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/exam/answer`,
+        payload: { problemIndex: p.index, answer: "a real attempt at an answer" },
+      });
+    }
+    const report = (await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/finish` })).json();
+    expect(report.unscored).toBe(problems.length);
+    expect(report.score).toBe(0);
+    expect(report.of).toBe(0); // nothing scorable, and it says so
+    expect(report.results.every((r: { correct: null }) => r.correct === null)).toBe(true);
+    await isolated.close();
+  });
+
+  it("a mixed pack's mock carries both machine-checked and rubric problems", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const { sessionId } = await premiumSession(isolated, "pro-finance", "mixed@example.com");
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    const problems = exam.json().problems as Array<{ index: number; written?: boolean }>;
+    expect(problems.some((p) => p.written)).toBe(true);
+    expect(problems.some((p) => !p.written)).toBe(true);
+    await isolated.close();
+  });
+
+  it("the two doors split honestly: rubric packs get a mock but no machine level check", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Doors", personaId: "obi", packId: "visa-prep" },
+    });
+    expect(s.json().examinable).toBe(true);
+    expect(s.json().assessable).toBe(false);
+    const m = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Doors", personaId: "amara", packId: "math-ms" },
+    });
+    expect(m.json().examinable).toBe(true);
+    expect(m.json().assessable).toBe(true);
+    await isolated.close();
+  });
+
+  it("the language pack now covers all three competencies with scenarios", () => {
+    const pack = loadPack("language");
+    const bySkill = new Map<string, number>();
+    for (const p of pack.problems) bySkill.set(String(p.skillId), (bySkill.get(String(p.skillId)) ?? 0) + 1);
+    for (const s of pack.skills) expect(bySkill.get(s.id) ?? 0, `${s.id} has no scenarios`).toBeGreaterThan(0);
+  });
+});

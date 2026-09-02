@@ -5,6 +5,7 @@ import { TutorBusyError, type AiGateway, type ChatMessage } from "@tutor/ai-gate
 import {
   buildSystemPrompt,
   type CurriculumPack,
+  type CurriculumProblem,
   loadPack,
   loadPersonas,
   loadLanguages,
@@ -14,6 +15,7 @@ import {
   UnknownPackError,
   voiceFor,
 } from "./tutor/prompt.js";
+import { canJudgeRubrics, judgeRubricAnswer, type RubricVerdict } from "./tutor/judge.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
@@ -313,15 +315,29 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) ||
     p.answer !== undefined;
 
+  const isRubric = (p: { check?: unknown }) => (p.check as { type?: string })?.type === "rubric";
+
+  // Rubric problems (visa answers, coaching reflections, language
+  // production) can sit in a timed mock ONLY when a real model is behind
+  // the gateway to grade them against their criteria. The mock provider
+  // cannot judge, so with it these doors stay closed rather than fake.
+  const rubricExamsOpen = canJudgeRubrics(gateway.planner);
+  const examEligible = (p: CurriculumProblem) => machineVerifiable(p) || (rubricExamsOpen && isRubric(p));
+
   /**
    * Round-robin sampler for scored surfaces: one machine-verifiable problem
    * per skill (curriculum order), then further laps until the cap. Keeps a
    * deep pack's mocks and level checks spread across the whole ladder.
    */
-  function sampleAcrossSkills(pack: CurriculumPack, cap: number, maxPerSkill = Infinity): number[] {
+  function sampleAcrossSkills(
+    pack: CurriculumPack,
+    cap: number,
+    maxPerSkill = Infinity,
+    eligible: (p: CurriculumProblem) => boolean = machineVerifiable,
+  ): number[] {
     const bySkill = new Map<string, number[]>();
     for (const [i, p] of pack.problems.entries()) {
-      if (!p.skillId || !machineVerifiable(p)) continue;
+      if (!p.skillId || !eligible(p)) continue;
       const list = bySkill.get(String(p.skillId)) ?? [];
       list.push(i);
       bySkill.set(String(p.skillId), list);
@@ -1115,7 +1131,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // Whether this pack can run scored surfaces (level check, mock exam).
         // Rubric-only packs are tutor-judged in conversation, so the client
         // should show no scored doors at all rather than doors that refuse.
-        examinable: pack.problems.some((p) => machineVerifiable(p)),
+        // Two different doors: a timed mock can include judged rubric
+        // problems, but the level check is machine-graded only, so each
+        // door shows only where it can actually open.
+        examinable: pack.problems.some((p) => examEligible(p)),
+        assessable: pack.problems.some((p) => machineVerifiable(p)),
         // Answers stay server-side; the client sees the shape, never the keys.
         lesson: lesson
           ? { skillId: lesson.skillId, title: lesson.title, objective: lesson.objective, practiceCount: lesson.practice.length }
@@ -1853,24 +1873,27 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
     if (session.exam) return reply.code(409).send({ error: "an exam is already in progress" });
     const pack = loadPack(session.packId);
-    // A scored exam may only contain problems a machine can actually grade.
-    // Before this filter, a learner could sit a timed mock on a rubric-only
-    // pack and score zero no matter what they wrote. Sampling is one problem
+    // A scored exam may only contain problems that CAN be graded: machine
+    // checks always; rubric problems only when a real model is behind the
+    // gateway to judge them (see rubricExamsOpen). Sampling is one problem
     // per skill, then further laps, so a mock spans the curriculum instead of
     // asking eight variants of the first skill.
-    const problemIndexes = sampleAcrossSkills(pack, 8);
+    const problemIndexes = sampleAcrossSkills(pack, 8, Infinity, examEligible);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no timed mock yet, practice with your tutor instead" });
     }
+    // Written rubric answers deserve breathing room; numeric ones stay brisk.
+    const timeLimit = (i: number) => pack.problems[i].timeLimitSec ?? (isRubric(pack.problems[i]) ? 240 : 90);
     session.exam = { problemIndexes, answers: new Map(), startedAt: Date.now() };
     await meter(session, "exam");
     return {
       problems: problemIndexes.map((i) => ({
         index: i,
         prompt: pack.problems[i].prompt,
-        timeLimitSec: pack.problems[i].timeLimitSec ?? 90,
+        timeLimitSec: timeLimit(i),
+        written: isRubric(pack.problems[i]) || undefined,
       })),
-      totalTimeSec: problemIndexes.reduce((n, i) => n + (pack.problems[i].timeLimitSec ?? 90), 0),
+      totalTimeSec: problemIndexes.reduce((n, i) => n + timeLimit(i), 0),
     };
   });
 
@@ -1884,7 +1907,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           additionalProperties: false,
           properties: {
             problemIndex: { type: "integer", minimum: 0 },
-            answer: { type: "string", minLength: 1, maxLength: 500 },
+            // Written rubric answers (a visa answer, a reflection) need more
+            // room than a number does.
+            answer: { type: "string", minLength: 1, maxLength: 2000 },
           },
         },
       },
@@ -1914,13 +1939,39 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const exam = session.exam;
     session.exam = undefined;
 
+    // Rubric answers are judged now, against each problem's own criteria,
+    // by the model behind the gateway. A verdict that fails to parse stays
+    // null, which the scoring below already treats as unscored, never wrong.
+    const judged = new Map<number, RubricVerdict | null>();
+    for (const i of exam.problemIndexes) {
+      const p = pack.problems[i];
+      const a = exam.answers.get(i);
+      if (!isRubric(p) || a === undefined) continue;
+      const criteria = (p.check as { criteria?: string[] }).criteria ?? [];
+      judged.set(
+        i,
+        await judgeRubricAnswer(gateway.planner, p.prompt, criteria, a.answer, {
+          signal: AbortSignal.timeout(60_000),
+        }),
+      );
+    }
+
     const results = exam.problemIndexes.map((i) => {
       const p = pack.problems[i];
       const a = exam.answers.get(i);
+      const verdict = judged.get(i);
       // Blank in a timed exam is wrong; answered-but-unverifiable (the
-      // checker down mid-exam) is unscored, and must never read as wrong.
-      const correct = a === undefined ? false : a.correct;
-      return { index: i, prompt: p.prompt, skillId: p.skillId, answer: a?.answer ?? null, correct };
+      // checker down mid-exam, or a judge reply that didn't parse) is
+      // unscored, and must never read as wrong.
+      const correct = a === undefined ? false : verdict !== undefined ? (verdict ? verdict.pass : null) : a.correct;
+      return {
+        index: i,
+        prompt: p.prompt,
+        skillId: p.skillId,
+        answer: a?.answer ?? null,
+        correct,
+        judge: verdict ? { met: verdict.met, of: verdict.of, note: verdict.note } : undefined,
+      };
     });
     for (const r of results) {
       if (r.skillId && r.answer !== null && r.correct !== null) {
@@ -1945,7 +1996,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length - unscored} in ${durationSec}s.` +
             (unscored ? ` ${unscored} answer(s) could not be machine-checked; judge those yourself, kindly.` : "") +
             ` Results: ` +
-            results.map((r) => `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct === null ? "?" : r.correct ? "✓" : "✗"}]`).join(" ") +
+            results
+              .map(
+                (r) =>
+                  `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct === null ? "?" : r.correct ? "✓" : "✗"}` +
+                  (r.judge ? ` judged ${r.judge.met}/${r.judge.of}: ${r.judge.note}` : "") +
+                  `]`,
+              )
+              .join(" ") +
             ` As the tutor, write a short post-mortem: celebrate what went right, name the pattern behind the misses, and give the single highest-impact thing to practice before the real exam.`,
         },
       ],

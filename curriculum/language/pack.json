@@ -13,6 +13,31 @@
       "skillId": "lang.en.introductions",
       "prompt": "Scenario: You meet a new classmate. Introduce yourself: your name, where you're from, and one hobby.",
       "check": { "type": "rubric", "criteria": ["states name", "states origin", "mentions a hobby", "grammatically coherent"] }
+    },
+    {
+      "skillId": "lang.en.introductions",
+      "prompt": "Scenario: You are starting a new job and meet your team. Introduce yourself in two or three sentences: your name, your role, and one thing you are looking forward to.",
+      "check": { "type": "rubric", "criteria": ["states name", "states role or what they do", "mentions something they look forward to", "grammatically coherent"] }
+    },
+    {
+      "skillId": "lang.en.past-tense",
+      "prompt": "Tell me about your last weekend in three or four sentences. Use the past tense.",
+      "check": { "type": "rubric", "criteria": ["uses past tense verbs correctly at least three times", "describes at least two activities", "sentences connect naturally", "grammatically coherent"] }
+    },
+    {
+      "skillId": "lang.en.past-tense",
+      "prompt": "Describe a journey or trip you once took: where you went, how you travelled, and one thing that happened.",
+      "check": { "type": "rubric", "criteria": ["names a destination", "uses past tense verbs correctly", "recounts one specific event", "grammatically coherent"] }
+    },
+    {
+      "skillId": "lang.en.opinions",
+      "prompt": "Some people think students should wear uniforms to school. What do you think? Give your opinion and one reason.",
+      "check": { "type": "rubric", "criteria": ["states a clear opinion", "gives at least one reason", "uses an opinion phrase such as 'I think' or 'in my view'", "grammatically coherent"] }
+    },
+    {
+      "skillId": "lang.en.opinions",
+      "prompt": "Your friend says city life is better than village life. Do you agree or disagree? Answer in three sentences with a reason and an example.",
+      "check": { "type": "rubric", "criteria": ["takes a clear position", "gives a reason", "gives an example", "grammatically coherent"] }
     }
   ]
 }
