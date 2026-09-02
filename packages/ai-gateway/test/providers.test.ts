@@ -98,14 +98,23 @@ describe("createGatewayFromEnv", () => {
     ]);
   });
 
-  it("routes the planner slot independently of live chat", () => {
+  it("routes the planner slot independently of live chat, queueing only the model box", () => {
     const gw = createGatewayFromEnv({
       AI_CHAT_PROVIDER: "llamacpp",
       AI_CHAT_PLANNER_PROVIDER: "mock",
       LLAMACPP_URL: "http://x",
     });
-    expect(gw.chat.name).toBe("llamacpp");
+    // The llama.cpp-backed slot sits behind the shared bounded queue; the
+    // mock planner never does.
+    expect(gw.chat.name).toBe("llamacpp+queue");
     expect(gw.planner.name).toBe("mock");
+    expect(gw.queue).toBeDefined();
+  });
+
+  it("mock-only gateways carry no queue at all", () => {
+    const gw = createGatewayFromEnv({});
+    expect(gw.chat.name).toBe("mock");
+    expect(gw.queue).toBeUndefined();
   });
 
   it("rejects unknown providers loudly", () => {
