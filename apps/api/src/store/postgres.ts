@@ -1182,6 +1182,81 @@ export class PostgresStore implements Store {
     };
   }
 
+  async growthAnalytics(now: Date = new Date()) {
+    // Sessions attributed to the owning ACCOUNT (owner on the session when
+    // recorded, else the student's parent, else the student's own account).
+    // Guests resolve to nothing and stay out: the funnel is about accounts.
+    const funnelRows = (await this.db.execute(sql`
+      with owner_sessions as (
+        select coalesce(s.owner_user_id, st.parent_user_id, st.user_id) as owner, s.started_at
+        from sessions s
+        join students st on st.id = s.student_id
+      )
+      select
+        (select count(*) from users) as registered,
+        (select count(distinct owner) from owner_sessions where owner is not null) as started,
+        (select count(*) from (
+           select owner from owner_sessions where owner is not null
+           group by owner having count(distinct (started_at at time zone 'utc')::date) >= 2
+         ) t) as returned,
+        (select count(distinct user_id) from billing_subscriptions where status = 'active') as subscribed
+    `)) as unknown as Array<Record<string, string | number>>;
+    const f = funnelRows[0] ?? {};
+
+    const cohortRows = (await this.db.execute(sql`
+      with cohort as (
+        select id, date_trunc('week', created_at at time zone 'utc') as week_start
+        from users
+        where created_at >= date_trunc('week', (${now.toISOString()}::timestamptz at time zone 'utc')) - interval '7 weeks'
+      ),
+      owner_sessions as (
+        select coalesce(s.owner_user_id, st.parent_user_id, st.user_id) as owner,
+               s.started_at at time zone 'utc' as started_at
+        from sessions s
+        join students st on st.id = s.student_id
+      )
+      select to_char(c.week_start, 'YYYY-MM-DD') as week_start,
+             count(distinct c.id)::int as signups,
+             ${sql.join(
+               Array.from({ length: 6 }, (_, k) => sql`
+                 count(distinct c.id) filter (where exists (
+                   select 1 from owner_sessions os
+                   where os.owner = c.id
+                     and os.started_at >= c.week_start + ${`${k * 7} days`}::interval
+                     and os.started_at <  c.week_start + ${`${(k + 1) * 7} days`}::interval
+                 ))::int as ${sql.raw(`w${k}`)}
+               `),
+               sql`, `,
+             )}
+      from cohort c
+      group by c.week_start
+      order by c.week_start
+    `)) as unknown as Array<Record<string, string | number>>;
+
+    const nowMs = now.getTime();
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    return {
+      funnel: {
+        registered: Number(f.registered ?? 0),
+        startedSession: Number(f.started ?? 0),
+        returnedAnotherDay: Number(f.returned ?? 0),
+        subscribed: Number(f.subscribed ?? 0),
+      },
+      cohorts: cohortRows.map((r) => {
+        const weekStartMs = Date.parse(`${r.week_start}T00:00:00Z`);
+        return {
+          weekStart: String(r.week_start),
+          signups: Number(r.signups),
+          retainedByWeek: Array.from({ length: 6 }, (_, k) => {
+            // "0%" and "too early to say" must never look the same.
+            if (weekStartMs + (k + 1) * WEEK > nowMs) return null;
+            return Math.round((100 * Number(r[`w${k}`] ?? 0)) / Math.max(1, Number(r.signups)));
+          }),
+        };
+      }),
+    };
+  }
+
   async getAccountById(userId: string) {
     const rows = await this.db
       .select({

@@ -370,6 +370,13 @@ export interface Store {
   /** Aggregate metrics for the Command Centre. No PII. */
   platformMetrics(days: number): Promise<PlatformMetrics>;
 
+  /**
+   * Growth analytics: the activation funnel and weekly signup cohorts with
+   * retention. Counts only, never PII. Guests are invisible here on purpose:
+   * a funnel is about accounts.
+   */
+  growthAnalytics(now?: Date): Promise<GrowthAnalytics>;
+
   /** One account by id, for the support view. Returns PII, so it is gated. */
   getAccountById(userId: string): Promise<{
     userId: string;
@@ -501,6 +508,26 @@ export interface PlatformIncident {
 }
 
 /** Aggregate platform metrics. Contains no personally identifying data. */
+export interface GrowthAnalytics {
+  funnel: {
+    /** Accounts ever created. */
+    registered: number;
+    /** Accounts whose family started at least one session. */
+    startedSession: number;
+    /** Accounts with sessions on two or more different days: the habit signal. */
+    returnedAnotherDay: number;
+    /** Accounts with an active paid subscription. */
+    subscribed: number;
+  };
+  /**
+   * Weekly signup cohorts (Mondays, UTC), newest last. retainedByWeek[k] is
+   * the percentage of the cohort with at least one session during week k
+   * after their signup week; null marks a week that has not fully elapsed,
+   * because "0%" and "too early to say" must never look the same.
+   */
+  cohorts: Array<{ weekStart: string; signups: number; retainedByWeek: Array<number | null> }>;
+}
+
 export interface PlatformMetrics {
   learners: number;
   guardians: number;

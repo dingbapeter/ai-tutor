@@ -135,6 +135,17 @@ export async function registerCommandCentre(
     return { days, metrics };
   });
 
+  /**
+   * Growth: the activation funnel and weekly signup cohorts with retention.
+   * Counts only, never PII, so the investor role reads it too: retention
+   * curves ARE the diligence question.
+   */
+  app.get("/command/growth", async (req, reply) => {
+    const actor = await requireCap(req, reply, "metrics:read");
+    if (!actor) return;
+    return store.growthAnalytics();
+  });
+
   // ---- Money ----
 
   /**

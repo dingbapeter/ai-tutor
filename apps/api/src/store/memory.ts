@@ -780,6 +780,73 @@ export class MemoryStore implements Store {
     };
   }
 
+  async growthAnalytics(now: Date = new Date()) {
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    const utcMonday = (d: Date) => {
+      const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const dow = (day.getUTCDay() + 6) % 7; // Monday = 0
+      return new Date(day.getTime() - dow * 24 * 60 * 60 * 1000);
+    };
+
+    // Sessions per owning ACCOUNT. Guests have no account, so they are
+    // invisible here on purpose; the funnel is about accounts.
+    const accountIds = new Set([...this.accounts.values()].map((a) => a.userId));
+    const ownerSessions = new Map<string, Date[]>();
+    for (const s of this.sessions.values()) {
+      const owner =
+        (s.meta as { ownerUserId?: string | null }).ownerUserId ??
+        this.profiles.get(s.meta.studentId)?.ownerUserId;
+      if (!owner || !accountIds.has(owner)) continue;
+      const list = ownerSessions.get(owner) ?? [];
+      list.push(s.startedAt);
+      ownerSessions.set(owner, list);
+    }
+
+    const returned = [...ownerSessions.values()].filter(
+      (dates) => new Set(dates.map((d) => d.toISOString().slice(0, 10))).size >= 2,
+    ).length;
+    const subscribed = new Set(
+      [...this.subscriptions.values()].filter((s) => s.status === "active").map((s) => s.userId),
+    ).size;
+
+    // Weekly signup cohorts over the last 8 weeks, 6 retention columns.
+    const cohortMap = new Map<number, string[]>();
+    const oldest = utcMonday(now).getTime() - 7 * WEEK;
+    for (const a of this.accounts.values()) {
+      const weekStart = utcMonday(a.createdAt).getTime();
+      if (weekStart < oldest) continue;
+      const list = cohortMap.get(weekStart) ?? [];
+      list.push(a.userId);
+      cohortMap.set(weekStart, list);
+    }
+    const cohorts = [...cohortMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([weekStart, members]) => ({
+        weekStart: new Date(weekStart).toISOString().slice(0, 10),
+        signups: members.length,
+        retainedByWeek: Array.from({ length: 6 }, (_, k) => {
+          const from = weekStart + k * WEEK;
+          const to = from + WEEK;
+          // "0%" and "too early to say" must never look the same.
+          if (to > now.getTime()) return null;
+          const retained = members.filter((userId) =>
+            (ownerSessions.get(userId) ?? []).some((d) => d.getTime() >= from && d.getTime() < to),
+          ).length;
+          return Math.round((100 * retained) / members.length);
+        }),
+      }));
+
+    return {
+      funnel: {
+        registered: this.accounts.size,
+        startedSession: ownerSessions.size,
+        returnedAnotherDay: returned,
+        subscribed,
+      },
+      cohorts,
+    };
+  }
+
   async getAccountById(userId: string) {
     const a = this.accountFor(userId);
     if (!a) return null;

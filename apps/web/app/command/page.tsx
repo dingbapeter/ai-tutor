@@ -208,10 +208,16 @@ interface OpsView {
   } | null;
 }
 
-type Tab = "overview" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
+interface GrowthView {
+  funnel: { registered: number; startedSession: number; returnedAnotherDay: number; subscribed: number };
+  cohorts: Array<{ weekStart: string; signups: number; retainedByWeek: Array<number | null> }>;
+}
+
+type Tab = "overview" | "growth" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
 
 const TABS: Array<{ id: Tab; label: string; needs: Capability }> = [
   { id: "overview", label: "Overview", needs: "metrics:read" },
+  { id: "growth", label: "Growth", needs: "metrics:read" },
   { id: "safety", label: "Safety", needs: "safety:read" },
   { id: "money", label: "Money", needs: "finance:aggregate" },
   { id: "people", label: "People", needs: "people:read" },
@@ -341,6 +347,7 @@ export default function CommandCentre() {
           <p className="cc-empty">This role has no console sections yet. Ask an owner to widen it.</p>
         )}
         {tab === "overview" && <Overview call={call} token={token} />}
+        {tab === "growth" && <Growth call={call} />}
         {tab === "safety" && <Safety call={call} token={token} />}
         {tab === "money" && <Money call={call} me={me} token={token} />}
         {tab === "people" && <People call={call} me={me} />}
@@ -1601,6 +1608,97 @@ function uptimeWords(seconds: number): string {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+function Growth({ call }: { call: Call }) {
+  const [data, setData] = useState<GrowthView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    call("/command/growth")
+      .then((d) => setData(d as GrowthView))
+      .catch((err) => setError((err as Error).message));
+  }, [call]);
+
+  if (error) return <div className="err">{error}</div>;
+  if (!data) return <p className="cc-empty">Counting heads.</p>;
+
+  const f = data.funnel;
+  const pct = (n: number, of: number) => (of > 0 ? `${Math.round((100 * n) / of)}% of signups` : "");
+  const cell = (v: number | null) => {
+    if (v === null) return { text: "–", bg: "transparent", fg: "var(--text-dim)" };
+    const bg =
+      v >= 60 ? "var(--ok-soft)" : v >= 30 ? "rgba(217, 161, 63, 0.18)" : v > 0 ? "var(--danger-soft)" : "var(--surface-2)";
+    const fg = v >= 60 ? "var(--ok)" : v >= 30 ? "#a37519" : v > 0 ? "var(--danger)" : "var(--text-dim)";
+    return { text: `${v}%`, bg, fg };
+  };
+
+  return (
+    <>
+      <div className="cc-h">
+        <h2>Growth</h2>
+      </div>
+      <p className="cc-lede">
+        The activation funnel and weekly retention. Counts only, never anyone&apos;s data; this is the
+        page that answers &ldquo;do families come back?&rdquo;.
+      </p>
+
+      <div className="cc-stats">
+        <Stat k="Signed up" v={num(f.registered)} n="accounts ever created" />
+        <Stat k="Started learning" v={num(f.startedSession)} n={pct(f.startedSession, f.registered)} />
+        <Stat
+          k="Came back"
+          v={num(f.returnedAnotherDay)}
+          n={`sessions on two or more days · ${pct(f.returnedAnotherDay, f.registered)}`}
+        />
+        <Stat k="Subscribed" v={num(f.subscribed)} n={pct(f.subscribed, f.registered)} />
+      </div>
+
+      <div className="cc-panel">
+        <h3>Weekly cohorts</h3>
+        <p>
+          Each row is one week&apos;s signups; each column is how many of them learned during week N
+          after signing up. A dash means that week has not finished yet, because 0% and &ldquo;too
+          early to say&rdquo; must never look the same.
+        </p>
+        {data.cohorts.length === 0 ? (
+          <p className="cc-empty">No signups in the last eight weeks yet.</p>
+        ) : (
+          <div className="cc-table-wrap">
+            <table className="cc-table">
+              <thead>
+                <tr>
+                  <th>Signup week</th>
+                  <th className="num">Signups</th>
+                  {Array.from({ length: 6 }, (_, k) => (
+                    <th key={k} className="num">Week {k}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.cohorts.map((c) => (
+                  <tr key={c.weekStart}>
+                    <td className="mono">{c.weekStart}</td>
+                    <td className="num">{num(c.signups)}</td>
+                    {c.retainedByWeek.map((v, k) => {
+                      const s = cell(v);
+                      return (
+                        <td key={k} className="num">
+                          <span style={{ background: s.bg, color: s.fg, borderRadius: 6, padding: "2px 8px", display: "inline-block", minWidth: 40 }}>
+                            {s.text}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
 
 function Ops({ call }: { call: Call }) {
