@@ -365,7 +365,16 @@ export interface Store {
 
   /** Operational switches, flipped from the Command Centre without a deploy. */
   getSetting(key: string): Promise<unknown | null>;
-  setSetting(key: string, value: unknown, updatedBy: string): Promise<void>;
+  /** updatedBy is a user id, or null when the platform itself writes. */
+  setSetting(key: string, value: unknown, updatedBy: string | null): Promise<void>;
+
+  /**
+   * Atomic once-only claim for a scheduled job (e.g. "digest:2026-09-13").
+   * Exactly one caller across all api instances gets true; everyone else
+   * gets false. This is what makes the in-app alarm clock safe to run on
+   * every instance without double-sending anything.
+   */
+  claimDailyJob(key: string): Promise<boolean>;
 
   /** Aggregate metrics for the Command Centre. No PII. */
   platformMetrics(days: number): Promise<PlatformMetrics>;

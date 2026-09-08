@@ -16,6 +16,7 @@ import {
   voiceFor,
 } from "./tutor/prompt.js";
 import { canJudgeRubrics, judgeRubricAnswer, type RubricVerdict } from "./tutor/judge.js";
+import { dueJobs, provisionSecrets } from "./ops/provision.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
@@ -142,6 +143,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
   const PLANS = plans ?? loadPlans();
+  // Zero-terminal deploys: on a real database, missing secrets (admin key,
+  // push keys) provision themselves once and persist. Env vars always win.
+  if (store.kind === "postgres" && env.SELF_PROVISION !== "off") {
+    await provisionSecrets(store, env);
+  }
   // Operational switches, read on the request path (see command/settings.ts).
   const controls = new ControlsReader(store);
   // Observability: every request timed, every failure remembered (ops/metrics.ts).
@@ -2357,12 +2363,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * something to do today, carrying the specific item, never a generic
    * "come study". Learners with a free day are left in peace.
    */
-  app.post("/admin/nudge-plans", async (req, reply) => {
-    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
-    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
-    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
-      return reply.code(501).send({ error: "push not configured" });
-    }
+  async function runNudgePlans() {
+    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return null;
     const webpush = (await import("web-push")).default;
     webpush.setVapidDetails(
       env.VAPID_SUBJECT ?? "mailto:tutor@dingba.ai",
@@ -2400,6 +2402,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       }
     }
     return { users: byUser.size, sent, quiet, stale };
+  }
+
+  app.post("/admin/nudge-plans", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+    const result = await runNudgePlans();
+    if (!result) return reply.code(501).send({ error: "push not configured" });
+    return result;
   });
 
   /**
@@ -2408,10 +2418,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * sessions, streak, what is due, safety flags, and the week ahead. An
    * account with a completely quiet week is left in peace.
    */
-  app.post("/admin/weekly-digest", async (req, reply) => {
-    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
-    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
-
+  async function runWeeklyDigest() {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     let composed = 0;
     let delivered = 0;
@@ -2457,11 +2464,46 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       try {
         if ((await sendWeeklyDigest({ to: account.email, learners })) === "sent") delivered += 1;
       } catch (err) {
-        req.log.error({ err, to: account.email }, "weekly digest failed");
+        app.log.error({ err, to: account.email }, "weekly digest failed");
       }
     }
     return { composed, delivered, quiet, unverified };
+  }
+
+  app.post("/admin/weekly-digest", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+    return runWeeklyDigest();
   });
+
+  /**
+   * The app is its own alarm clock: study reminders every morning, the
+   * guardian digest on Sunday evening, no external cron required. Every
+   * instance ticks once a minute; the store's atomic daily claim decides
+   * which single instance actually runs a due job, so scaling out never
+   * double-sends anything. External crons hitting the /admin routes remain
+   * possible and share the same code path.
+   */
+  if (env.NODE_ENV !== "test" && env.AUTO_JOBS !== "off") {
+    const nudgeHour = Number(env.NUDGE_HOUR_UTC ?? 7);
+    const digestHour = Number(env.DIGEST_HOUR_UTC ?? 18);
+    const tick = async () => {
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
+      for (const job of dueJobs(now, nudgeHour, digestHour)) {
+        if (!(await store.claimDailyJob(`${job}:${day}`))) continue;
+        try {
+          const result = job === "nudge" ? await runNudgePlans() : await runWeeklyDigest();
+          app.log.info({ job, result }, "scheduled job ran");
+        } catch (err) {
+          app.log.error({ err, job }, "scheduled job failed");
+        }
+      }
+    };
+    const clock = setInterval(() => void tick(), 60_000);
+    clock.unref();
+    app.addHook("onClose", async () => clearInterval(clock));
+  }
 
   /**
    * Prometheus scrape target. Point any Grafana agent at it with the admin

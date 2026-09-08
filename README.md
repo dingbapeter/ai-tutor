@@ -95,6 +95,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Conversation mode: open mic with browser VAD, utterances auto-sent, tutor interruptible by speaking over it (barge-in), silence never buffered unbounded | ✅ FSM unit-tested + live-verified with a fake microphone |
 | School portal (/school): org setup, roster import against seat caps, per-learner mastery/session/safety dashboard with real skill titles, one-tap open-tutor | ✅ tested + live-verified in the browser |
 | Growth analytics: activation funnel + weekly cohort retention (unelapsed weeks honestly null), Growth tab readable by investors, memory/postgres parity | ✅ tested (exact cohort math pinned) + live-verified |
+| Zero-terminal switch-on: migrations self-apply at boot (schema_migrations ledger), ADMIN_KEY + VAPID self-provision and persist, owner reads the master key in Ops, reminders + digest run on an in-app clock with atomic claims | ✅ tested + dress-rehearsed against a real PostgreSQL 16 (fresh boot, restart, key persistence) |
 | Exam mode: timed mocks, sealed verdicts, post-mortem, premium-gated | ✅ tested + live-verified |
 | Org/school accounts: seats, roster import, teacher dashboard | ✅ tested |
 | B2B API keys (scoped, hashed, quota'd, metered) + Tutor-as-a-Service sessions | ✅ tested + live-verified |

@@ -1102,7 +1102,7 @@ export class PostgresStore implements Store {
     return rows[0]?.value ?? null;
   }
 
-  async setSetting(key: string, value: unknown, updatedBy: string) {
+  async setSetting(key: string, value: unknown, updatedBy: string | null) {
     await this.db
       .insert(schema.platformSettings)
       .values({ key, value, updatedBy, updatedAt: new Date() })
@@ -1110,6 +1110,17 @@ export class PostgresStore implements Store {
         target: schema.platformSettings.key,
         set: { value, updatedBy, updatedAt: new Date() },
       });
+  }
+
+  async claimDailyJob(key: string) {
+    // Insert-only against the settings primary key: exactly one instance
+    // across the fleet wins the claim, everyone else sees a conflict.
+    const rows = await this.db
+      .insert(schema.platformSettings)
+      .values({ key: `job:${key}`, value: "claimed", updatedAt: new Date() })
+      .onConflictDoNothing()
+      .returning({ key: schema.platformSettings.key });
+    return rows.length > 0;
   }
 
   async platformMetrics(days: number): Promise<PlatformMetrics> {

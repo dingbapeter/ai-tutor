@@ -58,10 +58,16 @@ workspace files from there.
 | api | `apps/api/Dockerfile` (root context) | 4000 |
 | web | `apps/web/Dockerfile` (root context; set `NEXT_PUBLIC_API_URL=https://<api-domain>` as a service variable — Railway passes variables as build args) | 3000 |
 
-Add a Railway **Postgres** plugin, then run the migrations once, in order:
+Add a Railway **Postgres** plugin and set `DATABASE_URL` on the api. The
+api applies migrations ITSELF at boot (schema_migrations ledger; failed
+migration = failed boot, so the healthcheck keeps the old deploy live).
+The manual loop still works if ever needed:
 ```bash
 for f in packages/db/migrations/*.sql; do psql $DATABASE_URL -f "$f"; done
 ```
+
+**Branch**: Railway builds `main` by default; the live code is on the
+working branch. Service → Settings → Source → set the branch accordingly.
 
 ### api environment
 ```

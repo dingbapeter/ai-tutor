@@ -11,9 +11,13 @@ before real children use it, Part 4 is the horizon.
 
 ## Part 1: make the deploy real (an evening's work)
 
-### 1.0 Migrations
+### 1.0 Migrations — AUTOMATIC since 2026-09-08
 
-Apply `packages/db/migrations/` in order, 0000 through 0014 (fifteen files).
+The api applies `packages/db/migrations/` ITSELF at boot (a
+`schema_migrations` ledger tracks what ran; a failed migration fails the
+boot loudly so a healthcheck keeps the previous deploy serving). Nothing to
+run by hand; set `AUTO_MIGRATE=off` only if you ever want the old manual
+way. The files, in order, 0000 through 0014 (fifteen):
 The last five build the Command Centre and the scaling layer:
 `0010_command_centre.sql` (staff and the audit trail),
 `0011_platform_settings.sql` (the switches on the Controls tab),
@@ -32,11 +36,8 @@ you can spend.
 1. Railway project → **New** → **Database** → **PostgreSQL**.
 2. Copy the connection string it gives you.
 3. On the **api** service → Variables → `DATABASE_URL=<that string>`.
-4. Run every migration once, in order:
-   ```bash
-   for f in packages/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
-   ```
-   There are 15 (0000 through 0014). They are idempotent, safe to re-run.
+4. Deploy the api. It applies all 15 migrations itself on boot (see 1.0);
+   the manual `psql` loop remains possible but is no longer needed.
 5. Confirm: `https://<api-domain>/health` should now say `"store":"postgres"`
    instead of `"memory"`.
 
@@ -79,9 +80,11 @@ SMTP_FROM="Dingba" <tutor@dingba.ai>
 AI_MODERATION_PROVIDER=anthropic
 ANTHROPIC_API_KEY=<your key>
 
-# --- Push notifications (generate: npx web-push generate-vapid-keys) ---
-VAPID_PUBLIC_KEY=<generated>
-VAPID_PRIVATE_KEY=<generated>
+# --- Push notifications: OPTIONAL since 2026-09-08 ---
+# On postgres the api generates and persists its own VAPID pair at boot.
+# Set these only to rotate keys or bring your own.
+# VAPID_PUBLIC_KEY=<npx web-push generate-vapid-keys>
+# VAPID_PRIVATE_KEY=<generated>
 VAPID_SUBJECT=mailto:you@dingba.ai
 
 # --- Command Centre (the backend of everything) ---
@@ -97,16 +100,16 @@ PRICE_PREMIUM_MONTHLY=<e.g. 19>
 PRICE_CURRENCY=USD
 
 # --- Ops ---
-ADMIN_KEY=<long random string, for /admin endpoints>
-# Daily study reminders: point any cron (Railway cron, GitHub Actions, or
-# crontab on Contabo) at this once a morning, e.g. 7:00 in your users' zone:
-#   curl -X POST https://<api-domain>/admin/nudge-plans -H "x-admin-key: $ADMIN_KEY"
-# Each subscribed family gets one notification per learner who actually has
-# something to do today, with the specific item. Free days stay silent.
-# Weekly guardian digest: same idea, once a week (Sunday evening works well):
-#   curl -X POST https://<api-domain>/admin/weekly-digest -H "x-admin-key: $ADMIN_KEY"
-# Verified guardians with an active week get one plain email: sessions,
-# streak, what is due, safety flags, and the week ahead. Quiet weeks send nothing.
+# ADMIN_KEY is OPTIONAL since 2026-09-08: on postgres the api generates one
+# at boot, persists it, and shows it to the OWNER in Command Centre -> Ops
+# ("Your master key"). Set it only to choose/rotate your own.
+# ADMIN_KEY=<long random string, for /admin endpoints>
+# Study reminders and the weekly guardian digest are AUTOMATIC since
+# 2026-09-08: the api is its own alarm clock (reminders daily at
+# NUDGE_HOUR_UTC, default 7; digest Sundays at DIGEST_HOUR_UTC, default 18),
+# with an atomic daily claim so multiple instances never double-send.
+# The /admin/nudge-plans and /admin/weekly-digest endpoints remain for
+# manual runs with the master key. AUTO_JOBS=off disables the clock.
 ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>
 ```
 

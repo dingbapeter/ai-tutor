@@ -719,6 +719,13 @@ export class MemoryStore implements Store {
     this.settings.set(key, value);
   }
 
+  private jobClaims = new Set<string>();
+  async claimDailyJob(key: string) {
+    if (this.jobClaims.has(key)) return false;
+    this.jobClaims.add(key);
+    return true;
+  }
+
   async platformMetrics(days: number): Promise<PlatformMetrics> {
     const now = new Date();
     const dayKey = (d: Date) => d.toISOString().slice(0, 10);

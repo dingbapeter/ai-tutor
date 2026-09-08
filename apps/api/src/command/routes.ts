@@ -327,7 +327,14 @@ export async function registerCommandCentre(
     if (!actor) return;
     // aiQueue is the bounded line in front of the model box; null means the
     // configured providers need no queue (mock, or a paid API).
-    return { ...metrics.summary(), aiQueue: aiQueue ? aiQueue.stats() : null };
+    // The master key is shown to the OWNER only: it is self-provisioned at
+    // boot so nobody has to make one in a terminal, and this is where the
+    // founder reads it when a tool (Grafana, a manual cron) needs it.
+    return {
+      ...metrics.summary(),
+      aiQueue: aiQueue ? aiQueue.stats() : null,
+      adminKey: actor.role === "owner" ? (env.ADMIN_KEY ?? null) : undefined,
+    };
   });
 
   // ---- Safety desk ----

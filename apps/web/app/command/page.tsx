@@ -206,6 +206,7 @@ interface OpsView {
     avgWaitMs: number;
     longestWaitMs: number;
   } | null;
+  adminKey?: string | null;
 }
 
 interface GrowthView {
@@ -1836,6 +1837,19 @@ function Ops({ call }: { call: Call }) {
           <p className="cc-empty">Nothing has failed since this process started.</p>
         )}
       </div>
+
+      {data.adminKey && (
+        <div className="cc-panel">
+          <h3>Your master key</h3>
+          <p>
+            The platform made this key itself, so you never had to. It unlocks the staff-only
+            endpoints below (Grafana, manual job runs). Treat it like a password.
+          </p>
+          <p className="mono" style={{ wordBreak: "break-all", background: "var(--surface-2)", padding: "8px 10px", borderRadius: 8 }}>
+            {data.adminKey}
+          </p>
+        </div>
+      )}
 
       <div className="cc-panel">
         <h3>Wiring it to Grafana</h3>
