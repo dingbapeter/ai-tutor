@@ -143,7 +143,8 @@ export async function registerCommandCentre(
   app.get("/command/growth", async (req, reply) => {
     const actor = await requireCap(req, reply, "metrics:read");
     if (!actor) return;
-    return store.growthAnalytics();
+    const [analytics, referrals] = await Promise.all([store.growthAnalytics(), store.referralStats(5)]);
+    return { ...analytics, referrals };
   });
 
   // ---- Money ----

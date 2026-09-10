@@ -21,6 +21,15 @@ export const users = pgTable("users", {
   plan: text("plan").notNull().default("free"),
   orgId: uuid("org_id"),
   emailVerified: boolean("email_verified").notNull().default(false),
+  /** Referral loop: my shareable code, who invited me, and whether that
+   * invite has already paid out (one reward per referred account). */
+  referralCode: text("referral_code").unique(),
+  referredBy: uuid("referred_by"),
+  referralRewarded: boolean("referral_rewarded").notNull().default(false),
+  /** Time-boxed thank-you plan. Effective plan = better of plan and this
+   * while un-expired; billing's plan column is never touched by referrals. */
+  planBoost: text("plan_boost"),
+  planBoostUntil: timestamp("plan_boost_until"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

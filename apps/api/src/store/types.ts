@@ -40,6 +40,21 @@ export const EMPTY_PROFILE: LearnerProfile = {
   preferences: [],
 };
 
+/** Plan ordering for the referral boost: a boost can only ever improve. */
+export const PLAN_RANK: Record<string, number> = { free: 0, plus: 1, premium: 2 };
+
+export function betterPlan(a: string, b: string): string {
+  return (PLAN_RANK[b] ?? 0) > (PLAN_RANK[a] ?? 0) ? b : a;
+}
+
+/** Short, shareable, readable-aloud: no 0/o, 1/l/i lookalikes. */
+export function mintReferralCode(): string {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (const byte of crypto.getRandomValues(new Uint8Array(8))) out += alphabet[byte % alphabet.length];
+  return out;
+}
+
 /**
  * Adaptive engine v1: an SM-2-family scheduler (not full FSRS yet — the
  * fields are ready for it). Correct recall stretches the interval, and
@@ -256,8 +271,38 @@ export interface Store {
     since: Date,
   ): Promise<number>;
 
+  /** The EFFECTIVE plan: the better of the paid plan and any un-expired
+   *  referral boost. Everything that gates on plan reads this. */
   getUserPlan(userId: string): Promise<string>;
   setUserPlan(email: string, plan: string): Promise<boolean>;
+
+  // ---- Referral loop ----
+
+  /** My shareable code; minted on first ask, stable afterwards. */
+  getReferralCode(userId: string): Promise<string>;
+  userIdByReferralCode(code: string): Promise<string | null>;
+  /** Recorded once at signup; silently ignored if already set. */
+  setReferredBy(userId: string, referrerId: string): Promise<void>;
+  /** One-shot: the first call after the referred account verifies returns
+   *  the referrer's id and marks the reward paid; every later call returns
+   *  null. This is what stops re-verification from paying twice. */
+  claimReferralReward(referredUserId: string): Promise<string | null>;
+  /** Extend the thank-you plan by `days` from max(now, current expiry).
+   *  Returns the new expiry. Never touches the billing-owned plan. */
+  grantPlanBoost(userId: string, plan: string, days: number): Promise<Date>;
+  referralSummary(userId: string): Promise<{
+    code: string;
+    invited: number;
+    rewarded: number;
+    boostPlan: string | null;
+    boostUntil: Date | null;
+  }>;
+  /** For the Command Centre: how the loop is doing platform-wide. */
+  referralStats(topN: number): Promise<{
+    totalReferred: number;
+    rewarded: number;
+    top: Array<{ email: string; invited: number; rewarded: number }>;
+  }>;
 
   createOrg(ownerUserId: string, name: string, seats: number): Promise<{ id: string }>;
   getOrgByOwner(ownerUserId: string): Promise<{ id: string; name: string; seats: number; plan: string } | null>;

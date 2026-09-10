@@ -1,5 +1,7 @@
 import {
+  betterPlan,
   mergeProfile,
+  mintReferralCode,
   scheduleAttempt,
   type AuditEntry,
   type BillingEventRecord,
@@ -431,6 +433,11 @@ export class MemoryStore implements Store {
     createdAt: Date;
   }> = [];
   private plans = new Map<string, string>(); // userId -> plan
+  private referralCodes = new Map<string, string>(); // code -> userId
+  private referralCodeOf = new Map<string, string>(); // userId -> code
+  private referredBy = new Map<string, string>(); // referred userId -> referrer userId
+  private referralPaid = new Set<string>(); // referred userIds whose invite has paid out
+  private planBoosts = new Map<string, { plan: string; until: Date }>();
   private orgs = new Map<string, { id: string; name: string; ownerUserId: string; seats: number; plan: string }>();
   private orgStudents = new Map<string, string>(); // studentId -> orgId
   private apiKeys = new Map<
@@ -460,7 +467,9 @@ export class MemoryStore implements Store {
   }
 
   async getUserPlan(userId: string) {
-    return this.plans.get(userId) ?? "free";
+    const paid = this.plans.get(userId) ?? "free";
+    const boost = this.planBoosts.get(userId);
+    return boost && boost.until > new Date() ? betterPlan(paid, boost.plan) : paid;
   }
 
   async setUserPlan(email: string, plan: string) {
@@ -468,6 +477,77 @@ export class MemoryStore implements Store {
     if (!a) return false;
     this.plans.set(a.userId, plan);
     return true;
+  }
+
+  async getReferralCode(userId: string) {
+    const existing = this.referralCodeOf.get(userId);
+    if (existing) return existing;
+    let code = mintReferralCode();
+    while (this.referralCodes.has(code)) code = mintReferralCode();
+    this.referralCodes.set(code, userId);
+    this.referralCodeOf.set(userId, code);
+    return code;
+  }
+
+  async userIdByReferralCode(code: string) {
+    return this.referralCodes.get(code.toLowerCase()) ?? null;
+  }
+
+  async setReferredBy(userId: string, referrerId: string) {
+    if (userId === referrerId || this.referredBy.has(userId)) return;
+    this.referredBy.set(userId, referrerId);
+  }
+
+  async claimReferralReward(referredUserId: string) {
+    if (this.referralPaid.has(referredUserId)) return null;
+    const referrer = this.referredBy.get(referredUserId);
+    if (!referrer) return null;
+    this.referralPaid.add(referredUserId);
+    return referrer;
+  }
+
+  async grantPlanBoost(userId: string, plan: string, days: number) {
+    const current = this.planBoosts.get(userId);
+    const from = Math.max(Date.now(), current?.until.getTime() ?? 0);
+    const until = new Date(from + days * 86_400_000);
+    this.planBoosts.set(userId, { plan: betterPlan(current?.plan ?? "free", plan), until });
+    return until;
+  }
+
+  async referralSummary(userId: string) {
+    let invited = 0;
+    let rewarded = 0;
+    for (const [referred, referrer] of this.referredBy) {
+      if (referrer !== userId) continue;
+      invited += 1;
+      if (this.referralPaid.has(referred)) rewarded += 1;
+    }
+    const boost = this.planBoosts.get(userId);
+    const live = boost && boost.until > new Date() ? boost : null;
+    return {
+      code: await this.getReferralCode(userId),
+      invited,
+      rewarded,
+      boostPlan: live?.plan ?? null,
+      boostUntil: live?.until ?? null,
+    };
+  }
+
+  async referralStats(topN: number) {
+    const byReferrer = new Map<string, { invited: number; rewarded: number }>();
+    for (const [referred, referrer] of this.referredBy) {
+      const row = byReferrer.get(referrer) ?? { invited: 0, rewarded: 0 };
+      row.invited += 1;
+      if (this.referralPaid.has(referred)) row.rewarded += 1;
+      byReferrer.set(referrer, row);
+    }
+    const emailOf = new Map<string, string>();
+    for (const [email, a] of this.accounts) emailOf.set(a.userId, email);
+    const top = [...byReferrer.entries()]
+      .sort((a, b) => b[1].invited - a[1].invited)
+      .slice(0, topN)
+      .map(([id, row]) => ({ email: emailOf.get(id) ?? id, ...row }));
+    return { totalReferred: this.referredBy.size, rewarded: this.referralPaid.size, top };
   }
 
   async createOrg(ownerUserId: string, name: string, seats: number) {

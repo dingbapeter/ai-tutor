@@ -212,6 +212,11 @@ interface OpsView {
 interface GrowthView {
   funnel: { registered: number; startedSession: number; returnedAnotherDay: number; subscribed: number };
   cohorts: Array<{ weekStart: string; signups: number; retainedByWeek: Array<number | null> }>;
+  referrals: {
+    totalReferred: number;
+    rewarded: number;
+    top: Array<{ email: string; invited: number; rewarded: number }>;
+  };
 }
 
 type Tab = "overview" | "growth" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
@@ -1691,6 +1696,40 @@ function Growth({ call }: { call: Call }) {
                         </td>
                       );
                     })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="cc-panel">
+        <h3>Referrals</h3>
+        <p>
+          The invite-a-friend loop: how many accounts a friend brought in, and how many of those
+          confirmed their email (which is when both sides earn their thank-you days).
+        </p>
+        <div className="cc-stats">
+          <Stat k="Referred signups" v={num(data.referrals.totalReferred)} n="accounts that came from a friend's link" />
+          <Stat k="Confirmed" v={num(data.referrals.rewarded)} n="verified their email, rewards paid" />
+        </div>
+        {data.referrals.top.length > 0 && (
+          <div className="cc-table-wrap">
+            <table className="cc-table">
+              <thead>
+                <tr>
+                  <th>Top inviters</th>
+                  <th className="num">Invited</th>
+                  <th className="num">Confirmed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.referrals.top.map((r) => (
+                  <tr key={r.email}>
+                    <td className="mono">{r.email}</td>
+                    <td className="num">{num(r.invited)}</td>
+                    <td className="num">{num(r.rewarded)}</td>
                   </tr>
                 ))}
               </tbody>

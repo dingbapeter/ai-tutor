@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearRef, storedRef } from "../referral";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -88,6 +89,15 @@ export default function Account() {
   const [routineBusy, setRoutineBusy] = useState<string | null>(null);
   const [careEditing, setCareEditing] = useState<string | null>(null);
   const [careForm, setCareForm] = useState<{ name: string; phone: string; relationship: string }>({ name: "", phone: "", relationship: "" });
+  const [referral, setReferral] = useState<{
+    link: string;
+    invited: number;
+    rewarded: number;
+    boostPlan: string | null;
+    boostUntil: string | null;
+    rewardDays: number;
+  } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
@@ -134,6 +144,8 @@ export default function Account() {
       }
       const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${t}` } });
       if (u.ok) setUsage(await u.json());
+      const r = await fetch(`${API}/account/referral`, { headers: { authorization: `Bearer ${t}` } });
+      if (r.ok) setReferral(await r.json());
       const b = await fetch(`${API}/billing/status`);
       if (b.ok) setBillingOn((await b.json()).configured === true);
     } catch {
@@ -149,12 +161,20 @@ export default function Account() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
           mode === "register"
-            ? { email, password, role, ...(displayName.trim() ? { displayName: displayName.trim() } : {}) }
+            ? {
+                email,
+                password,
+                role,
+                ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+                // Credit the friend whose link brought them here, if any.
+                ...(storedRef() ? { ref: storedRef() } : {}),
+              }
             : { email, password },
         ),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
+      if (mode === "register") clearRef();
       localStorage.setItem("tutor_token", json.token);
       setToken(json.token);
     } catch (e) {
@@ -454,6 +474,42 @@ export default function Account() {
               </button>
             </span>
           )}
+        </div>
+      )}
+
+      {referral && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <b>🎁 Invite a friend</b>
+          <p style={{ margin: "6px 0 8px", color: "var(--text-dim)", fontSize: 14 }}>
+            Share your link. When a friend joins and confirms their email, you BOTH get {referral.rewardDays} days
+            of Plus free.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <code style={{ padding: "6px 10px", background: "var(--bg-soft, rgba(0,0,0,0.06))", borderRadius: 8, fontSize: 13, wordBreak: "break-all" }}>
+              {referral.link}
+            </code>
+            <button
+              className="btn quiet small"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(referral.link);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2500);
+                } catch {
+                  // Clipboard blocked (rare): the link is visible to copy by hand.
+                }
+              }}
+            >
+              {linkCopied ? "Copied!" : "Copy link"}
+            </button>
+          </div>
+          <small style={{ color: "var(--text-dim)", display: "block", marginTop: 8 }}>
+            {referral.invited === 0
+              ? "No friends yet. Send it to someone who would love a tutor."
+              : `${referral.invited} joined so far, ${referral.rewarded} confirmed.`}
+            {referral.boostUntil &&
+              ` Your thank-you ${referral.boostPlan ?? "plus"} runs until ${new Date(referral.boostUntil).toLocaleDateString()}.`}
+          </small>
         </div>
       )}
 

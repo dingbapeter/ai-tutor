@@ -420,17 +420,19 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       password: { type: "string", minLength: 8, maxLength: 128 },
       displayName: { type: "string", minLength: 1, maxLength: 80 },
       role: { type: "string", enum: ["parent", "student"] },
+      // A friend's referral code. Optional, and never a reason to fail signup.
+      ref: { type: "string", minLength: 4, maxLength: 32, pattern: "^[A-Za-z0-9]+$" },
     },
   };
 
-  app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student" } }>(
+  app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student"; ref?: string } }>(
     "/auth/register",
     { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } } },
     async (req, reply) => {
       // Honour the Command Centre's signup pause before anything else.
       const live = await controls.get();
       if (live.signupsPaused) return reply.code(503).send({ error: live.signupsPausedReason });
-      const { email, password, displayName, role } = req.body;
+      const { email, password, displayName, role, ref } = req.body;
       const account = await store.createAccount(
         email,
         await hashPassword(password),
@@ -438,6 +440,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         displayName?.trim() || email.split("@")[0],
       );
       if (!account) return reply.code(409).send({ error: "that email is already registered" });
+      if (ref) {
+        // Remember who invited them; the thank-you waits for email
+        // verification so invented inboxes never earn anything.
+        const referrer = await store.userIdByReferralCode(ref);
+        if (referrer && referrer !== account.userId) await store.setReferredBy(account.userId, referrer);
+      }
       const token = mintToken();
       await store.saveToken(token.hash, account.userId);
       // Email verification: fire-and-forget so signup never blocks on SMTP.
@@ -468,6 +476,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       );
       if (!userId) return reply.code(400).send({ error: "that verification link is invalid or expired, request a new one" });
       await store.markEmailVerified(userId);
+      // Referral payout, once per referred account: a real, verified friend
+      // earns BOTH sides some paid-plan days. The claim is atomic, so
+      // re-verifying can never pay twice.
+      const referrer = await store.claimReferralReward(userId);
+      if (referrer) {
+        const days = Number(env.REFERRAL_REWARD_DAYS ?? 7);
+        if (days > 0) {
+          await store.grantPlanBoost(userId, "plus", days);
+          await store.grantPlanBoost(referrer, "plus", days);
+        }
+      }
       return { verified: true };
     },
   );
@@ -2557,6 +2576,22 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         limits: { messages: limits.dailyMessages, voiceTurns: limits.dailyVoiceTurns },
       },
       monthTotal: await store.sumUsage({ userId: user.userId }, null, monthStart),
+    };
+  });
+
+  /**
+   * The referral loop, from the inviter's side: my code, my shareable link,
+   * how many friends came, and how long my thank-you Plus runs.
+   */
+  app.get("/account/referral", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const summary = await store.referralSummary(user.userId);
+    const origin = env.WEB_ORIGIN ?? "http://localhost:3000";
+    return {
+      ...summary,
+      link: `${origin}/?ref=${summary.code}`,
+      rewardDays: Number(env.REFERRAL_REWARD_DAYS ?? 7),
     };
   });
 

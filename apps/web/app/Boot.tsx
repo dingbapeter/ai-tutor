@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { rememberRef } from "./referral";
 
 /** Registers the service worker and shows an offline banner when the network drops. */
 export default function Boot() {
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
+    // A friend's invite link can land on any page; keep the credit for signup.
+    rememberRef(window.location.search);
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }

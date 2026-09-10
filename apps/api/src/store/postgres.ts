@@ -1,7 +1,9 @@
 import { createDb, schema, type Db } from "@tutor/db";
-import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
+  betterPlan,
   mergeProfile,
+  mintReferralCode,
   scheduleAttempt,
   type AuditEntry,
   type BillingEventRecord,
@@ -515,11 +517,151 @@ export class PostgresStore implements Store {
 
   async getUserPlan(userId: string) {
     const rows = await this.db
-      .select({ plan: schema.users.plan })
+      .select({
+        plan: schema.users.plan,
+        boost: schema.users.planBoost,
+        boostUntil: schema.users.planBoostUntil,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
-    return rows[0]?.plan ?? "free";
+    const row = rows[0];
+    if (!row) return "free";
+    if (row.boost && row.boostUntil && row.boostUntil > new Date()) return betterPlan(row.plan, row.boost);
+    return row.plan;
+  }
+
+  async getReferralCode(userId: string) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const rows = await this.db
+        .select({ code: schema.users.referralCode })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+      if (rows[0]?.code) return rows[0].code;
+      try {
+        const set = await this.db
+          .update(schema.users)
+          .set({ referralCode: mintReferralCode() })
+          .where(and(eq(schema.users.id, userId), isNull(schema.users.referralCode)))
+          .returning({ code: schema.users.referralCode });
+        if (set[0]?.code) return set[0].code;
+      } catch {
+        // unique collision with another user's code — mint again
+      }
+    }
+    throw new Error("could not mint a referral code");
+  }
+
+  async userIdByReferralCode(code: string) {
+    const rows = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.referralCode, code.toLowerCase()))
+      .limit(1);
+    return rows[0]?.id ?? null;
+  }
+
+  async setReferredBy(userId: string, referrerId: string) {
+    if (userId === referrerId) return;
+    await this.db
+      .update(schema.users)
+      .set({ referredBy: referrerId })
+      .where(and(eq(schema.users.id, userId), isNull(schema.users.referredBy)));
+  }
+
+  async claimReferralReward(referredUserId: string) {
+    // Atomic one-shot: only the first claim flips the flag and learns who
+    // to thank; a re-verification later returns nothing.
+    const rows = await this.db
+      .update(schema.users)
+      .set({ referralRewarded: true })
+      .where(
+        and(
+          eq(schema.users.id, referredUserId),
+          eq(schema.users.referralRewarded, false),
+          isNotNull(schema.users.referredBy),
+        ),
+      )
+      .returning({ referrer: schema.users.referredBy });
+    return rows[0]?.referrer ?? null;
+  }
+
+  async grantPlanBoost(userId: string, plan: string, days: number) {
+    const rows = await this.db
+      .select({ boost: schema.users.planBoost, until: schema.users.planBoostUntil })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    const current = rows[0];
+    const from = Math.max(Date.now(), current?.until?.getTime() ?? 0);
+    const until = new Date(from + days * 86_400_000);
+    await this.db
+      .update(schema.users)
+      .set({ planBoost: betterPlan(current?.boost ?? "free", plan), planBoostUntil: until })
+      .where(eq(schema.users.id, userId));
+    return until;
+  }
+
+  async referralSummary(userId: string) {
+    const [counts] = await this.db
+      .select({
+        invited: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.referredBy, userId));
+    const me = await this.db
+      .select({ boost: schema.users.planBoost, until: schema.users.planBoostUntil })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    const live = me[0]?.boost && me[0]?.until && me[0].until > new Date() ? me[0] : null;
+    return {
+      code: await this.getReferralCode(userId),
+      invited: Number(counts?.invited ?? 0),
+      rewarded: Number(counts?.rewarded ?? 0),
+      boostPlan: live?.boost ?? null,
+      boostUntil: live?.until ?? null,
+    };
+  }
+
+  async referralStats(topN: number) {
+    const [totals] = await this.db
+      .select({
+        totalReferred: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(isNotNull(schema.users.referredBy));
+    const grouped = await this.db
+      .select({
+        referrer: schema.users.referredBy,
+        invited: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(isNotNull(schema.users.referredBy))
+      .groupBy(schema.users.referredBy)
+      .orderBy(sql`count(*) desc`)
+      .limit(topN);
+    const ids = grouped.map((g) => g.referrer).filter((r): r is string => r !== null);
+    const emails = ids.length
+      ? await this.db
+          .select({ id: schema.users.id, email: schema.users.email })
+          .from(schema.users)
+          .where(inArray(schema.users.id, ids))
+      : [];
+    const emailOf = new Map(emails.map((e) => [e.id, e.email]));
+    return {
+      totalReferred: Number(totals?.totalReferred ?? 0),
+      rewarded: Number(totals?.rewarded ?? 0),
+      top: grouped.map((g) => ({
+        email: emailOf.get(g.referrer ?? "") ?? (g.referrer ?? "unknown"),
+        invited: Number(g.invited),
+        rewarded: Number(g.rewarded),
+      })),
+    };
   }
 
   async setUserPlan(email: string, plan: string) {
