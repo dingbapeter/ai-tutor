@@ -8,18 +8,25 @@
 #
 # Models are downloaded once into the ./models volume — see deploy/DEPLOY.md.
 
+# Every Dingba service carries a memory cap and a CPU cap, so on a SHARED
+# box (mailcow, video conferencing, ...) Dingba can never starve the
+# neighbours: worst case it slows itself down, never them. Raise the caps
+# when the box is dedicated.
+
 services:
   llm:
     image: ghcr.io/ggml-org/llama.cpp:server
     command: >
       -m /models/chat.gguf
       --host 0.0.0.0 --port 8080
-      -c 8192 --parallel 4
+      -c 8192 --parallel 2
     volumes:
       - ./models:/models
     ports:
       - "8080:8080"
     restart: unless-stopped
+    mem_limit: 3g
+    cpus: 3
     # deploy:
     #   resources:
     #     reservations:
@@ -33,6 +40,8 @@ services:
     ports:
       - "8081:8000"
     restart: unless-stopped
+    mem_limit: 1500m
+    cpus: 2
 
   tts:
     # Kokoro-82M behind an OpenAI-compatible /v1/audio/speech
@@ -40,16 +49,23 @@ services:
     ports:
       - "8082:8880"
     restart: unless-stopped
+    mem_limit: 1200m
+    cpus: 2
 
   mathcheck:
     build: ../services/mathcheck
     ports:
       - "8090:8090"
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1
 
   postgres:
     # Use this OR Railway Postgres — not both. Keeping the DB next to the app
     # on Railway is simpler; this is here if you want everything on Contabo.
+    # Behind a profile so `up -d` does NOT start it by default:
+    #   docker compose --profile localdb -f deploy/docker-compose.contabo.yml up -d
+    profiles: ["localdb"]
     image: postgres:16
     environment:
       POSTGRES_USER: tutor

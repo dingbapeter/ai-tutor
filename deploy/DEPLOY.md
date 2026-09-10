@@ -28,6 +28,30 @@ curl localhost:8081/health   # stt
 curl localhost:8090/health   # mathcheck
 ```
 
+### Sharing the box with other products (e.g. mailcow) on ~8 GB RAM
+
+The 7B needs ~5 GB by itself and does not fit next to mailcow on an 8 GB
+box. The recipe that does fit (and stays licensing-clean, MIT):
+
+```bash
+# Phi-3.5-mini-instruct Q4 (~2.4 GB) instead of the 7B — same filename,
+# nothing else changes:
+curl -L -o deploy/models/chat.gguf \
+  https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf
+
+# A swap safety net so a memory spike can never let the kernel kill a
+# neighbour (one-time):
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
+Every Dingba container in the compose file carries `mem_limit` + `cpus`
+caps for exactly this case: Dingba can slow itself down, never the
+neighbours. The llm runs `--parallel 2` here; set `AI_MAX_CONCURRENT=2`
+on the Railway api so the app-side queue matches the model server's
+slots. Move to the 7B on a dedicated box at launch: it is a model file
+swap plus three URL changes, nothing else.
+
 Then open ports 8080-8090 ONLY to your Railway app's egress (firewall/ufw), not
 to the public internet — these services have no auth of their own.
 
