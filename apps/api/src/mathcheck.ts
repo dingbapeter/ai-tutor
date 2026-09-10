@@ -13,12 +13,18 @@ export type Check =
 
 const BASE = process.env.MATHCHECK_URL ?? "http://localhost:8090";
 
+// Same shared secret the gateway uses: the gate on the model box checks it.
+function headers(): Record<string, string> {
+  const key = process.env.BRAIN_KEY;
+  return { "content-type": "application/json", ...(key ? { "x-brain-key": key } : {}) };
+}
+
 export async function verifyAnswer(check: Check, studentAnswer: string): Promise<boolean | null> {
   try {
     if (check.type === "solve") {
       const res = await fetch(`${BASE}/check/solve`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: headers(),
         body: JSON.stringify({
           equation: check.equation,
           variable: check.variable,
@@ -38,7 +44,7 @@ export async function verifyAnswer(check: Check, studentAnswer: string): Promise
       // no-brackets rule so typing the question back never scores.
       const res = await fetch(`${BASE}/check/equivalent`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: headers(),
         body: JSON.stringify({
           expression: check.expression,
           student_expression: studentAnswer,

@@ -61,6 +61,10 @@ WHISPER_URL=http://<contabo-ip>:8081
 TTS_URL=http://<contabo-ip>:8082
 PIPER_TTS_URL=http://<contabo-ip>:8083   # unlocks 43 more speaking languages
 MATHCHECK_URL=http://<contabo-ip>:8090
+# The brain-door password. Make one (`openssl rand -hex 24`), put the SAME
+# value here and in deploy/.env on the model box; the gate container in
+# front of the AI services rejects every request without it (401).
+BRAIN_KEY=<same value as deploy/.env on the model box>
 
 # The line in front of the model box (optional; these are the defaults).
 # Match AI_MAX_CONCURRENT to llama.cpp's parallel slots (-np).

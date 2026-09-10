@@ -25,11 +25,14 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
   const llamaUrl = env.LLAMACPP_URL ?? "http://localhost:8080";
   const whisperUrl = env.WHISPER_URL ?? "http://localhost:8081";
   const ttsUrl = env.TTS_URL ?? "http://localhost:8082";
+  // One shared secret unlocks every self-hosted AI door. The gate container
+  // on the model box checks it, so open ports are useless to strangers.
+  const brainKey = env.BRAIN_KEY;
 
   const chatFor = (name: string | undefined) => {
     switch (name ?? "mock") {
       case "llamacpp":
-        return new LlamaCppChatProvider(llamaUrl);
+        return new LlamaCppChatProvider(llamaUrl, "default", brainKey);
       case "mock":
         return new MockChatProvider();
       default:
@@ -40,7 +43,7 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
   const stt = () => {
     switch (env.AI_STT_PROVIDER ?? "mock") {
       case "whisper":
-        return new WhisperSttProvider(whisperUrl);
+        return new WhisperSttProvider(whisperUrl, undefined, brainKey);
       case "mock":
         return new MockSttProvider();
       default:
@@ -54,15 +57,15 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
     const piperUrl = env.PIPER_TTS_URL;
     switch (env.AI_TTS_PROVIDER ?? "mock") {
       case "kokoro": {
-        const kokoro = new KokoroTtsProvider(ttsUrl, "kokoro");
+        const kokoro = new KokoroTtsProvider(ttsUrl, "kokoro", "kokoro", brainKey);
         if (!piperUrl) return kokoro;
         return new RoutingTtsProvider(
-          { kokoro, piper: new KokoroTtsProvider(piperUrl, "piper", "piper") },
+          { kokoro, piper: new KokoroTtsProvider(piperUrl, "piper", "piper", brainKey) },
           kokoro,
         );
       }
       case "piper":
-        return new KokoroTtsProvider(piperUrl ?? ttsUrl, "piper", "piper");
+        return new KokoroTtsProvider(piperUrl ?? ttsUrl, "piper", "piper", brainKey);
       case "mock":
         return new MockTtsProvider();
       default:
@@ -73,7 +76,7 @@ export function createGatewayFromEnv(env: Record<string, string | undefined> = p
   const vision = () => {
     switch (env.AI_VISION_PROVIDER ?? "mock") {
       case "llamacpp":
-        return new LlamaCppVisionProvider(llamaUrl);
+        return new LlamaCppVisionProvider(llamaUrl, "default", brainKey);
       case "mock":
         return new MockVisionProvider();
       default:

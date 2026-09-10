@@ -19,9 +19,13 @@ function sseChunk(content: string): string {
 
 let server: Server;
 let base: string;
+// The gate on the model box checks x-brain-key; these tests prove every
+// adapter presents it when configured (and stays silent when not).
+const seenKeys: Record<string, string | undefined> = {};
 
 beforeAll(async () => {
   server = createServer(async (req, res) => {
+    seenKeys[req.url ?? ""] = req.headers["x-brain-key"] as string | undefined;
     if (req.url === "/v1/chat/completions") {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write(sseChunk("Hello "));
@@ -84,6 +88,40 @@ describe("KokoroTtsProvider", () => {
     const result = await provider.speak("hello", "af_heart");
     expect(result.mimeType).toBe("audio/mpeg");
     expect(result.audio.length).toBeGreaterThan(0);
+  });
+});
+
+describe("brain key", () => {
+  it("every adapter presents the shared key when configured", async () => {
+    const chat = new LlamaCppChatProvider(base, "default", "sesame-key");
+    for await (const _ of chat.chat([{ role: "user", content: "hi" }])) void _;
+    expect(seenKeys["/v1/chat/completions"]).toBe("sesame-key");
+
+    const stt = new WhisperSttProvider(base, undefined, "sesame-key");
+    await stt.transcribe(new Uint8Array([0]), "audio/wav");
+    expect(seenKeys["/v1/audio/transcriptions"]).toBe("sesame-key");
+
+    const tts = new KokoroTtsProvider(base, "kokoro", "kokoro", "sesame-key");
+    await tts.speak("hello", "af_heart");
+    expect(seenKeys["/v1/audio/speech"]).toBe("sesame-key");
+  });
+
+  it("sends no key header at all when none is configured", async () => {
+    const chat = new LlamaCppChatProvider(base);
+    for await (const _ of chat.chat([{ role: "user", content: "hi" }])) void _;
+    expect(seenKeys["/v1/chat/completions"]).toBeUndefined();
+  });
+
+  it("flows from the BRAIN_KEY env through the queued gateway to the wire", async () => {
+    const gw = createGatewayFromEnv({
+      AI_CHAT_PROVIDER: "llamacpp",
+      LLAMACPP_URL: base,
+      BRAIN_KEY: "env-key",
+    });
+    let out = "";
+    for await (const delta of gw.chat.chat([{ role: "user", content: "hi" }])) out += delta;
+    expect(out).toBe("Hello world!");
+    expect(seenKeys["/v1/chat/completions"]).toBe("env-key");
   });
 });
 

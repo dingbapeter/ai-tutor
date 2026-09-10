@@ -13,7 +13,35 @@
 # neighbours: worst case it slows itself down, never them. Raise the caps
 # when the box is dedicated.
 
+# Nothing below publishes a port except the `gate`: a tiny nginx that
+# checks the shared secret (x-brain-key) on every request before letting
+# it through to an AI service. Set the secret ONCE in deploy/.env:
+#
+#   BRAIN_KEY=<same value as the Railway api's BRAIN_KEY variable>
+#
+# GET /health stays open on each door for uptime checks.
+
 services:
+  gate:
+    image: nginx:1.27-alpine
+    environment:
+      - BRAIN_KEY=${BRAIN_KEY:?set BRAIN_KEY in deploy/.env (same value as on Railway)}
+    volumes:
+      - ./gate:/etc/nginx/templates:ro
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "8082:8082"
+      - "8090:8090"
+    depends_on:
+      - llm
+      - stt
+      - tts
+      - mathcheck
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+
   llm:
     image: ghcr.io/ggml-org/llama.cpp:server
     command: >
@@ -22,8 +50,6 @@ services:
       -c 8192 --parallel 2
     volumes:
       - ./models:/models
-    ports:
-      - "8080:8080"
     restart: unless-stopped
     mem_limit: 3g
     cpus: 3
@@ -37,8 +63,6 @@ services:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     environment:
       - WHISPER__MODEL=Systran/faster-whisper-small
-    ports:
-      - "8081:8000"
     restart: unless-stopped
     mem_limit: 1500m
     cpus: 2
@@ -46,16 +70,12 @@ services:
   tts:
     # Kokoro-82M behind an OpenAI-compatible /v1/audio/speech
     image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
-    ports:
-      - "8082:8880"
     restart: unless-stopped
     mem_limit: 1200m
     cpus: 2
 
   mathcheck:
     build: ../services/mathcheck
-    ports:
-      - "8090:8090"
     restart: unless-stopped
     mem_limit: 512m
     cpus: 1

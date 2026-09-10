@@ -54,27 +54,29 @@ If it answers "git: command not found", run `apt install -y git` once and retry.
 
 ### Step 6. Wake the brain
 
-**Where:** the same window. Three lines, one at a time; line 1 downloads about 5 GB.
+**Where:** the same window. Four lines, one at a time; line 1 downloads about 5 GB (sharing the box with other products? Use the smaller model from deploy/DEPLOY.md instead).
 
 ```sh
 curl -L -o deploy/models/chat.gguf https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
+echo "BRAIN_KEY=$(openssl rand -hex 24)" > deploy/.env
 docker compose -f deploy/docker-compose.contabo.yml up -d
 curl localhost:8080/health && curl localhost:8081/health && curl localhost:8090/health
 ```
 
+Line 2 invents the brain's password. Nothing reaches the AI without it; the app presents it on every call once step 7 is done.
 **Done when:** each health check answers ok. Any red text: paste it all into the chat.
 
-### Step 7. Tell Railway where the brain lives
+### Step 7. Tell Railway where the brain lives, and give it the password
 
 **Where:** Railway, the api box, Variables.
-**Do:** Fill the four brain addresses from the checklist (LLAMACPP_URL, WHISPER_URL, TTS_URL, MATHCHECK_URL), each with your Contabo address, like http://YOUR-CONTABO-IP:8080.
+**Do:** Fill the four brain addresses from the checklist (LLAMACPP_URL, WHISPER_URL, TTS_URL, MATHCHECK_URL), each with your Contabo address, like http://YOUR-CONTABO-IP:8080. Then add **BRAIN_KEY**: in the PowerShell window type `cat deploy/.env`, copy the value after the = sign, paste it in.
 **Done when:** a tutor on the website answers in full sentences.
 
-### Step 8. Lock the brain's doors
+### Step 8. Hide the doors completely (optional extra lock)
 
-**Where:** Contabo's control panel, Firewall page.
-**Do:** One rule: only Railway may reach doors 8080 to 8090; everyone else blocked. Confused? Screenshot it into the chat; this one matters.
-**Done when:** the rule is saved.
+**Where:** the PowerShell window.
+**Do:** The password already keeps strangers out. If your Railway plan shows a fixed outgoing address (api box, Settings, Static Outbound IPs), you can ALSO make the doors invisible to everyone but Railway; ask in the build chat for the two lines to paste.
+**Done when:** the tutor still answers on the website.
 
 ### Step 9. Set the ONE timer
 
