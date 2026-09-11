@@ -381,6 +381,12 @@ export class MemoryStore implements Store {
     return this.profiles.get(studentId)?.displayName ?? null;
   }
 
+  async countStudentSessions(studentId: string) {
+    let n = 0;
+    for (const s of this.sessions.values()) if (s.meta.studentId === studentId) n += 1;
+    return n;
+  }
+
   async setTutorName(studentId: string, name: string | null) {
     const p = this.profiles.get(studentId);
     if (p) p.tutorName = name ?? undefined;

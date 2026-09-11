@@ -447,6 +447,14 @@ export class PostgresStore implements Store {
     return rows[0]?.displayName ?? null;
   }
 
+  async countStudentSessions(studentId: string) {
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId));
+    return Number(row?.n ?? 0);
+  }
+
   async setTutorName(studentId: string, name: string | null) {
     await this.db.update(schema.students).set({ tutorName: name }).where(eq(schema.students.id, studentId));
   }

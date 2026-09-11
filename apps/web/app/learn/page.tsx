@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
+import Face from "./Face";
+import { bondStage, moodFromText } from "./face-logic";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
@@ -35,51 +37,7 @@ interface Msg {
 }
 type Format = "plain" | "story" | "comic" | "song";
 
-/**
- * Avatar v1: the face on the other side of the screen. Blinks while idle,
- * mouth moves while speaking, eyes drift up while thinking, widen while
- * listening to the student's voice. One face, four honest states.
- */
-function Avatar({ color = "#e8875a", accent = "#8a4b2d", speaking, thinking = false, listening = false, size = 72 }: {
-  color?: string;
-  accent?: string;
-  speaking: boolean;
-  thinking?: boolean;
-  listening?: boolean;
-  size?: number;
-}) {
-  const eyeR = listening ? 5.6 : 4.5;
-  const pupilY = thinking && !speaking ? 43.5 : 46;
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden>
-      <circle cx="50" cy="52" r="40" fill={color} />
-      <circle cx="50" cy="30" r="26" fill={accent} opacity="0.25" />
-      <g className="avatar-eyes">
-        <circle cx="38" cy={pupilY} r={eyeR} fill="#1a1a2e" />
-        <circle cx="62" cy={pupilY} r={eyeR} fill="#1a1a2e" />
-        <circle cx="39.5" cy={pupilY - 1.5} r="1.4" fill="#fff" />
-        <circle cx="63.5" cy={pupilY - 1.5} r="1.4" fill="#fff" />
-      </g>
-      {listening && (
-        <>
-          <path d="M 31 37 Q 38 33 45 37" stroke="#1a1a2e" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
-          <path d="M 55 37 Q 62 33 69 37" stroke="#1a1a2e" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
-        </>
-      )}
-      {speaking ? (
-        <ellipse className="avatar-mouth-talking" cx="50" cy="66" rx="9" ry="6" fill="#1a1a2e" />
-      ) : thinking ? (
-        <ellipse className="avatar-mouth-hmm" cx="50" cy="66" rx="4.5" ry="3" fill="#1a1a2e" />
-      ) : listening ? (
-        <path d="M 42 65 Q 50 70 58 65" stroke="#1a1a2e" strokeWidth="3" fill="none" strokeLinecap="round" />
-      ) : (
-        <path d="M 41 64 Q 50 72 59 64" stroke="#1a1a2e" strokeWidth="3" fill="none" strokeLinecap="round" />
-      )}
-      <circle cx="30" cy="58" r="4" fill="#fff" opacity="0.35" />
-      <circle cx="70" cy="58" r="4" fill="#fff" opacity="0.35" />
-    </svg>
-  );
-}
+// The living persona lives in Face.tsx; its inner weather in face-logic.ts.
 
 export default function Home() {
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -95,6 +53,7 @@ export default function Home() {
   const [tutorNameDraft, setTutorNameDraft] = useState("");
   const [tutorNameSaved, setTutorNameSaved] = useState(false);
   const [sessionTutorName, setSessionTutorName] = useState<string | null>(null);
+  const [bondSessions, setBondSessions] = useState(0);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -145,6 +104,28 @@ export default function Home() {
   const pendingSegment = useRef<Blob | null>(null);
 
   const persona = personas.find((p) => p.id === personaId);
+  const bondInfo = bondStage(bondSessions);
+  const bond = bondInfo.stage;
+  // The face's emotional weather follows the tutor's own last words.
+  const tutorMood = moodFromText([...messages].reverse().find((m) => m.role === "assistant")?.content ?? null);
+
+  // Real lipsync: an analyser rides on the playing voice so the mouth moves
+  // with the ACTUAL sound, not a canned loop.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  function getMouthLevel(): number {
+    const analyser = analyserRef.current;
+    const data = levelData.current;
+    if (!analyser || !data) return 0;
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const d = (data[i] - 128) / 128;
+      sum += d * d;
+    }
+    return Math.min(1, Math.sqrt(sum / data.length) * 4);
+  }
 
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
@@ -202,6 +183,25 @@ export default function Home() {
   function playAudio(src: Blob | string) {
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
+    // Feed the face: route this voice through an analyser so the mouth
+    // follows the real loudness. Any failure falls back to the natural wave.
+    try {
+      const AC = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AC) {
+        audioCtxRef.current ??= new AC();
+        void audioCtxRef.current.resume().catch(() => {});
+        const srcNode = audioCtxRef.current.createMediaElementSource(audio);
+        const analyser = audioCtxRef.current.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.4;
+        srcNode.connect(analyser);
+        analyser.connect(audioCtxRef.current.destination);
+        analyserRef.current = analyser;
+        levelData.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+      }
+    } catch {
+      analyserRef.current = null;
+    }
     currentAudio.current = audio;
     setSpeaking(true);
     speakingRef.current = true;
@@ -316,6 +316,7 @@ export default function Home() {
       const json = await res.json();
       setSessionId(json.sessionId);
       setSessionTutorName(json.persona?.name ?? null);
+      setBondSessions(json.bond?.sessions ?? 0);
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
@@ -707,7 +708,7 @@ export default function Home() {
       <main className="shell">
         <div className="card fadeUp">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <Avatar color={persona?.color} accent={persona?.accent} speaking={false} size={56} />
+            <Face personaId={persona?.id} color={persona?.color} accent={persona?.accent} speaking={false} mood="warm" bond={bond} live={false} size={56} />
             <h2 style={{ margin: 0 }}>Session recap from {sessionTutorName ?? persona?.name}</h2>
           </div>
           <p style={{ whiteSpace: "pre-wrap" }}>{recap}</p>
@@ -764,7 +765,7 @@ export default function Home() {
             {personas.map((p) => (
               <button key={p.id} onClick={() => setPersonaId(p.id)}
                 className={`pill${personaId === p.id ? " on" : ""}`}>
-                <Avatar color={p.color} accent={p.accent} speaking={false} size={40} />
+                <Face personaId={p.id} color={p.color} accent={p.accent} speaking={false} live={false} size={40} />
                 <span><b>{p.name}</b><br /><small>{p.style}</small></span>
               </button>
             ))}
@@ -869,17 +870,27 @@ export default function Home() {
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className={`avatar-live${convo === "hearing" ? " avatar-hearing" : ""}`}>
-            <Avatar
+            <Face
+              personaId={persona?.id}
               color={persona?.color}
               accent={persona?.accent}
               speaking={speaking}
               thinking={busy && !speaking}
               listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
-              size={84}
+              attentive={input.trim().length > 0}
+              mood={tutorMood}
+              bond={bond}
+              getLevel={getMouthLevel}
+              size={96}
             />
           </span>
           <div>
-            <h2>{sessionTutorName ?? persona?.name}</h2>
+            <h2>
+              {sessionTutorName ?? persona?.name}{" "}
+              <small style={{ fontWeight: 500, fontSize: 12, color: "var(--text-dim)" }} title="Your friendship grows with every session">
+                · {bondInfo.label}
+              </small>
+            </h2>
             <div className="status">
               {lessonTitle ? `Lesson: ${lessonTitle} · ` : ""}
               {speaking

@@ -276,6 +276,10 @@ export interface Store {
   getUserPlan(userId: string): Promise<string>;
   setUserPlan(email: string, plan: string): Promise<boolean>;
 
+  /** How many sessions this student has ever had — the bond the tutor and
+   *  student have built, which the living persona wears visibly. */
+  countStudentSessions(studentId: string): Promise<number>;
+
   // ---- Name your tutor ----
 
   /** The student's own name for their tutor; null clears back to default. */

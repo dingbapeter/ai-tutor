@@ -1193,6 +1193,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return {
         sessionId,
         persona: { id: persona.id, name: tutorDisplayName },
+        // The friendship so far: how many sessions these two have had.
+        // The living persona wears it (a new friend looks newer than an
+        // old one), and it only ever grows.
+        bond: { sessions: await store.countStudentSessions(studentIdResolved) },
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
