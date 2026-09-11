@@ -211,10 +211,16 @@ export function buildSystemPrompt(opts: {
   warmupSkills?: string[];
   routine?: RoutineForPrompt | null;
   language?: string;
+  /** The student's own name for this tutor. The persona keeps its soul; the name is theirs. */
+  tutorName?: string | null;
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
+  const renamed =
+    opts.tutorName && opts.tutorName !== persona.name
+      ? `\n${studentName} gave you your name themselves: you are called ${opts.tutorName}. Always introduce yourself and refer to yourself as ${opts.tutorName}; never use the name ${persona.name}. If asked, you're still honest that you are an AI tutor.`
+      : ``;
   return [
-    persona.systemStyle,
+    persona.systemStyle + renamed,
     ``,
     `You are ${studentName}'s personal tutor for "${pack.title}". This is a live one-on-one session.`,
     ``,

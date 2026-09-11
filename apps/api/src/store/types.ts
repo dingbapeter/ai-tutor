@@ -276,6 +276,12 @@ export interface Store {
   getUserPlan(userId: string): Promise<string>;
   setUserPlan(email: string, plan: string): Promise<boolean>;
 
+  // ---- Name your tutor ----
+
+  /** The student's own name for their tutor; null clears back to default. */
+  setTutorName(studentId: string, name: string | null): Promise<void>;
+  getTutorName(studentId: string): Promise<string | null>;
+
   // ---- Referral loop ----
 
   /** My shareable code; minted on first ask, stable afterwards. */

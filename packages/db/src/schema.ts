@@ -199,6 +199,8 @@ export const students = pgTable("students", {
   locale: text("locale").notNull().default("en"),
   /** Chosen tutor persona (see config/personas.json). Persistent — same tutor every session. */
   personaId: text("persona_id").notNull().default("amara"),
+  /** The student's own name for their tutor. Null = the persona's default. */
+  tutorName: text("tutor_name"),
   /** Set when the student belongs to a school/org roster. */
   orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

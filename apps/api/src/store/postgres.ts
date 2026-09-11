@@ -411,12 +411,14 @@ export class PostgresStore implements Store {
   }
 
   async listStudentProfiles(userId: string) {
-    const own = await this.db
-      .select({ id: schema.students.id, displayName: schema.students.displayName })
-      .from(schema.students)
-      .where(eq(schema.students.userId, userId));
+    const cols = {
+      id: schema.students.id,
+      displayName: schema.students.displayName,
+      tutorName: schema.students.tutorName,
+    };
+    const own = await this.db.select(cols).from(schema.students).where(eq(schema.students.userId, userId));
     const children = await this.db
-      .select({ id: schema.students.id, displayName: schema.students.displayName })
+      .select(cols)
       .from(schema.students)
       .where(eq(schema.students.parentUserId, userId));
     return [...own, ...children];
@@ -443,6 +445,19 @@ export class PostgresStore implements Store {
       .where(eq(schema.students.id, studentId))
       .limit(1);
     return rows[0]?.displayName ?? null;
+  }
+
+  async setTutorName(studentId: string, name: string | null) {
+    await this.db.update(schema.students).set({ tutorName: name }).where(eq(schema.students.id, studentId));
+  }
+
+  async getTutorName(studentId: string) {
+    const rows = await this.db
+      .select({ tutorName: schema.students.tutorName })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.tutorName ?? null;
   }
 
   async recordIncident(incident: {

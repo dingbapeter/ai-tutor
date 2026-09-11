@@ -538,6 +538,12 @@ body[data-session="1"] .appbar { display: none; }
 /* The tutor is present: a slow breath while idle. */
 .avatar-live { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
+/* A small pondering wobble while the tutor thinks. */
+.avatar-mouth-hmm { animation: hmm 1.6s ease-in-out infinite; transform-origin: 50px 66px; }
+@keyframes hmm { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2.5px); } }
+/* Leaning in while the student is talking. */
+.avatar-hearing { animation: lean-in 1.2s ease-in-out infinite; }
+@keyframes lean-in { 0%, 100% { transform: scale(1.02); } 50% { transform: scale(1.06); } }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

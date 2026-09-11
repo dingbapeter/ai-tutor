@@ -48,7 +48,7 @@ export class MemoryStore implements Store {
     { userId: string; provider: string; customerRef: string; subscriptionRef: string; plan: string; status: "active" | "canceled"; updatedAt: Date }
   >();
   private sessionMessages = new Map<string, Array<{ role: string; content: string; createdAt: Date }>>();
-  private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string }>();
+  private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string; tutorName?: string }>();
 
   async ensureStudent(name: string, parentEmail?: string) {
     // Scope identity by parent email so two families' "Ada"s never collide.
@@ -370,7 +370,7 @@ export class MemoryStore implements Store {
   async listStudentProfiles(userId: string) {
     return [...this.profiles.values()]
       .filter((p) => p.ownerUserId === userId)
-      .map((p) => ({ id: p.id, displayName: p.displayName }));
+      .map((p) => ({ id: p.id, displayName: p.displayName, tutorName: p.tutorName ?? null }));
   }
 
   async ownsStudent(userId: string, studentId: string) {
@@ -379,6 +379,15 @@ export class MemoryStore implements Store {
 
   async getStudentName(studentId: string) {
     return this.profiles.get(studentId)?.displayName ?? null;
+  }
+
+  async setTutorName(studentId: string, name: string | null) {
+    const p = this.profiles.get(studentId);
+    if (p) p.tutorName = name ?? undefined;
+  }
+
+  async getTutorName(studentId: string) {
+    return this.profiles.get(studentId)?.tutorName ?? null;
   }
 
   private incidents: Array<{

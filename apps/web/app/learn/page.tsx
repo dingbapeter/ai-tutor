@@ -35,25 +35,43 @@ interface Msg {
 }
 type Format = "plain" | "story" | "comic" | "song";
 
-/** Avatar v0: stylized SVG face — blinks when idle, mouth moves while speaking. */
-function Avatar({ color = "#e8875a", accent = "#8a4b2d", speaking, size = 72 }: {
+/**
+ * Avatar v1: the face on the other side of the screen. Blinks while idle,
+ * mouth moves while speaking, eyes drift up while thinking, widen while
+ * listening to the student's voice. One face, four honest states.
+ */
+function Avatar({ color = "#e8875a", accent = "#8a4b2d", speaking, thinking = false, listening = false, size = 72 }: {
   color?: string;
   accent?: string;
   speaking: boolean;
+  thinking?: boolean;
+  listening?: boolean;
   size?: number;
 }) {
+  const eyeR = listening ? 5.6 : 4.5;
+  const pupilY = thinking && !speaking ? 43.5 : 46;
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden>
       <circle cx="50" cy="52" r="40" fill={color} />
       <circle cx="50" cy="30" r="26" fill={accent} opacity="0.25" />
       <g className="avatar-eyes">
-        <circle cx="38" cy="46" r="4.5" fill="#1a1a2e" />
-        <circle cx="62" cy="46" r="4.5" fill="#1a1a2e" />
-        <circle cx="39.5" cy="44.5" r="1.4" fill="#fff" />
-        <circle cx="63.5" cy="44.5" r="1.4" fill="#fff" />
+        <circle cx="38" cy={pupilY} r={eyeR} fill="#1a1a2e" />
+        <circle cx="62" cy={pupilY} r={eyeR} fill="#1a1a2e" />
+        <circle cx="39.5" cy={pupilY - 1.5} r="1.4" fill="#fff" />
+        <circle cx="63.5" cy={pupilY - 1.5} r="1.4" fill="#fff" />
       </g>
+      {listening && (
+        <>
+          <path d="M 31 37 Q 38 33 45 37" stroke="#1a1a2e" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
+          <path d="M 55 37 Q 62 33 69 37" stroke="#1a1a2e" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5" />
+        </>
+      )}
       {speaking ? (
         <ellipse className="avatar-mouth-talking" cx="50" cy="66" rx="9" ry="6" fill="#1a1a2e" />
+      ) : thinking ? (
+        <ellipse className="avatar-mouth-hmm" cx="50" cy="66" rx="4.5" ry="3" fill="#1a1a2e" />
+      ) : listening ? (
+        <path d="M 42 65 Q 50 70 58 65" stroke="#1a1a2e" strokeWidth="3" fill="none" strokeLinecap="round" />
       ) : (
         <path d="M 41 64 Q 50 72 59 64" stroke="#1a1a2e" strokeWidth="3" fill="none" strokeLinecap="round" />
       )}
@@ -73,7 +91,10 @@ export default function Home() {
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [family, setFamily] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [family, setFamily] = useState<Array<{ id: string; displayName: string; tutorName?: string | null }>>([]);
+  const [tutorNameDraft, setTutorNameDraft] = useState("");
+  const [tutorNameSaved, setTutorNameSaved] = useState(false);
+  const [sessionTutorName, setSessionTutorName] = useState<string | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -256,6 +277,25 @@ export default function Home() {
     }
   }
 
+  async function saveTutorName() {
+    if (!token || !studentId) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/tutor-name`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: tutorNameDraft }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = (await res.json()) as { tutorName: string | null };
+      setFamily((f) => f.map((s) => (s.id === studentId ? { ...s, tutorName: json.tutorName } : s)));
+      setTutorNameDraft(json.tutorName ?? "");
+      setTutorNameSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save the name");
+    }
+  }
+
   async function startSession() {
     setError(null);
     try {
@@ -275,6 +315,7 @@ export default function Home() {
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
       setSessionId(json.sessionId);
+      setSessionTutorName(json.persona?.name ?? null);
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
@@ -667,7 +708,7 @@ export default function Home() {
         <div className="card fadeUp">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Avatar color={persona?.color} accent={persona?.accent} speaking={false} size={56} />
-            <h2 style={{ margin: 0 }}>Session recap from {persona?.name}</h2>
+            <h2 style={{ margin: 0 }}>Session recap from {sessionTutorName ?? persona?.name}</h2>
           </div>
           <p style={{ whiteSpace: "pre-wrap" }}>{recap}</p>
           <button className="btn big" onClick={() => { setRecap(null); setMessages([]); }}>
@@ -695,7 +736,7 @@ export default function Home() {
               <label className="lbl">Who&apos;s learning today?</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {family.map((s) => (
-                  <button key={s.id} onClick={() => setStudentId(s.id)}
+                  <button key={s.id} onClick={() => { setStudentId(s.id); setTutorNameDraft(s.tutorName ?? ""); setTutorNameSaved(false); }}
                     className={`pill${studentId === s.id ? " on" : ""}`}>
                     <b>{s.displayName}</b>
                   </button>
@@ -728,6 +769,27 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          {token && studentId && personaId && (
+            <>
+              <label className="lbl">
+                Give your tutor their own name <small>(optional, they keep their personality)</small>
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={tutorNameDraft}
+                  onChange={(e) => { setTutorNameDraft(e.target.value); setTutorNameSaved(false); }}
+                  className="inp"
+                  style={{ flex: 1 }}
+                  placeholder={persona?.name ?? "Their name"}
+                  maxLength={30}
+                />
+                <button className="btn small" onClick={saveTutorName} disabled={tutorNameSaved}>
+                  {tutorNameSaved ? "Saved" : "Save name"}
+                </button>
+              </div>
+            </>
+          )}
 
           <label className="lbl">What are we working on?</label>
           <div className="grid2">
@@ -806,11 +868,18 @@ export default function Home() {
     <main className="session">
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span className="avatar-live">
-            <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} size={52} />
+          <span className={`avatar-live${convo === "hearing" ? " avatar-hearing" : ""}`}>
+            <Avatar
+              color={persona?.color}
+              accent={persona?.accent}
+              speaking={speaking}
+              thinking={busy && !speaking}
+              listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
+              size={84}
+            />
           </span>
           <div>
-            <h2>{persona?.name}</h2>
+            <h2>{sessionTutorName ?? persona?.name}</h2>
             <div className="status">
               {lessonTitle ? `Lesson: ${lessonTitle} · ` : ""}
               {speaking

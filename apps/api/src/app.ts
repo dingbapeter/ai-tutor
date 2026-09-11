@@ -554,6 +554,47 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * Name your tutor. The persona keeps its voice and teaching soul; the
+   * name belongs to the student. An empty name goes back to the default.
+   */
+  app.put<{ Params: { id: string }; Body: { name: string } }>(
+    "/students/:id/tutor-name",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: { name: { type: "string", maxLength: 40 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      const raw = req.body.name.trim().replace(/\s+/g, " ");
+      if (!raw) {
+        await store.setTutorName(req.params.id, null);
+        return { tutorName: null };
+      }
+      if (!/^[\p{L}\p{N} .'-]{2,30}$/u.test(raw)) {
+        return reply.code(400).send({ error: "a tutor name is 2 to 30 letters, numbers, spaces or . ' -" });
+      }
+      // The same safety desk that reads messages reads the name: a slur or
+      // contact bait can't become the word a child hears all session.
+      const verdict = await gateway.moderation.moderate(raw, "student");
+      if (verdict.flagged) {
+        return reply.code(400).send({ error: "that name can't be used here, pick another" });
+      }
+      await store.setTutorName(req.params.id, raw);
+      return { tutorName: raw };
+    },
+  );
+
   /** Parent dashboard: per student — recent sessions with recaps + mastery. */
   app.get("/dashboard", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -825,12 +866,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return undefined; // a pack retired since the session started
     }
     const studentName = (await store.getStudentName(meta.studentId)) ?? "Student";
-    const [memoryLines, learnerProfile, routine, due, messages] = await Promise.all([
+    const [memoryLines, learnerProfile, routine, due, messages, tutorName] = await Promise.all([
       store.getMemories(meta.studentId),
       store.getProfile(meta.studentId),
       store.getRoutine(meta.studentId),
       store.getDueSkills(meta.studentId, 10),
       store.listSessionMessages(sessionId),
+      store.getTutorName(meta.studentId),
     ]);
     const warmupSkills = due
       .map((d) => pack.skills.find((sk) => sk.id === d.skillId)?.title)
@@ -853,7 +895,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       history: [
         {
           role: "system",
-          content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language: meta.language }),
+          content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language: meta.language, tutorName }),
         },
         ...messages,
       ],
@@ -1069,6 +1111,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const memoryLines = await store.getMemories(studentIdResolved);
       const learnerProfile = await store.getProfile(studentIdResolved);
       const routine = await store.getRoutine(studentIdResolved);
+      // The student's own name for this tutor, if they gave one.
+      const tutorName = await store.getTutorName(studentIdResolved);
+      const tutorDisplayName = tutorName ?? persona.name;
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
@@ -1098,7 +1143,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           {
             role: "system",
             content:
-              buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills: lesson ? [] : warmupSkills, routine, language }) +
+              buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills: lesson ? [] : warmupSkills, routine, language, tutorName }) +
               (lesson?.briefText ?? ""),
           },
         ],
@@ -1138,7 +1183,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           ? `Hi ${studentName}, good to see you. Today we're getting comfortable with ${lesson.title.toLowerCase()}. Let's ease in.`
           : memoryLines.length
             ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
-            : `Hi ${studentName}, I'm ${persona.name}. Glad you're here. What would you like to start with today?`;
+            : `Hi ${studentName}, I'm ${tutorDisplayName}. Glad you're here. What would you like to start with today?`;
       }
       greeting = greeting.trim();
       session.history.push({ role: "assistant", content: greeting });
@@ -1147,7 +1192,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
       return {
         sessionId,
-        persona: { id: persona.id, name: persona.name },
+        persona: { id: persona.id, name: tutorDisplayName },
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
