@@ -387,6 +387,15 @@ export class MemoryStore implements Store {
     return n;
   }
 
+  async firstSessionAt(studentId: string) {
+    let earliest: Date | null = null;
+    for (const s of this.sessions.values()) {
+      if (s.meta.studentId !== studentId) continue;
+      if (!earliest || s.startedAt < earliest) earliest = s.startedAt;
+    }
+    return earliest;
+  }
+
   async setTutorName(studentId: string, name: string | null) {
     const p = this.profiles.get(studentId);
     if (p) p.tutorName = name ?? undefined;

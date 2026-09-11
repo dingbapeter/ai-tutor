@@ -87,6 +87,7 @@ export default function Face({
   attentive = false,
   mood = "neutral",
   bond = 0,
+  maturity = 0,
   getLevel,
   size = 84,
   live = true,
@@ -102,6 +103,8 @@ export default function Face({
   mood?: Mood;
   /** Bond stage 0..3 — the friendship the character visibly wears. */
   bond?: number;
+  /** 0..1 how grown-up the tutor looks — grows with the friendship's age. */
+  maturity?: number;
   /** Live loudness of the tutor's voice, 0..1. Falls back to a natural wave. */
   getLevel?: () => number;
   size?: number;
@@ -110,6 +113,15 @@ export default function Face({
 }) {
   const rig = rigFor(personaId, accent);
   const iris = color ?? "#5b4632";
+  // Aging: a young face is rounder with bigger eyes set lower and a smaller
+  // nose; growing up lengthens the face, lifts and shrinks the eyes a touch,
+  // and defines the nose. Subtle on purpose — a companion maturing, not a
+  // different character.
+  const m = Math.max(0, Math.min(1, maturity));
+  const headRy = 40 + m * 4;
+  const eyeScale = 1 - m * 0.14;
+  const eyeY = 47 - m * 1.5;
+  const noseLen = 60 + m * 3;
 
   const [f, setF] = useState({ open: 0, curve: 0.3, brow: 0, gazeX: 0, gazeY: 0, lid: 0 });
   const anim = useRef({ open: 0, curve: 0.3, brow: 0, gazeX: 0, gazeY: 0, lid: 0 });
@@ -192,7 +204,7 @@ export default function Face({
       {/* ears, head, hair */}
       <circle cx="14" cy="52" r="6" fill={rig.skin} />
       <circle cx="86" cy="52" r="6" fill={rig.skin} />
-      <ellipse cx="50" cy="52" rx="38" ry="40" fill={rig.skin} />
+      <ellipse cx="50" cy="52" rx="38" ry={headRy} fill={rig.skin} />
       <Hair rig={rig} />
       {rig.beard && <path d="M 22 58 Q 26 84 50 86 Q 74 84 78 58 Q 74 76 50 78 Q 26 76 22 58 Z" fill={rig.hair} opacity="0.9" />}
       {/* brows */}
@@ -200,21 +212,21 @@ export default function Face({
       <path d={`M 55 ${browY + (v.brow < 0 ? 0 : -0.5)} Q 63 ${browY - 2.5} 71 ${browY + browTilt}`} stroke={rig.hair} strokeWidth="3" fill="none" strokeLinecap="round" />
       {/* eyes: whites, iris follows the gaze, lids blink */}
       <g>
-        <ellipse cx="37" cy="47" rx="7.5" ry={6 * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
-        <ellipse cx="63" cy="47" rx="7.5" ry={6 * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
+        <ellipse cx="37" cy={eyeY} rx={7.5 * eyeScale} ry={6 * eyeScale * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
+        <ellipse cx="63" cy={eyeY} rx={7.5 * eyeScale} ry={6 * eyeScale * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
         {eyeOpen > 0.25 && (
           <>
-            <circle cx={37 + v.gazeX} cy={47 + v.gazeY} r={listening ? 4 : 3.4} fill={iris} />
-            <circle cx={63 + v.gazeX} cy={47 + v.gazeY} r={listening ? 4 : 3.4} fill={iris} />
-            <circle cx={37 + v.gazeX} cy={47 + v.gazeY} r="1.7" fill="#1a1a2e" />
-            <circle cx={63 + v.gazeX} cy={47 + v.gazeY} r="1.7" fill="#1a1a2e" />
-            <circle cx={38.2 + v.gazeX} cy={45.8 + v.gazeY} r="0.9" fill="#fff" />
-            <circle cx={64.2 + v.gazeX} cy={45.8 + v.gazeY} r="0.9" fill="#fff" />
+            <circle cx={37 + v.gazeX} cy={eyeY + v.gazeY} r={(listening ? 4 : 3.4) * eyeScale} fill={iris} />
+            <circle cx={63 + v.gazeX} cy={eyeY + v.gazeY} r={(listening ? 4 : 3.4) * eyeScale} fill={iris} />
+            <circle cx={37 + v.gazeX} cy={eyeY + v.gazeY} r={1.7 * eyeScale} fill="#1a1a2e" />
+            <circle cx={63 + v.gazeX} cy={eyeY + v.gazeY} r={1.7 * eyeScale} fill="#1a1a2e" />
+            <circle cx={38.2 + v.gazeX} cy={eyeY - 1.2 + v.gazeY} r={0.9 * eyeScale} fill="#fff" />
+            <circle cx={64.2 + v.gazeX} cy={eyeY - 1.2 + v.gazeY} r={0.9 * eyeScale} fill="#fff" />
           </>
         )}
       </g>
-      {/* nose */}
-      <path d="M 50 52 Q 47.5 58 50 60.5 Q 52.5 58 50 52" fill={rig.skinShade} opacity="0.7" />
+      {/* nose — lengthens and defines with age */}
+      <path d={`M 50 52 Q 47.5 ${noseLen - 2} 50 ${noseLen} Q 52.5 ${noseLen - 2} 50 52`} fill={rig.skinShade} opacity="0.7" />
       {/* blush when joyful */}
       {v.curve > 0.7 && (
         <>

@@ -455,6 +455,14 @@ export class PostgresStore implements Store {
     return Number(row?.n ?? 0);
   }
 
+  async firstSessionAt(studentId: string) {
+    const [row] = await this.db
+      .select({ first: sql<Date | null>`min(${schema.sessions.startedAt})` })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId));
+    return row?.first ? new Date(row.first) : null;
+  }
+
   async setTutorName(studentId: string, name: string | null) {
     await this.db.update(schema.students).set({ tutorName: name }).where(eq(schema.students.id, studentId));
   }

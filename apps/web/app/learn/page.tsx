@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
 import Face from "./Face";
-import { bondStage, moodFromText } from "./face-logic";
+import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
@@ -54,6 +54,7 @@ export default function Home() {
   const [tutorNameSaved, setTutorNameSaved] = useState(false);
   const [sessionTutorName, setSessionTutorName] = useState<string | null>(null);
   const [bondSessions, setBondSessions] = useState(0);
+  const [bondDays, setBondDays] = useState(0);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -94,6 +95,7 @@ export default function Home() {
   const bottom = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const voiceEnergy = useRef<number[]>([]);
   const photoInput = useRef<HTMLInputElement>(null);
   const convoLoop = useRef<ConversationLoop | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
@@ -106,6 +108,7 @@ export default function Home() {
   const persona = personas.find((p) => p.id === personaId);
   const bondInfo = bondStage(bondSessions);
   const bond = bondInfo.stage;
+  const maturity = maturityFromDays(bondDays);
   // The face's emotional weather follows the tutor's own last words.
   const tutorMood = moodFromText([...messages].reverse().find((m) => m.role === "assistant")?.content ?? null);
 
@@ -317,6 +320,7 @@ export default function Home() {
       setSessionId(json.sessionId);
       setSessionTutorName(json.persona?.name ?? null);
       setBondSessions(json.bond?.sessions ?? 0);
+      setBondDays(json.bond?.days ?? 0);
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
@@ -564,12 +568,43 @@ export default function Home() {
       );
       const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunks.current = [];
+      // Listen to HOW they sound while they speak: sample their voice loudness
+      // ~10x a second so we can tell a flat, tired voice from a lively one.
+      voiceEnergy.current = [];
+      let toneCtx: AudioContext | null = null;
+      let toneTimer: ReturnType<typeof setInterval> | null = null;
+      try {
+        const AC = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) {
+          toneCtx = new AC();
+          const srcNode = toneCtx.createMediaStreamSource(stream);
+          const analyser = toneCtx.createAnalyser();
+          analyser.fftSize = 256;
+          srcNode.connect(analyser);
+          const buf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+          toneTimer = setInterval(() => {
+            analyser.getByteTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) {
+              const d = (buf[i] - 128) / 128;
+              sum += d * d;
+            }
+            voiceEnergy.current.push(Math.sqrt(sum / buf.length));
+            if (voiceEnergy.current.length > 400) voiceEnergy.current.shift();
+          }, 100);
+        }
+      } catch {
+        toneCtx = null;
+      }
+      chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
       rec.onstop = async () => {
+        if (toneTimer) clearInterval(toneTimer);
+        void toneCtx?.close().catch(() => {});
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
         if (blob.size < 1000) return; // accidental tap
-        await sendVoice(blob);
+        await sendVoice(blob, voiceToneFromEnergy(voiceEnergy.current));
       };
       recorder.current = rec;
       rec.start();
@@ -584,7 +619,7 @@ export default function Home() {
     setRecording(false);
   }
 
-  async function sendVoice(blob: Blob) {
+  async function sendVoice(blob: Blob, tone: "low" | "bright" | "neutral" = "neutral") {
     if (!sessionId) return;
     setBusy(true);
     busyRef.current = true;
@@ -592,7 +627,11 @@ export default function Home() {
     try {
       const res = await fetch(`${API}/sessions/${sessionId}/voice`, {
         method: "POST",
-        headers: { "content-type": blob.type || "audio/webm" },
+        headers: {
+          "content-type": blob.type || "audio/webm",
+          // How they sounded, so the tutor can notice the person (never shown).
+          ...(tone !== "neutral" ? { "x-voice-tone": tone } : {}),
+        },
         body: blob,
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `voice failed (${res.status})`);
@@ -880,6 +919,7 @@ export default function Home() {
               attentive={input.trim().length > 0}
               mood={tutorMood}
               bond={bond}
+              maturity={maturity}
               getLevel={getMouthLevel}
               size={96}
             />

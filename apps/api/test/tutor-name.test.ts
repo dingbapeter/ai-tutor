@@ -83,8 +83,8 @@ describe("name your tutor (sprint 40)", () => {
     });
     expect(session.statusCode).toBe(200);
     expect(session.json().persona).toEqual({ id: "amara", name: "Sparkle Sun" });
-    // The living persona wears the friendship: this is their first session.
-    expect(session.json().bond).toEqual({ sessions: 1 });
+    // The living persona wears the friendship: their first session, day zero.
+    expect(session.json().bond).toEqual({ sessions: 1, days: 0 });
 
     // Empty name clears back to the persona default.
     const clear = await app.inject({

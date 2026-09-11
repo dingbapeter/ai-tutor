@@ -279,6 +279,9 @@ export interface Store {
   /** How many sessions this student has ever had — the bond the tutor and
    *  student have built, which the living persona wears visibly. */
   countStudentSessions(studentId: string): Promise<number>;
+  /** When this friendship began (the earliest session), or null if none
+   *  yet. Drives the tutor aging alongside the child over real time. */
+  firstSessionAt(studentId: string): Promise<Date | null>;
 
   // ---- Name your tutor ----
 

@@ -1131,6 +1131,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         apiKeyId,
       });
 
+      // The friendship so far, counted AFTER this session exists: sessions
+      // had (the bond stage) and days since it began (how grown-up the
+      // tutor looks). A brand new pair reads 1 session, 0 days.
+      const bondSessions = await store.countStudentSessions(studentIdResolved);
+      const firstAt = await store.firstSessionAt(studentIdResolved);
+      const bondDays = firstAt ? Math.max(0, Math.floor((Date.now() - firstAt.getTime()) / 86_400_000)) : 0;
+
       live.set(sessionId, {
         id: sessionId,
         studentId: studentIdResolved,
@@ -1193,10 +1200,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return {
         sessionId,
         persona: { id: persona.id, name: tutorDisplayName },
-        // The friendship so far: how many sessions these two have had.
-        // The living persona wears it (a new friend looks newer than an
-        // old one), and it only ever grows.
-        bond: { sessions: await store.countStudentSessions(studentIdResolved) },
+        // The friendship so far: sessions had (the bond stage) and days
+        // together (how grown-up the tutor looks). Both only ever grow.
+        bond: { sessions: bondSessions, days: bondDays },
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
@@ -1472,8 +1478,26 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           session.history.push({ role: "user", content: transcript });
           await store.saveMessage(session.id, "user", transcript);
 
+          // How they SOUND, not just what they said. The client reads the
+          // student's own voice while they speak and passes a tone; a low,
+          // flat voice earns the tutor a private nudge to notice the person
+          // (rule 8), even when the words themselves seem fine. The note is
+          // ephemeral (not saved to the transcript) and never shown.
+          const tone = req.headers["x-voice-tone"];
+          const toneHistory =
+            tone === "low"
+              ? [
+                  ...session.history,
+                  {
+                    role: "system" as const,
+                    content:
+                      "[Private note, not from the student: their voice just now sounded quiet and flat. Gently check how they're doing as a person before carrying on, in your own voice. Do not mention their tone of voice or this note.]",
+                  },
+                ]
+              : session.history;
+
           replyText = "";
-          for await (const delta of chatFor(session).chat(session.history, {
+          for await (const delta of chatFor(session).chat(toneHistory, {
             signal: AbortSignal.timeout(120_000),
           }))
             replyText += delta;
