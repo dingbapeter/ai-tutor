@@ -80,7 +80,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Parent email (mailcow SMTP) | ⚠️ code-complete; needs a live SMTP run at deploy |
 | Whisper STT / Kokoro TTS against real engines | ⚠️ protocol-tested; live run happens on Contabo at deploy |
 | Push-to-talk voice turn (audio→STT→reply→TTS, one round trip) | ✅ tested + live-verified vs real LLM |
-| Voice-note playback, avatar v0 (blink/talk states), practice UI, format chips | ✅ built; web build verified |
+| Voice-note playback, practice UI, format chips | ✅ built; web build verified |
 | Learning formats (story/comic/song) endpoint | ✅ tested (model compliance depends on deploy model size) |
 | Auth: register/login (bcrypt + hashed tokens), family profiles, ownership | ✅ tested + live-verified on Postgres |
 | Guest→account upgrade (claiming a parent email adopts guest-era students) | ✅ live-verified |
@@ -142,6 +142,18 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Pedagogy eval harness (`pnpm evals`): scripted learner scenarios judged deterministically, split honestly into plumbing judges (fail the run on any provider) and model judges (reported on mock, binding on the real stack or --strict). Covers socratic restraint under pressure, wrong-answer care, the house voice, language discipline, the safety redirect down to the transcript record, greeting, length discipline | ✅ 6/6 plumbing judges pass on mock; point AI_CHAT_PROVIDER at the deployed stack for the verdicts that matter |
 | Safety fallback hardened against evasion: the rules moderator now matches across normalized views (zero-width strip, NFKC full-width folding, leetspeak, stretched letters, spaced-out letters), additive so plain matching can never get weaker; two real gaps the red-team suite found are fixed (stacked jailbreak qualifiers, consecutive leet characters); its honest limit (no paraphrase understanding) is a pinned test, which is exactly why production runs the classifier on top | ✅ 8 adversarial cases green, ordinary schoolwork asserted unflagged |
 | Full-platform stub sweep: zero TODOs, dead links, toasts or console noise confirmed by grep across every shipping surface; the one real hole found and fixed was the mock exam, which would let a learner sit a timed test on a rubric-only pack and score zero regardless of their answers, poisoning mastery with false failures. Scored surfaces (level check, mock exam) now only exist where a machine can actually grade, the client shows no doors that could only refuse, answered-but-unverifiable exam questions are unscored rather than wrong, and stale copy and the example.com VAPID fallback are gone | ✅ tested (rubric packs refuse with honest wording, examinable flag pinned) + live-verified in a browser: math keeps its scored doors, visa prep shows none |
+| Request queue in front of the AI brain: one bounded line shared by every llama.cpp-backed capability (concurrency matched to the model server's slots), honest 503 + Retry-After when full, SSE busy payload, queue stats in Ops and Prometheus | ✅ tested (7 queue tests) + proven under a 30-client blast: 6 served, 24 honest refusals, zero hangs |
+| Model-judged mock exams for rubric subjects (essays, interviews): strict-JSON judge, UNSCORED rather than wrong when the model can't judge, examinable vs assessable doors split so no door ever only refuses | ✅ tested; visa-prep composure drills keep their authored time limits |
+| Conversation mode: hands-free voice that listens while it speaks, barge-in by talking over the tutor, a pure voice-activity state machine, echo-cancelled mic, newest-segment-wins while the tutor is busy | ✅ 8 FSM tests + live-verified with a fake microphone in a real browser |
+| School portal (/school) on the org API: rosters, per-student mastery with skill titles, one-click session start for a chosen learner | ✅ tested end to end |
+| Growth analytics in the Command Centre: activation funnel and 8 weekly retention cohorts, with unelapsed weeks shown as null so 0% and "too early" can never look the same; investors read it | ✅ tested with exact pinned cohort maths |
+| Zero-terminal switch-on: migrations apply themselves at boot with a ledger, secrets (admin key, VAPID) self-provision on Postgres and the master key shows to the owner in Ops, reminders and the Sunday digest run on an in-app clock with an atomic daily claim so two instances never double-send | ✅ tested + dress-rehearsed on a real Postgres 16 (fresh boot applies every migration, restart applies none) |
+| Brain-door password: an nginx gate is the only published entry to the self-hosted AI services; every request needs the shared key (401 otherwise), health stays open; every adapter presents the key | ✅ protocol-tested + the real nginx image attacked in docker (no key, wrong key, right key) |
+| Referral loop: shareable code per account, credit remembered until signup, both sides get Plus days only when the friend verifies their email, atomic one-shot payout, a time-boxed boost that can never override a paid plan; Growth tab shows referred signups and top inviters | ✅ tested incl. double-verification replay + real Postgres |
+| Name your tutor: a per-learner name for their chosen persona, validated and run through the safety desk, honoured in the prompt, greeting, header and recap, while the tutor stays honest that it is an AI | ✅ tested + real Postgres |
+| The living persona: a vector character face with the mouth driven by the real voice loudness, human blinks and saccades, gaze that follows thinking/listening/typing, an emotion engine reading the tutor's own words, five distinct rigs, a bond that grows with sessions (pin, halo, cap), and a face that matures with the friendship's age; the student's voice TONE (quiet and flat) earns the tutor a private care nudge that never touches the transcript | ✅ pure logic tested (mood, bond, maturity, tone, viseme seam) + API tests with a capturing chat provider |
+| The tutor can look like anyone: 10 skin tones, 13 hair styles incl. coily, curls, locs, hijab and turban, 12 hair colours, chosen per learner with a live preview and validated server-side against a shared vocabulary | ✅ tested end to end + real Postgres |
+| Comp access for the team and testers: explicit, per-person, time-boxed grants tied to a monthly performance review; a missed review or a passed expiry drops the person back to their real plan automatically; owners only; full review trail kept | ✅ tested (lapse, renew, revoke, expiry, owner-only) + real Postgres |
 | WhatsApp nudges | ❌ later sprints |
 
 ## Roadmap
@@ -170,10 +182,22 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       signature-verified webhooks flipping plans, cancellation downgrades,
       upgrade buttons (needs live keys at deploy); email verification
       (password reset shipped earlier in the blind-spot sprint)
-- [ ] Sprint 6b remainder: study plans & scheduling, WhatsApp nudges
-      (spaced-repetition warm-ups shipped with the adaptive engine)
-- [ ] Phase 2: full-duplex live voice (LiveKit self-hosted), whiteboard, homework
-      camera, image generation for cartoon panels (IDEAS.md #001 full version)
+- [x] Sprints 7-30: Dingba identity, all-of-life verticals, the Dingba Brain
+      (learner profile), adaptive engine, homework camera, routine upload,
+      diagnostics, attunement + care call, the Command Centre (RBAC, safety
+      desk, controls, exports, HR, billing events), study plans, reminders,
+      guardian digest, lessons, resumable sessions, observability, load
+      testing, pedagogy evals, moderation hardening, stub sweep
+- [x] Sprints 31-36: 272-problem verified curriculum, the AI request queue,
+      model-judged rubric mocks, conversation-mode voice, the school portal,
+      growth analytics
+- [x] Sprints 37-45: zero-terminal switch-on, the brain-door password, the
+      referral loop, name-your-tutor, the living persona (voice-driven face,
+      emotion engine, growing bond, aging, voice-tone care), look-like-anyone
+      appearance, reviewed comp access
+- [ ] WhatsApp nudges; full-duplex live voice (LiveKit self-hosted); whiteboard;
+      image generation for cartoon panels (IDEAS.md #001 full version);
+      illustrated and, post-funding, photoreal persona art (docs/FUNDING-ASKS.md)
 
 Language coverage, licence verdicts, and the Nigerian-language voice plan:
 `docs/LANGUAGES.md`.
