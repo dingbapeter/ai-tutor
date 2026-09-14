@@ -164,6 +164,27 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   // instead of resetting at the server's midnight.
   const startOfToday = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+  // The team learns for free. Command Centre staff — the owners plus anyone
+  // they assign a role — get the unlimited comp plan automatically, so
+  // end-to-end testing runs on real accounts without burning an allowance.
+  // Owners are recognised by COMMAND_OWNER_EMAILS even before their first
+  // login writes a staff row. Owners can also hand the "unlimited" plan to
+  // any account from the Command Centre (People tab) for outside testers.
+  const ownerEmails = new Set(
+    (env.COMMAND_OWNER_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  async function effectivePlan(user: { userId: string; email: string }): Promise<string> {
+    if (PLANS.unlimited) {
+      if (ownerEmails.has(user.email.toLowerCase())) return "unlimited";
+      const staff = await store.getStaff(user.userId);
+      if (staff && staff.status === "active") return "unlimited";
+    }
+    return store.getUserPlan(user.userId);
+  }
+
   // Optional error reporting: any webhook-compatible sink (GlitchTip, Slack,
   // Discord). Fire-and-forget; absence of the env var disables it.
   app.addHook("onError", async (req, _reply, error) => {
@@ -542,7 +563,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     async (req, reply) => {
       const user = await userFromRequest(req, store);
       if (!user) return reply.code(401).send({ error: "sign in required" });
-      const plan = await store.getUserPlan(user.userId);
+      const plan = await effectivePlan(user);
       const existing = await store.listStudentProfiles(user.userId);
       if (existing.length >= limitsFor(plan).familySeats) {
         return reply.code(402).send({
@@ -1122,7 +1143,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // Recaps go to the parent account's inbox; adult learners get their own.
         parentEmail = user.email.endsWith("@students.local") ? undefined : user.email;
         ownerUserId = user.userId;
-        plan = await store.getUserPlan(user.userId);
+        plan = await effectivePlan(user);
       } else if (req.body.studentName) {
         if (!apiKeyId) {
           const day = new Date().toISOString().slice(0, 10);
@@ -2676,7 +2697,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
-    const plan = await store.getUserPlan(user.userId);
+    const plan = await effectivePlan(user);
     const limits = limitsFor(plan);
     return {
       plan,

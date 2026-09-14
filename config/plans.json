@@ -24,6 +24,15 @@
       "examMode": true,
       "premiumBrain": true,
       "classInvites": 4
+    },
+    "unlimited": {
+      "note": "Comp plan for the team and testers. Every feature on, allowances effectively infinite. Command Centre staff get this automatically; owners can also assign it to any account.",
+      "dailyMessages": 1000000000,
+      "dailyVoiceTurns": 1000000000,
+      "familySeats": 1000,
+      "examMode": true,
+      "premiumBrain": true,
+      "classInvites": 50
     }
   }
 }

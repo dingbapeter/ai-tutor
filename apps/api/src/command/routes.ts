@@ -257,7 +257,7 @@ export async function registerCommandCentre(
           type: "object",
           required: ["plan"],
           properties: {
-            plan: { type: "string", enum: ["free", "plus", "premium"] },
+            plan: { type: "string", enum: ["free", "plus", "premium", "unlimited"] },
             reason: { type: "string", maxLength: 280 },
           },
         },

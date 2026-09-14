@@ -968,7 +968,7 @@ function People({ call, me }: { call: Call; me: Me }) {
               <>
                 <label className="lbl">Move this account to a different plan</label>
                 <div className="cc-rowacts">
-                  {["free", "plus", "premium"].map((p) => (
+                  {["free", "plus", "premium", "unlimited"].map((p) => (
                     <button
                       key={p}
                       className={`btn small ${person.account.plan === p ? "" : "quiet"}`}
