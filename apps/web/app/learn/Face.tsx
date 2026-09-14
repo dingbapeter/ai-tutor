@@ -24,23 +24,38 @@ import { approach, expressionFor, type Mood } from "./face-logic";
 interface Rig {
   skin: string;
   skinShade: string;
+  /** soft highlight on the lit side of the face */
+  skinLight: string;
   hair: string;
   /** hairstyle key — which hair paths to draw */
   style: "puff" | "flattop" | "buns" | "bob" | "fade";
+  /** clothing colour on the shoulders, so each tutor reads as a person */
+  clothes: string;
+  clothesShade: string;
   beard?: boolean;
 }
 
 const RIGS: Record<string, Rig> = {
-  amara: { skin: "#a9683a", skinShade: "#8a4b2d", hair: "#2b1b12", style: "puff" },
-  kofi: { skin: "#7c4a26", skinShade: "#5f3517", hair: "#161210", style: "flattop", beard: true },
-  juno: { skin: "#c98e58", skinShade: "#a06b3c", hair: "#4a3e99", style: "buns" },
-  nia: { skin: "#94592f", skinShade: "#734120", hair: "#1d1a2e", style: "bob" },
-  obi: { skin: "#6d3f1f", skinShade: "#532c12", hair: "#141414", style: "fade" },
+  amara: { skin: "#b06f3e", skinShade: "#8a4b2d", skinLight: "#c98a56", hair: "#241611", style: "puff", clothes: "#e8875a", clothesShade: "#c96b41" },
+  kofi: { skin: "#824e28", skinShade: "#5f3517", skinLight: "#9c6538", hair: "#141010", style: "flattop", clothes: "#4a7d5f", clothesShade: "#356048", beard: true },
+  juno: { skin: "#cf9560", skinShade: "#a06b3c", skinLight: "#e0ac78", hair: "#4a3e99", style: "buns", clothes: "#7b6bd6", clothesShade: "#5a4bb0" },
+  nia: { skin: "#9c6033", skinShade: "#734120", skinLight: "#b47a45", hair: "#1d1a2e", style: "bob", clothes: "#3f6fb5", clothesShade: "#2c5490" },
+  obi: { skin: "#754321", skinShade: "#532c12", skinLight: "#8f5a30", hair: "#131313", style: "fade", clothes: "#c98a3c", clothesShade: "#a86f27" },
 };
 
 function rigFor(personaId: string | undefined, accent?: string): Rig {
   const known = personaId ? RIGS[personaId] : undefined;
-  return known ?? { skin: "#a9683a", skinShade: "#8a4b2d", hair: accent ?? "#2b1b12", style: "puff" };
+  return (
+    known ?? {
+      skin: "#b06f3e",
+      skinShade: "#8a4b2d",
+      skinLight: "#c98a56",
+      hair: accent ?? "#241611",
+      style: "puff",
+      clothes: accent ?? "#e8875a",
+      clothesShade: "#c96b41",
+    }
+  );
 }
 
 function Hair({ rig }: { rig: Rig }) {
@@ -199,12 +214,21 @@ export default function Face({
   const glow = bond >= 3 ? "#e8b34b" : bond >= 2 ? (color ?? "#e8875a") : null;
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden style={{ overflow: "visible" }}>
-      {glow && <circle cx="50" cy="52" r="46" fill="none" stroke={glow} strokeWidth={bond >= 3 ? 2.5 : 1.5} opacity="0.5" />}
+    <svg width={size} height={size} viewBox="0 0 100 106" aria-hidden style={{ overflow: "visible" }}>
+      {glow && <circle cx="50" cy="50" r="47" fill="none" stroke={glow} strokeWidth={bond >= 3 ? 2.5 : 1.5} opacity="0.5" />}
+      {/* shoulders + clothing, so it reads as a person, not a floating head */}
+      <path d="M 6 106 Q 10 82 30 76 L 70 76 Q 90 82 94 106 Z" fill={rig.clothes} />
+      <path d="M 6 106 Q 10 82 30 76 L 38 76 Q 24 84 20 106 Z" fill={rig.clothesShade} opacity="0.55" />
+      <path d="M 38 78 Q 50 88 62 78 L 62 74 L 38 74 Z" fill={rig.clothesShade} opacity="0.4" />
+      {/* neck */}
+      <path d="M 42 70 L 42 80 Q 50 84 58 80 L 58 70 Z" fill={rig.skinShade} />
       {/* ears, head, hair */}
       <circle cx="14" cy="52" r="6" fill={rig.skin} />
       <circle cx="86" cy="52" r="6" fill={rig.skin} />
       <ellipse cx="50" cy="52" rx="38" ry={headRy} fill={rig.skin} />
+      {/* soft studio light from the upper-left, and a shaded jaw on the right */}
+      <ellipse cx="38" cy="44" rx="20" ry={headRy * 0.55} fill={rig.skinLight} opacity="0.45" />
+      <path d="M 70 40 Q 88 52 80 74 Q 66 84 50 86 Q 72 74 70 40 Z" fill={rig.skinShade} opacity="0.3" />
       <Hair rig={rig} />
       {rig.beard && <path d="M 22 58 Q 26 84 50 86 Q 74 84 78 58 Q 74 76 50 78 Q 26 76 22 58 Z" fill={rig.hair} opacity="0.9" />}
       {/* brows */}
