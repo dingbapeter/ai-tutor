@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { approach, expressionFor, type Mood } from "./face-logic";
+import { HAIR_COLORS, SKIN_TONES } from "./face-appearance";
 
 /**
  * The living persona: a character face rendered as pure SVG, animated at
@@ -28,7 +29,7 @@ interface Rig {
   skinLight: string;
   hair: string;
   /** hairstyle key — which hair paths to draw */
-  style: "puff" | "flattop" | "buns" | "bob" | "fade";
+  style: string;
   /** clothing colour on the shoulders, so each tutor reads as a person */
   clothes: string;
   clothesShade: string;
@@ -59,34 +60,93 @@ function rigFor(personaId: string | undefined, accent?: string): Rig {
 }
 
 function Hair({ rig }: { rig: Rig }) {
+  const h = rig.hair;
   switch (rig.style) {
     case "flattop":
-      return <path d="M 22 34 L 22 22 Q 50 12 78 22 L 78 34 Q 50 24 22 34 Z" fill={rig.hair} />;
+      return <path d="M 22 34 L 22 22 Q 50 12 78 22 L 78 34 Q 50 24 22 34 Z" fill={h} />;
     case "buns":
       return (
         <>
-          <circle cx="22" cy="22" r="11" fill={rig.hair} />
-          <circle cx="78" cy="22" r="11" fill={rig.hair} />
-          <path d="M 20 38 Q 50 14 80 38 Q 50 28 20 38 Z" fill={rig.hair} />
+          <circle cx="22" cy="22" r="11" fill={h} />
+          <circle cx="78" cy="22" r="11" fill={h} />
+          <path d="M 20 38 Q 50 14 80 38 Q 50 28 20 38 Z" fill={h} />
         </>
       );
     case "bob":
       return (
         <>
-          <path d="M 18 62 Q 12 24 50 16 Q 88 24 82 62 L 74 60 Q 78 30 50 26 Q 22 30 26 60 Z" fill={rig.hair} />
-          <path d="M 20 40 Q 50 16 80 40 Q 50 30 20 40 Z" fill={rig.hair} />
+          <path d="M 18 62 Q 12 24 50 16 Q 88 24 82 62 L 74 60 Q 78 30 50 26 Q 22 30 26 60 Z" fill={h} />
+          <path d="M 20 40 Q 50 16 80 40 Q 50 30 20 40 Z" fill={h} />
         </>
       );
     case "fade":
-      return <path d="M 24 36 Q 26 20 50 18 Q 74 20 76 36 Q 50 26 24 36 Z" fill={rig.hair} />;
-    default:
-      // puff: a proud rounded afro
+      return <path d="M 24 36 Q 26 20 50 18 Q 74 20 76 36 Q 50 26 24 36 Z" fill={h} />;
+    case "buzz":
+      return <path d="M 22 40 Q 24 22 50 20 Q 76 22 78 40 Q 50 30 22 40 Z" fill={h} opacity="0.85" />;
+    case "straight":
       return (
         <>
-          <circle cx="35" cy="22" r="13" fill={rig.hair} />
-          <circle cx="65" cy="22" r="13" fill={rig.hair} />
-          <circle cx="50" cy="17" r="14" fill={rig.hair} />
-          <path d="M 20 40 Q 50 18 80 40 Q 50 30 20 40 Z" fill={rig.hair} />
+          <path d="M 16 70 Q 10 26 50 15 Q 90 26 84 70 L 76 68 Q 80 30 50 25 Q 20 30 24 68 Z" fill={h} />
+          <path d="M 22 38 Q 50 16 78 38 Q 50 30 22 38 Z" fill={h} />
+        </>
+      );
+    case "waves":
+      return (
+        <>
+          <path d="M 18 58 Q 14 26 50 16 Q 86 26 82 58 Q 74 46 66 54 Q 58 44 50 52 Q 42 44 34 54 Q 26 46 18 58 Z" fill={h} />
+        </>
+      );
+    case "curls":
+      return (
+        <>
+          {[24, 36, 50, 64, 76].map((x, i) => (
+            <circle key={i} cx={x} cy={i % 2 ? 20 : 24} r="9" fill={h} />
+          ))}
+          <path d="M 20 40 Q 50 20 80 40 Q 50 30 20 40 Z" fill={h} />
+        </>
+      );
+    case "coily":
+      return (
+        <>
+          {[22, 32, 42, 50, 58, 68, 78].map((x, i) => (
+            <circle key={i} cx={x} cy={22 + (i % 2 ? 3 : -2)} r="7.5" fill={h} />
+          ))}
+          <path d="M 18 42 Q 50 20 82 42 Q 50 30 18 42 Z" fill={h} />
+        </>
+      );
+    case "locs":
+      return (
+        <>
+          <path d="M 20 40 Q 50 16 80 40 Q 50 28 20 40 Z" fill={h} />
+          {[20, 27, 34, 66, 73, 80].map((x, i) => (
+            <rect key={i} x={x - 2.5} y={34} width="5" height={26 + (i % 2) * 8} rx="2.5" fill={h} />
+          ))}
+        </>
+      );
+    case "hijab":
+      return (
+        <>
+          <path d="M 10 62 Q 6 20 50 12 Q 94 20 90 62 Q 84 78 74 82 L 74 60 Q 78 30 50 24 Q 22 30 26 60 L 26 82 Q 16 78 10 62 Z" fill={h} />
+          <path d="M 26 60 Q 22 84 40 90 L 40 66 Z" fill={h} opacity="0.8" />
+        </>
+      );
+    case "turban":
+      return (
+        <>
+          <path d="M 18 40 Q 20 16 50 14 Q 80 16 82 40 Q 50 24 18 40 Z" fill={h} />
+          <path d="M 18 40 Q 50 30 82 40 Q 78 30 72 26 Q 50 34 28 26 Q 22 30 18 40 Z" fill={h} opacity="0.75" />
+        </>
+      );
+    case "afro":
+    case "puff":
+    default:
+      // a proud rounded afro
+      return (
+        <>
+          <circle cx="35" cy="22" r="13" fill={h} />
+          <circle cx="65" cy="22" r="13" fill={h} />
+          <circle cx="50" cy="17" r="14" fill={h} />
+          <path d="M 20 40 Q 50 18 80 40 Q 50 30 20 40 Z" fill={h} />
         </>
       );
   }
@@ -103,6 +163,9 @@ export default function Face({
   mood = "neutral",
   bond = 0,
   maturity = 0,
+  skinTone,
+  hairStyle,
+  hairColor,
   getLevel,
   size = 84,
   live = true,
@@ -120,13 +183,26 @@ export default function Face({
   bond?: number;
   /** 0..1 how grown-up the tutor looks — grows with the friendship's age. */
   maturity?: number;
+  /** The learner's chosen look, so the tutor can be anyone. Null = default. */
+  skinTone?: string | null;
+  hairStyle?: string | null;
+  hairColor?: string | null;
   /** Live loudness of the tutor's voice, 0..1. Falls back to a natural wave. */
   getLevel?: () => number;
   size?: number;
   /** false = a still portrait (picker tiles), no animation loop. */
   live?: boolean;
 }) {
-  const rig = rigFor(personaId, accent);
+  const base = rigFor(personaId, accent);
+  // The learner's chosen appearance overrides the persona's default look,
+  // one field at a time; the persona keeps its clothing colour and soul.
+  const tone = skinTone && SKIN_TONES[skinTone] ? SKIN_TONES[skinTone] : null;
+  const rig: Rig = {
+    ...base,
+    ...(tone ? { skin: tone.skin, skinShade: tone.shade, skinLight: tone.light } : {}),
+    ...(hairStyle ? { style: hairStyle } : {}),
+    ...(hairColor && HAIR_COLORS[hairColor] ? { hair: HAIR_COLORS[hairColor] } : {}),
+  };
   const iris = color ?? "#5b4632";
   // Aging: a young face is rounder with bigger eyes set lower and a smaller
   // nose; growing up lengthens the face, lifts and shrinks the eyes a touch,

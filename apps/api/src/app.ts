@@ -20,6 +20,7 @@ import { dueJobs, provisionSecrets } from "./ops/provision.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
+import { cleanLook } from "./tutor/look.js";
 import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
@@ -595,6 +596,39 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * The tutor can look like anyone: the learner sets skin tone, hair style
+   * and hair colour. The persona keeps its voice, name and clothing colour;
+   * only the face is the learner's. Any field cleared goes back to default.
+   */
+  app.put<{ Params: { id: string }; Body: { skin?: string; hair?: string; hairColor?: string } }>(
+    "/students/:id/tutor-look",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            skin: { type: "string", maxLength: 20 },
+            hair: { type: "string", maxLength: 20 },
+            hairColor: { type: "string", maxLength: 20 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      const cleaned = cleanLook(req.body);
+      if (!cleaned.ok) return reply.code(400).send({ error: cleaned.error });
+      await store.setTutorLook(req.params.id, cleaned.look);
+      return { look: cleaned.look };
+    },
+  );
+
   /** Parent dashboard: per student — recent sessions with recaps + mastery. */
   app.get("/dashboard", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -1114,6 +1148,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       // The student's own name for this tutor, if they gave one.
       const tutorName = await store.getTutorName(studentIdResolved);
       const tutorDisplayName = tutorName ?? persona.name;
+      // The chosen appearance, so the tutor can look like anyone.
+      const tutorLook = await store.getTutorLook(studentIdResolved);
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
@@ -1203,6 +1239,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // The friendship so far: sessions had (the bond stage) and days
         // together (how grown-up the tutor looks). Both only ever grow.
         bond: { sessions: bondSessions, days: bondDays },
+        look: tutorLook,
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),

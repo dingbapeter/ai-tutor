@@ -91,6 +91,22 @@ export function maturityFromDays(days: number): number {
 }
 
 /**
+ * Viseme seam. A photoreal or illustrated avatar driver needs a mouth SHAPE
+ * per moment, not just loudness. This maps the live loudness (0..1) to a
+ * coarse viseme key the vector rig ignores today but a richer driver can
+ * consume tomorrow, so swapping in a photoreal face is a wiring change, not
+ * a rebuild. Named for the classic Preston Blair set: rest, slight, open,
+ * wide.
+ */
+export type Viseme = "rest" | "slight" | "open" | "wide";
+export function visemeFromLevel(level: number): Viseme {
+  if (level < 0.06) return "rest";
+  if (level < 0.22) return "slight";
+  if (level < 0.5) return "open";
+  return "wide";
+}
+
+/**
  * The student's voice, not just their words. Given a short series of
  * loudness samples (0..1) captured while they spoke, decide the tone:
  * "low" when they were quiet and flat (tired, discouraged, withdrawn),

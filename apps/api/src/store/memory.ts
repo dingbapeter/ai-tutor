@@ -48,7 +48,16 @@ export class MemoryStore implements Store {
     { userId: string; provider: string; customerRef: string; subscriptionRef: string; plan: string; status: "active" | "canceled"; updatedAt: Date }
   >();
   private sessionMessages = new Map<string, Array<{ role: string; content: string; createdAt: Date }>>();
-  private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string; tutorName?: string }>();
+  private profiles = new Map<
+    string,
+    {
+      id: string;
+      ownerUserId: string;
+      displayName: string;
+      tutorName?: string;
+      look?: { skin: string | null; hair: string | null; hairColor: string | null };
+    }
+  >();
 
   async ensureStudent(name: string, parentEmail?: string) {
     // Scope identity by parent email so two families' "Ada"s never collide.
@@ -370,7 +379,12 @@ export class MemoryStore implements Store {
   async listStudentProfiles(userId: string) {
     return [...this.profiles.values()]
       .filter((p) => p.ownerUserId === userId)
-      .map((p) => ({ id: p.id, displayName: p.displayName, tutorName: p.tutorName ?? null }));
+      .map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        tutorName: p.tutorName ?? null,
+        look: p.look ?? { skin: null, hair: null, hairColor: null },
+      }));
   }
 
   async ownsStudent(userId: string, studentId: string) {
@@ -403,6 +417,15 @@ export class MemoryStore implements Store {
 
   async getTutorName(studentId: string) {
     return this.profiles.get(studentId)?.tutorName ?? null;
+  }
+
+  async setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }) {
+    const p = this.profiles.get(studentId);
+    if (p) p.look = look;
+  }
+
+  async getTutorLook(studentId: string) {
+    return this.profiles.get(studentId)?.look ?? { skin: null, hair: null, hairColor: null };
   }
 
   private incidents: Array<{

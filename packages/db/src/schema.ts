@@ -201,6 +201,11 @@ export const students = pgTable("students", {
   personaId: text("persona_id").notNull().default("amara"),
   /** The student's own name for their tutor. Null = the persona's default. */
   tutorName: text("tutor_name"),
+  /** The student's chosen tutor appearance, so it can look like anyone.
+   * Null on any = the persona's default look. */
+  lookSkin: text("look_skin"),
+  lookHair: text("look_hair"),
+  lookHairColor: text("look_hair_color"),
   /** Set when the student belongs to a school/org roster. */
   orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

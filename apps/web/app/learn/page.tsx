@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
 import Face from "./Face";
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
+import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
@@ -49,12 +50,15 @@ export default function Home() {
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [family, setFamily] = useState<Array<{ id: string; displayName: string; tutorName?: string | null }>>([]);
+  const [family, setFamily] = useState<Array<{ id: string; displayName: string; tutorName?: string | null; look?: Look }>>([]);
   const [tutorNameDraft, setTutorNameDraft] = useState("");
   const [tutorNameSaved, setTutorNameSaved] = useState(false);
   const [sessionTutorName, setSessionTutorName] = useState<string | null>(null);
   const [bondSessions, setBondSessions] = useState(0);
   const [bondDays, setBondDays] = useState(0);
+  const emptyLook: Look = { skin: null, hair: null, hairColor: null };
+  const [lookDraft, setLookDraft] = useState<Look>(emptyLook);
+  const [sessionLook, setSessionLook] = useState<Look>(emptyLook);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -280,6 +284,26 @@ export default function Home() {
     }
   }
 
+  async function saveLook(change: Partial<Look>) {
+    if (!token || !studentId) return;
+    const next: Look = { ...lookDraft, ...change };
+    setLookDraft(next); // optimistic: the preview updates instantly
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/tutor-look`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ skin: next.skin ?? "", hair: next.hair ?? "", hairColor: next.hairColor ?? "" }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = (await res.json()) as { look: Look };
+      setLookDraft(json.look);
+      setFamily((f) => f.map((s) => (s.id === studentId ? { ...s, look: json.look } : s)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save the look");
+    }
+  }
+
   async function saveTutorName() {
     if (!token || !studentId) return;
     setError(null);
@@ -321,6 +345,7 @@ export default function Home() {
       setSessionTutorName(json.persona?.name ?? null);
       setBondSessions(json.bond?.sessions ?? 0);
       setBondDays(json.bond?.days ?? 0);
+      setSessionLook(json.look ?? emptyLook);
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
@@ -776,7 +801,7 @@ export default function Home() {
               <label className="lbl">Who&apos;s learning today?</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {family.map((s) => (
-                  <button key={s.id} onClick={() => { setStudentId(s.id); setTutorNameDraft(s.tutorName ?? ""); setTutorNameSaved(false); }}
+                  <button key={s.id} onClick={() => { setStudentId(s.id); setTutorNameDraft(s.tutorName ?? ""); setTutorNameSaved(false); setLookDraft(s.look ?? emptyLook); }}
                     className={`pill${studentId === s.id ? " on" : ""}`}>
                     <b>{s.displayName}</b>
                   </button>
@@ -827,6 +852,54 @@ export default function Home() {
                 <button className="btn small" onClick={saveTutorName} disabled={tutorNameSaved}>
                   {tutorNameSaved ? "Saved" : "Save name"}
                 </button>
+              </div>
+
+              <label className="lbl">
+                Make your tutor look like anyone <small>(they keep their voice and personality)</small>
+              </label>
+              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <Face
+                  personaId={personaId}
+                  color={persona?.color}
+                  accent={persona?.accent}
+                  speaking={false}
+                  mood="warm"
+                  skinTone={lookDraft.skin}
+                  hairStyle={lookDraft.hair}
+                  hairColor={lookDraft.hairColor}
+                  live={false}
+                  size={92}
+                />
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <small style={{ color: "var(--text-dim)" }}>Skin tone</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
+                    {Object.entries(SKIN_TONES).map(([key, t]) => (
+                      <button key={key} title={key} aria-label={`skin ${key}`}
+                        onClick={() => saveLook({ skin: key })}
+                        style={{ width: 24, height: 24, borderRadius: 6, background: t.skin, cursor: "pointer",
+                          border: lookDraft.skin === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
+                    ))}
+                  </div>
+                  <small style={{ color: "var(--text-dim)" }}>Hair</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
+                    {HAIR_STYLES.map((key) => (
+                      <button key={key} onClick={() => saveLook({ hair: key })}
+                        className={`pill${lookDraft.hair === key ? " on" : ""}`}
+                        style={{ padding: "3px 9px", fontSize: 12 }}>{key}</button>
+                    ))}
+                  </div>
+                  <small style={{ color: "var(--text-dim)" }}>Hair colour</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 0" }}>
+                    {Object.entries(HAIR_COLORS).map(([key, hex]) => (
+                      <button key={key} title={key} aria-label={`hair ${key}`}
+                        onClick={() => saveLook({ hairColor: key })}
+                        style={{ width: 24, height: 24, borderRadius: 6, background: hex, cursor: "pointer",
+                          border: lookDraft.hairColor === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
+                    ))}
+                    <button onClick={() => saveLook({ skin: null, hair: null, hairColor: null })}
+                      className="btn quiet small" style={{ marginLeft: 4 }}>Reset</button>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -920,6 +993,9 @@ export default function Home() {
               mood={tutorMood}
               bond={bond}
               maturity={maturity}
+              skinTone={sessionLook.skin}
+              hairStyle={sessionLook.hair}
+              hairColor={sessionLook.hairColor}
               getLevel={getMouthLevel}
               size={96}
             />

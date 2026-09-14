@@ -229,7 +229,14 @@ export interface Store {
 
   addStudentProfile(parentUserId: string, displayName: string): Promise<{ id: string }>;
   /** Profiles this account may act for: own profile plus children. */
-  listStudentProfiles(userId: string): Promise<Array<{ id: string; displayName: string }>>;
+  listStudentProfiles(userId: string): Promise<
+    Array<{
+      id: string;
+      displayName: string;
+      tutorName?: string | null;
+      look?: { skin: string | null; hair: string | null; hairColor: string | null };
+    }>
+  >;
   ownsStudent(userId: string, studentId: string): Promise<boolean>;
   getStudentName(studentId: string): Promise<string | null>;
   listSessionSummaries(
@@ -288,6 +295,11 @@ export interface Store {
   /** The student's own name for their tutor; null clears back to default. */
   setTutorName(studentId: string, name: string | null): Promise<void>;
   getTutorName(studentId: string): Promise<string | null>;
+
+  /** The tutor's appearance the student chose, so it can look like anyone.
+   *  Each field null = the persona's default. */
+  setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }): Promise<void>;
+  getTutorLook(studentId: string): Promise<{ skin: string | null; hair: string | null; hairColor: string | null }>;
 
   // ---- Referral loop ----
 

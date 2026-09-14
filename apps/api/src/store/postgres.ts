@@ -415,13 +415,21 @@ export class PostgresStore implements Store {
       id: schema.students.id,
       displayName: schema.students.displayName,
       tutorName: schema.students.tutorName,
+      lookSkin: schema.students.lookSkin,
+      lookHair: schema.students.lookHair,
+      lookHairColor: schema.students.lookHairColor,
     };
     const own = await this.db.select(cols).from(schema.students).where(eq(schema.students.userId, userId));
     const children = await this.db
       .select(cols)
       .from(schema.students)
       .where(eq(schema.students.parentUserId, userId));
-    return [...own, ...children];
+    return [...own, ...children].map((s) => ({
+      id: s.id,
+      displayName: s.displayName,
+      tutorName: s.tutorName ?? null,
+      look: { skin: s.lookSkin ?? null, hair: s.lookHair ?? null, hairColor: s.lookHairColor ?? null },
+    }));
   }
 
   async ownsStudent(userId: string, studentId: string) {
@@ -474,6 +482,23 @@ export class PostgresStore implements Store {
       .where(eq(schema.students.id, studentId))
       .limit(1);
     return rows[0]?.tutorName ?? null;
+  }
+
+  async setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }) {
+    await this.db
+      .update(schema.students)
+      .set({ lookSkin: look.skin, lookHair: look.hair, lookHairColor: look.hairColor })
+      .where(eq(schema.students.id, studentId));
+  }
+
+  async getTutorLook(studentId: string) {
+    const rows = await this.db
+      .select({ skin: schema.students.lookSkin, hair: schema.students.lookHair, hairColor: schema.students.lookHairColor })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    const r = rows[0];
+    return { skin: r?.skin ?? null, hair: r?.hair ?? null, hairColor: r?.hairColor ?? null };
   }
 
   async recordIncident(incident: {
