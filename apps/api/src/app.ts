@@ -21,6 +21,7 @@ import { masteryStage, type LearnerProfile, type Store } from "./store/types.js"
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
 import { cleanLook } from "./tutor/look.js";
+import { grantGivesAccess } from "./command/access.js";
 import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
 import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
@@ -164,12 +165,15 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   // instead of resetting at the server's midnight.
   const startOfToday = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  // The team learns for free. Command Centre staff — the owners plus anyone
-  // they assign a role — get the unlimited comp plan automatically, so
-  // end-to-end testing runs on real accounts without burning an allowance.
-  // Owners are recognised by COMMAND_OWNER_EMAILS even before their first
-  // login writes a staff row. Owners can also hand the "unlimited" plan to
-  // any account from the Command Centre (People tab) for outside testers.
+  // The effective plan a signed-in learner runs on. Being on staff grants
+  // NOTHING by itself — free elevated use must be assigned per person and
+  // stays justified against a monthly review (see command/access.ts):
+  //  - owners (COMMAND_OWNER_EMAILS) are the super-admins, always unlimited;
+  //  - anyone else gets a comp level ONLY while they hold an active grant
+  //    (not expired, not revoked, review not overdue);
+  //  - otherwise their real billing plan applies.
+  // So a tester's access ends on its own, and a lapsed review drops them
+  // back to normal automatically — no standing free-for-all.
   const ownerEmails = new Set(
     (env.COMMAND_OWNER_EMAILS ?? "")
       .split(",")
@@ -177,11 +181,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       .filter(Boolean),
   );
   async function effectivePlan(user: { userId: string; email: string }): Promise<string> {
-    if (PLANS.unlimited) {
-      if (ownerEmails.has(user.email.toLowerCase())) return "unlimited";
-      const staff = await store.getStaff(user.userId);
-      if (staff && staff.status === "active") return "unlimited";
-    }
+    if (ownerEmails.has(user.email.toLowerCase())) return "unlimited";
+    const grant = await store.getAccessGrant(user.userId);
+    if (grant && grantGivesAccess(grant, new Date()) && PLANS[grant.level]) return grant.level;
     return store.getUserPlan(user.userId);
   }
 

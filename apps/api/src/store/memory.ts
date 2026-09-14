@@ -526,6 +526,75 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  private accessGrants = new Map<string, import("./types.js").AccessGrant>();
+  private accessReviews: Array<{
+    userId: string;
+    reviewedBy: string | null;
+    reviewedAt: Date;
+    rating: string;
+    decision: string;
+    note: string | null;
+  }> = [];
+
+  async getAccessGrant(userId: string) {
+    return this.accessGrants.get(userId) ?? null;
+  }
+
+  async setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }) {
+    this.accessGrants.set(grant.userId, {
+      ...grant,
+      grantedAt: new Date(),
+      lastReviewAt: null,
+      lastRating: null,
+      revokedAt: null,
+    });
+  }
+
+  async revokeAccessGrant(userId: string) {
+    const g = this.accessGrants.get(userId);
+    if (g) g.revokedAt = new Date();
+  }
+
+  async recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }) {
+    this.accessReviews.push({
+      userId: review.userId,
+      reviewedBy: review.reviewedBy,
+      reviewedAt: new Date(),
+      rating: review.rating,
+      decision: review.decision,
+      note: review.note,
+    });
+    const g = this.accessGrants.get(review.userId);
+    if (g) {
+      g.lastReviewAt = new Date();
+      g.lastRating = review.rating;
+      g.nextReviewAt = review.nextReviewAt;
+      g.revokedAt = review.revoke ? new Date() : null;
+    }
+  }
+
+  async listAccessGrants() {
+    const emailOf = new Map<string, string>();
+    for (const [email, a] of this.accounts) emailOf.set(a.userId, email);
+    return [...this.accessGrants.values()].map((g) => ({ ...g, email: emailOf.get(g.userId) ?? g.userId }));
+  }
+
   async getReferralCode(userId: string) {
     const existing = this.referralCodeOf.get(userId);
     if (existing) return existing;

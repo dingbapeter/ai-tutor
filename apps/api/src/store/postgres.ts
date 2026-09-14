@@ -729,6 +729,118 @@ export class PostgresStore implements Store {
     return rows.length > 0;
   }
 
+  async getAccessGrant(userId: string) {
+    const rows = await this.db.select().from(schema.accessGrants).where(eq(schema.accessGrants.userId, userId)).limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      userId: r.userId,
+      level: r.level,
+      reason: r.reason ?? null,
+      grantedBy: r.grantedBy ?? null,
+      grantedAt: r.grantedAt,
+      expiresAt: r.expiresAt ?? null,
+      reviewIntervalDays: r.reviewIntervalDays,
+      nextReviewAt: r.nextReviewAt ?? null,
+      lastReviewAt: r.lastReviewAt ?? null,
+      lastRating: r.lastRating ?? null,
+      revokedAt: r.revokedAt ?? null,
+    };
+  }
+
+  async setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }) {
+    const values = {
+      userId: grant.userId,
+      level: grant.level,
+      reason: grant.reason,
+      grantedBy: grant.grantedBy,
+      grantedAt: new Date(),
+      expiresAt: grant.expiresAt,
+      reviewIntervalDays: grant.reviewIntervalDays,
+      nextReviewAt: grant.nextReviewAt,
+      lastReviewAt: null,
+      lastRating: null,
+      revokedAt: null,
+    };
+    await this.db
+      .insert(schema.accessGrants)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.accessGrants.userId, set: values });
+  }
+
+  async revokeAccessGrant(userId: string) {
+    await this.db.update(schema.accessGrants).set({ revokedAt: new Date() }).where(eq(schema.accessGrants.userId, userId));
+  }
+
+  async recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }) {
+    await this.db.insert(schema.accessReviews).values({
+      userId: review.userId,
+      reviewedBy: review.reviewedBy,
+      rating: review.rating,
+      decision: review.decision,
+      note: review.note,
+    });
+    await this.db
+      .update(schema.accessGrants)
+      .set({
+        lastReviewAt: new Date(),
+        lastRating: review.rating,
+        nextReviewAt: review.nextReviewAt,
+        revokedAt: review.revoke ? new Date() : null,
+      })
+      .where(eq(schema.accessGrants.userId, review.userId));
+  }
+
+  async listAccessGrants() {
+    const rows = await this.db
+      .select({
+        userId: schema.accessGrants.userId,
+        level: schema.accessGrants.level,
+        reason: schema.accessGrants.reason,
+        grantedBy: schema.accessGrants.grantedBy,
+        grantedAt: schema.accessGrants.grantedAt,
+        expiresAt: schema.accessGrants.expiresAt,
+        reviewIntervalDays: schema.accessGrants.reviewIntervalDays,
+        nextReviewAt: schema.accessGrants.nextReviewAt,
+        lastReviewAt: schema.accessGrants.lastReviewAt,
+        lastRating: schema.accessGrants.lastRating,
+        revokedAt: schema.accessGrants.revokedAt,
+        email: schema.users.email,
+      })
+      .from(schema.accessGrants)
+      .innerJoin(schema.users, eq(schema.users.id, schema.accessGrants.userId));
+    return rows.map((r) => ({
+      userId: r.userId,
+      level: r.level,
+      reason: r.reason ?? null,
+      grantedBy: r.grantedBy ?? null,
+      grantedAt: r.grantedAt,
+      expiresAt: r.expiresAt ?? null,
+      reviewIntervalDays: r.reviewIntervalDays,
+      nextReviewAt: r.nextReviewAt ?? null,
+      lastReviewAt: r.lastReviewAt ?? null,
+      lastRating: r.lastRating ?? null,
+      revokedAt: r.revokedAt ?? null,
+      email: r.email,
+    }));
+  }
+
   async createOrg(ownerUserId: string, name: string, seats: number) {
     const [org] = await this.db
       .insert(schema.orgs)

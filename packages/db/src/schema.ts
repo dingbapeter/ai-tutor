@@ -212,6 +212,35 @@ export const students = pgTable("students", {
 });
 
 /**
+ * Comp access grants: explicit, time-boxed free elevated use tied to a
+ * monthly review (see command/access.ts). One row per user who holds one.
+ */
+export const accessGrants = pgTable("access_grants", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  level: text("level").notNull(),
+  reason: text("reason"),
+  grantedBy: uuid("granted_by"),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  reviewIntervalDays: integer("review_interval_days").notNull().default(30),
+  nextReviewAt: timestamp("next_review_at"),
+  lastReviewAt: timestamp("last_review_at"),
+  lastRating: text("last_rating"),
+  revokedAt: timestamp("revoked_at"),
+});
+
+/** The performance-review trail behind the grants. */
+export const accessReviews = pgTable("access_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at").notNull().defaultNow(),
+  rating: text("rating").notNull(),
+  decision: text("decision").notNull(),
+  note: text("note"),
+});
+
+/**
  * Knowledge graph nodes, loaded from curriculum packs. `prerequisites` holds
  * skill ids that must be mastered first — how the tutor walks back to the
  * shaky fraction skill underneath an algebra failure.

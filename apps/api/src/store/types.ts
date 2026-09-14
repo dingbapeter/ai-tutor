@@ -283,6 +283,35 @@ export interface Store {
   getUserPlan(userId: string): Promise<string>;
   setUserPlan(email: string, plan: string): Promise<boolean>;
 
+  // ---- Comp access grants (see command/access.ts) ----
+
+  /** The comp grant for a user, or null. Raw record; activity is computed. */
+  getAccessGrant(userId: string): Promise<AccessGrant | null>;
+  /** Create or replace a grant. Resets the review clock. */
+  setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }): Promise<void>;
+  /** Mark a grant revoked (kept for the record). */
+  revokeAccessGrant(userId: string): Promise<void>;
+  /** Log a performance review and roll the grant's review clock / state forward. */
+  recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }): Promise<void>;
+  /** Every grant, for the Command Centre HR view. */
+  listAccessGrants(): Promise<Array<AccessGrant & { email: string }>>;
+
   /** How many sessions this student has ever had — the bond the tutor and
    *  student have built, which the living persona wears visibly. */
   countStudentSessions(studentId: string): Promise<number>;
@@ -505,6 +534,21 @@ export interface Store {
 }
 
 /** A Command Centre staff member (investors included, on their own role). */
+/** A comp access grant record (see command/access.ts for the rules). */
+export interface AccessGrant {
+  userId: string;
+  level: string;
+  reason: string | null;
+  grantedBy: string | null;
+  grantedAt: Date;
+  expiresAt: Date | null;
+  reviewIntervalDays: number;
+  nextReviewAt: Date | null;
+  lastReviewAt: Date | null;
+  lastRating: string | null;
+  revokedAt: Date | null;
+}
+
 export interface StaffMember {
   userId: string;
   email: string;

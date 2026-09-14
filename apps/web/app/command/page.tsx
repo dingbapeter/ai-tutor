@@ -844,6 +844,117 @@ function Money({ call, me, token }: { call: Call; me: Me; token: string }) {
 
 /* ---------- people ---------- */
 
+interface Grant {
+  userId: string;
+  level: string;
+  reason: string | null;
+  expiresAt: string | null;
+  reviewIntervalDays: number;
+  nextReviewAt: string | null;
+  lastReviewAt: string | null;
+  lastRating: string | null;
+  status: "active" | "revoked" | "expired" | "review_overdue";
+}
+
+/** Comp access desk for one account: grant, review monthly, revoke. Owner-only. */
+function AccessControls({ call, userId, canManage }: { call: Call; userId: string; canManage: boolean }) {
+  const [grant, setGrant] = useState<Grant | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [level, setLevel] = useState("unlimited");
+  const [days, setDays] = useState("");
+  const [interval, setIntervalDays] = useState("30");
+  const [reason, setReason] = useState("");
+  const [rating, setRating] = useState("meets");
+  const [decision, setDecision] = useState("renew");
+
+  const load = useCallback(async () => {
+    try {
+      const b = (await call("/command/access")) as { grants: Grant[] };
+      setGrant(b.grants.find((g) => g.userId === userId) ?? null);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoaded(true);
+    }
+  }, [call, userId]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function grantAccess() {
+    setErr(null);
+    try {
+      await call(`/command/people/${userId}/access`, {
+        method: "POST",
+        body: JSON.stringify({
+          level,
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+          ...(days ? { expiresAt: new Date(Date.now() + Number(days) * 86400000).toISOString() } : {}),
+          reviewIntervalDays: Number(interval) || 30,
+        }),
+      });
+      await load();
+    } catch (e) { setErr((e as Error).message); }
+  }
+  async function review() {
+    setErr(null);
+    try {
+      await call(`/command/people/${userId}/access/review`, { method: "POST", body: JSON.stringify({ rating, decision }) });
+      await load();
+    } catch (e) { setErr((e as Error).message); }
+  }
+  async function revoke() {
+    setErr(null);
+    try { await call(`/command/people/${userId}/access`, { method: "DELETE" }); await load(); }
+    catch (e) { setErr((e as Error).message); }
+  }
+
+  if (!canManage) return null;
+  if (!loaded) return <p className="cc-empty">Checking comp access.</p>;
+  const chip = grant
+    ? { active: "var(--ok)", review_overdue: "#a37519", expired: "var(--text-dim)", revoked: "var(--danger)" }[grant.status]
+    : null;
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+      <label className="lbl">Comp access (free elevated use, tied to a monthly review)</label>
+      {err && <p className="err">{err}</p>}
+      {grant ? (
+        <>
+          <p style={{ margin: "4px 0 10px", fontSize: 14 }}>
+            <b style={{ textTransform: "capitalize" }}>{grant.level}</b>{" "}
+            <span style={{ color: chip ?? "inherit", fontWeight: 600 }}>· {grant.status.replace("_", " ")}</span><br />
+            <small style={{ color: "var(--text-dim)" }}>
+              {grant.expiresAt ? `Expires ${new Date(grant.expiresAt).toLocaleDateString()}. ` : "No expiry. "}
+              {grant.nextReviewAt ? `Next review due ${new Date(grant.nextReviewAt).toLocaleDateString()}. ` : ""}
+              {grant.lastRating ? `Last rating: ${grant.lastRating}.` : "Not reviewed yet."}
+            </small>
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="inp" style={{ width: "auto" }} value={rating} onChange={(e) => setRating(e.target.value)}>
+              {["exceeds", "meets", "below", "unsatisfactory"].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select className="inp" style={{ width: "auto" }} value={decision} onChange={(e) => setDecision(e.target.value)}>
+              {["renew", "keep", "revoke"].map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <button className="btn small" onClick={review}>Record monthly review</button>
+            <button className="btn ghost small" onClick={revoke}>Revoke now</button>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select className="inp" style={{ width: "auto" }} value={level} onChange={(e) => setLevel(e.target.value)}>
+            {["unlimited", "premium", "plus"].map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <input className="inp" style={{ width: 130 }} placeholder="Expires in days" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} />
+          <input className="inp" style={{ width: 130 }} placeholder="Review every N days" value={interval} onChange={(e) => setIntervalDays(e.target.value.replace(/\D/g, ""))} />
+          <input className="inp" style={{ flex: 1, minWidth: 140 }} placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <button className="btn small" onClick={grantAccess}>Grant access</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function People({ call, me }: { call: Call; me: Me }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AccountHit[] | null>(null);
@@ -968,7 +1079,7 @@ function People({ call, me }: { call: Call; me: Me }) {
               <>
                 <label className="lbl">Move this account to a different plan</label>
                 <div className="cc-rowacts">
-                  {["free", "plus", "premium", "unlimited"].map((p) => (
+                  {["free", "plus", "premium"].map((p) => (
                     <button
                       key={p}
                       className={`btn small ${person.account.plan === p ? "" : "quiet"}`}
@@ -981,6 +1092,7 @@ function People({ call, me }: { call: Call; me: Me }) {
                 </div>
               </>
             )}
+            <AccessControls call={call} userId={person.account.userId} canManage={me.capabilities.includes("staff:write")} />
           </div>
 
           {person.learners.map((l) => (

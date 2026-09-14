@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { EMPLOYMENT_TYPES, type StaffHr, type StaffMember, type Store } from "../store/types.js";
 import { audit } from "./audit.js";
 import { capabilitiesFor, can, isStaffRole, STAFF_ROLES, type Capability, type StaffRole } from "./rbac.js";
+import { grantStatus, nextReviewFrom, PERFORMANCE_RATINGS, REVIEW_DECISIONS } from "./access.js";
 import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
 import { csvFilename, toCsv } from "./csv.js";
 import type { Metrics } from "../ops/metrics.js";
@@ -257,7 +258,7 @@ export async function registerCommandCentre(
           type: "object",
           required: ["plan"],
           properties: {
-            plan: { type: "string", enum: ["free", "plus", "premium", "unlimited"] },
+            plan: { type: "string", enum: ["free", "plus", "premium"] },
             reason: { type: "string", maxLength: 280 },
           },
         },
@@ -276,6 +277,127 @@ export async function registerCommandCentre(
         ip: ipOf(req),
       });
       return { userId: account.userId, plan: req.body.plan };
+    },
+  );
+
+  // ---- Comp access grants: reviewed, time-boxed free elevated use ----
+
+  /** Every current grant with its live status, for the access desk. */
+  app.get("/command/access", async (req, reply) => {
+    const actor = await requireCap(req, reply, "staff:write");
+    if (!actor) return;
+    const now = new Date();
+    const grants = (await store.listAccessGrants()).map((g) => ({ ...g, status: grantStatus(g, now) }));
+    return { grants, ratings: PERFORMANCE_RATINGS, decisions: REVIEW_DECISIONS };
+  });
+
+  /**
+   * Assign (or replace) a comp grant. Owner-only. Starts the monthly review
+   * clock; an expiry makes it self-ending for a testing window.
+   */
+  app.post<{ Params: { userId: string }; Body: { level: string; reason?: string; expiresAt?: string; reviewIntervalDays?: number } }>(
+    "/command/people/:userId/access",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["level"],
+          additionalProperties: false,
+          properties: {
+            level: { type: "string", enum: ["unlimited", "premium", "plus"] },
+            reason: { type: "string", maxLength: 280 },
+            expiresAt: { type: "string", format: "date-time" },
+            reviewIntervalDays: { type: "integer", minimum: 1, maximum: 366 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const actor = await requireCap(req, reply, "staff:write");
+      if (!actor) return;
+      const account = await store.getAccountById(req.params.userId);
+      if (!account) return reply.code(404).send({ error: "no account with that id" });
+      const interval = req.body.reviewIntervalDays ?? 30;
+      const now = new Date();
+      const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
+      if (expiresAt && expiresAt.getTime() <= now.getTime()) {
+        return reply.code(400).send({ error: "the expiry has to be in the future" });
+      }
+      await store.setAccessGrant({
+        userId: account.userId,
+        level: req.body.level,
+        reason: req.body.reason ?? null,
+        grantedBy: actor.userId,
+        expiresAt,
+        reviewIntervalDays: interval,
+        nextReviewAt: nextReviewFrom(now, interval),
+      });
+      await audit(store, actor, "access.grant", {
+        target: account.userId,
+        meta: { email: account.email, level: req.body.level, expiresAt: expiresAt?.toISOString() ?? null, interval },
+        ip: ipOf(req),
+      });
+      return { userId: account.userId, grant: await store.getAccessGrant(account.userId) };
+    },
+  );
+
+  /** Revoke a grant now (kept on the record). */
+  app.delete<{ Params: { userId: string } }>("/command/people/:userId/access", async (req, reply) => {
+    const actor = await requireCap(req, reply, "staff:write");
+    if (!actor) return;
+    const account = await store.getAccountById(req.params.userId);
+    if (!account) return reply.code(404).send({ error: "no account with that id" });
+    await store.revokeAccessGrant(account.userId);
+    await audit(store, actor, "access.revoke", { target: account.userId, meta: { email: account.email }, ip: ipOf(req) });
+    return { userId: account.userId, grant: await store.getAccessGrant(account.userId) };
+  });
+
+  /**
+   * Record the monthly performance review that keeps a grant alive. "renew"
+   * or "keep" rolls the review clock forward (access continues); "revoke"
+   * ends it. A grant whose review is never recorded lapses on its own.
+   */
+  app.post<{ Params: { userId: string }; Body: { rating: string; decision: string; note?: string } }>(
+    "/command/people/:userId/access/review",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["rating", "decision"],
+          additionalProperties: false,
+          properties: {
+            rating: { type: "string", enum: [...PERFORMANCE_RATINGS] },
+            decision: { type: "string", enum: [...REVIEW_DECISIONS] },
+            note: { type: "string", maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const actor = await requireCap(req, reply, "staff:write");
+      if (!actor) return;
+      const account = await store.getAccountById(req.params.userId);
+      if (!account) return reply.code(404).send({ error: "no account with that id" });
+      const grant = await store.getAccessGrant(account.userId);
+      if (!grant) return reply.code(404).send({ error: "that account has no access grant to review" });
+      const revoke = req.body.decision === "revoke";
+      await store.recordAccessReview({
+        userId: account.userId,
+        reviewedBy: actor.userId,
+        rating: req.body.rating,
+        decision: req.body.decision,
+        note: req.body.note ?? null,
+        nextReviewAt: revoke ? null : nextReviewFrom(new Date(), grant.reviewIntervalDays),
+        revoke,
+      });
+      // The rating is performance data; record that a review happened and its
+      // decision, not the private note.
+      await audit(store, actor, "access.review", {
+        target: account.userId,
+        meta: { email: account.email, rating: req.body.rating, decision: req.body.decision },
+        ip: ipOf(req),
+      });
+      return { userId: account.userId, grant: await store.getAccessGrant(account.userId) };
     },
   );
 
