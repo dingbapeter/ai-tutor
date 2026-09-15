@@ -1,0 +1,24 @@
+{
+  "name": "@tutor/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dingba's native app shell for Google Play and the Apple App Store. One codebase: the shell loads the same web app, gains native microphone, camera and push permissions, and updates the moment the website deploys, without a store review.",
+  "type": "module",
+  "scripts": {
+    "cap:check": "cap ls",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

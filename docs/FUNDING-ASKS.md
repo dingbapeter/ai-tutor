@@ -62,6 +62,17 @@ grant-makers.
 - **Payment processing fees** — Paystack/Stripe percentages (offset by
   revenue, list for completeness).
 
+## App stores (browser AND app)
+- **Developer accounts:** Google Play (one-time registration fee) and
+  Apple Developer Program (annual fee). The founder holds both; no AI does.
+- **A Mac for iOS builds** (or a hosted Mac build service): Apple only
+  allows App Store builds from Xcode on macOS. Android builds run anywhere.
+- **Store assets:** screenshots per device size, a 1024px icon, splash art,
+  feature graphic; folds into the character-art commission.
+- **Children's-app compliance:** Play's Families policy and Apple's Kids
+  category require a parental gate, no third-party ads, and completed data-
+  safety / privacy-nutrition forms; the legal review below covers it.
+
 ## Non-engineering, still needs budget
 
 - **Legal** — a lawyer to review /terms and /privacy: children's data
@@ -87,5 +98,6 @@ grant-makers.
 | Legal review | one-time | launch to children, compliantly |
 | Curriculum breadth | one-time | more subjects, more markets |
 | Go-to-market | one-time | reach the first cohorts |
+| App store accounts + Mac build | one-time + annual | Dingba in Google Play and the App Store |
 
 Keep this file updated as new money-needing items surface in the build.
