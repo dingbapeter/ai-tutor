@@ -5,6 +5,7 @@ import MathText from "../MathText";
 import Face from "./Face";
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
+import { audioContext, canAnalyse, installAudioUnlock, unlockAudio } from "./audio";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
@@ -117,9 +118,11 @@ export default function Home() {
   const tutorMood = moodFromText([...messages].reverse().find((m) => m.role === "assistant")?.content ?? null);
 
   // Real lipsync: an analyser rides on the playing voice so the mouth moves
-  // with the ACTUAL sound, not a canned loop.
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  // with the ACTUAL sound, not a canned loop. It is attached ONLY when the
+  // audio engine is awake, because routing a voice through a suspended
+  // context (Safari's default) would silence the tutor completely.
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null);
   function getMouthLevel(): number {
     const analyser = analyserRef.current;
@@ -133,6 +136,10 @@ export default function Home() {
     }
     return Math.min(1, Math.sqrt(sum / data.length) * 4);
   }
+
+  // Wake the audio engine on the learner's first touch. iOS keeps it asleep
+  // until then, and an asleep engine means a silent tutor.
+  useEffect(() => installAudioUnlock(), []);
 
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
@@ -190,24 +197,33 @@ export default function Home() {
   function playAudio(src: Blob | string) {
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
+    // iPhones need the element itself marked inline, and a nudge in case the
+    // learner's first tap has not woken the audio engine yet.
+    audio.preload = "auto";
+    (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    unlockAudio();
     // Feed the face: route this voice through an analyser so the mouth
-    // follows the real loudness. Any failure falls back to the natural wave.
-    try {
-      const AC = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AC) {
-        audioCtxRef.current ??= new AC();
-        void audioCtxRef.current.resume().catch(() => {});
-        const srcNode = audioCtxRef.current.createMediaElementSource(audio);
-        const analyser = audioCtxRef.current.createAnalyser();
+    // follows the real loudness. HEARING THE TUTOR COMES FIRST: a suspended
+    // context (Safari's default until a gesture) would swallow the sound, so
+    // in that case we play the plain element and the mouth falls back to its
+    // natural talking wave.
+    analyserRef.current = null;
+    const ctx = audioContext();
+    if (canAnalyse(ctx) && ctx) {
+      try {
+        sourceRef.current?.disconnect();
+        const srcNode = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.4;
         srcNode.connect(analyser);
-        analyser.connect(audioCtxRef.current.destination);
+        analyser.connect(ctx.destination);
+        sourceRef.current = srcNode;
         analyserRef.current = analyser;
         levelData.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+      } catch {
+        analyserRef.current = null;
       }
-    } catch {
-      analyserRef.current = null;
     }
     currentAudio.current = audio;
     setSpeaking(true);
@@ -596,13 +612,16 @@ export default function Home() {
       // Listen to HOW they sound while they speak: sample their voice loudness
       // ~10x a second so we can tell a flat, tired voice from a lively one.
       voiceEnergy.current = [];
-      let toneCtx: AudioContext | null = null;
+      let toneSource: MediaStreamAudioSourceNode | null = null;
       let toneTimer: ReturnType<typeof setInterval> | null = null;
       try {
-        const AC = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (AC) {
-          toneCtx = new AC();
-          const srcNode = toneCtx.createMediaStreamSource(stream);
+        // The shared engine, and only while it is awake; a suspended context
+        // would just feed the tone reader silence.
+        unlockAudio();
+        const toneCtx = audioContext();
+        if (canAnalyse(toneCtx) && toneCtx) {
+          toneSource = toneCtx.createMediaStreamSource(stream);
+          const srcNode = toneSource;
           const analyser = toneCtx.createAnalyser();
           analyser.fftSize = 256;
           srcNode.connect(analyser);
@@ -619,13 +638,14 @@ export default function Home() {
           }, 100);
         }
       } catch {
-        toneCtx = null;
+        toneSource = null;
       }
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
       rec.onstop = async () => {
         if (toneTimer) clearInterval(toneTimer);
-        void toneCtx?.close().catch(() => {});
+        // The engine is shared and stays alive; just drop this mic tap.
+        toneSource?.disconnect();
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
         if (blob.size < 1000) return; // accidental tap

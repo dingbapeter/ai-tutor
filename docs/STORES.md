@@ -135,3 +135,30 @@ exactly that list.
   first if you only have one computer, iOS when you have a Mac day.
 - **Never** commit `.jks`, `.keystore`, `.p12` or provisioning profiles;
   the repo's ignore rules block them, keep it that way.
+
+---
+
+## The phone-audio check, before any build ships
+
+iPhones are strict about sound: Safari keeps the audio engine asleep until
+the child taps something, and anything routed through a sleeping engine is
+heard by nobody. That once made the tutor completely silent on iPhone while
+looking perfect on a laptop, so there is a probe for it:
+
+```
+pnpm --filter @tutor/api dev                       # the API, on 4100
+cd apps/web && NEXT_PUBLIC_API_URL=http://127.0.0.1:4100 pnpm build
+# the web app builds standalone, so the browser files are copied in and it
+# is served by its own server, not `next start`:
+cp -r .next/static .next/standalone/apps/web/.next/static
+(cd .next/standalone/apps/web && PORT=3100 node server.js)
+node tools/device/audio-probe.mjs                  # from the repo root
+```
+
+It opens the real build at phone size, taps through as a child would, and
+checks that the tutor is heard on an iPhone whose engine never wakes, that
+lip-sync still runs when it does wake, that the hands-free button shows on
+browsers with only the old `webkitAudioContext` name, and that nothing
+scrolls sideways. Run it before cutting a store build, and still do one
+pass on a real iPhone and a real Android: a simulated engine is a good
+alarm, not a substitute for the device.

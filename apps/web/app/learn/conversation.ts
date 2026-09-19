@@ -1,3 +1,4 @@
+import { audioContext, hasWebAudio, unlockAudio } from "./audio";
 /**
  * Conversation mode: the tutor listens continuously, hears the learner out,
  * answers, and can be interrupted by simply speaking over it.
@@ -129,7 +130,9 @@ export function conversationSupported(): boolean {
     typeof navigator !== "undefined" &&
     Boolean(navigator.mediaDevices?.getUserMedia) &&
     typeof MediaRecorder !== "undefined" &&
-    typeof AudioContext !== "undefined"
+    // Either spelling: older Safari and some in-app browsers only have the
+    // webkit one, and checking the bare name hid this button on iPhones.
+    hasWebAudio(typeof window === "undefined" ? undefined : window)
   );
 }
 
@@ -138,6 +141,8 @@ export class ConversationLoop {
   private fsm: VadFsm;
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
+  /** This loop's tap on the mic. Dropped on stop; the engine is shared. */
+  private micSource: MediaStreamAudioSourceNode | null = null;
   private analyser: AnalyserNode | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
@@ -163,8 +168,17 @@ export class ConversationLoop {
       this.hooks.onError("We can't reach your microphone. Check permissions and try again.");
       throw new Error("mic unavailable");
     }
-    this.audioCtx = new AudioContext();
+    // The one shared engine, woken first: a suspended context reads pure
+    // silence, which would leave the tutor deaf in conversation mode.
+    unlockAudio();
+    this.audioCtx = audioContext();
+    if (!this.audioCtx) {
+      this.hooks.onError("this browser cannot open the microphone for conversation");
+      return;
+    }
+    await this.audioCtx.resume().catch(() => {});
     const source = this.audioCtx.createMediaStreamSource(this.stream);
+    this.micSource = source;
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 1024;
     source.connect(this.analyser);
@@ -190,7 +204,10 @@ export class ConversationLoop {
     this.recorder = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
-    this.audioCtx?.close().catch(() => {});
+    // Drop this loop's mic tap but NEVER close the engine: it is shared with
+    // the tutor's own voice, and closing it would mute the rest of the session.
+    this.micSource?.disconnect();
+    this.micSource = null;
     this.audioCtx = null;
     this.analyser = null;
     this.hooks.onState("off");
