@@ -173,7 +173,11 @@ export class ConversationLoop {
     unlockAudio();
     this.audioCtx = audioContext();
     if (!this.audioCtx) {
-      this.hooks.onError("this browser cannot open the microphone for conversation");
+      // The microphone is already open: close it again before giving up, or
+      // the recording light stays on for the rest of the visit.
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      this.hooks.onError("This browser cannot listen for conversation. You can still type, and your tutor still speaks back.");
       return;
     }
     await this.audioCtx.resume().catch(() => {});
@@ -186,7 +190,15 @@ export class ConversationLoop {
       ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find((t) =>
         MediaRecorder.isTypeSupported?.(t),
       ) ?? "";
-    this.startRecorder();
+    try {
+      this.startRecorder();
+    } catch {
+      // A browser that opens a microphone but cannot record it: hand the
+      // microphone back rather than sit on it.
+      this.stop();
+      this.hooks.onError("This browser cannot record voice. You can still type, and your tutor still speaks back.");
+      return;
+    }
     this.fsm.reset();
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.hooks.onState("listening");

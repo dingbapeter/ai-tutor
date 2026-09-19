@@ -830,3 +830,11 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
   .cc-stat .v { font-size: 24px; }
   .cc-h { flex-wrap: wrap; }
 }
+
+/* Right-to-left lessons (Arabic, Farsi, Hebrew, Kurdish, Urdu, Pashto).
+   The words flow right to left; maths does not. Isolating the formula
+   keeps "3 + 4 = 7" the right way round inside a right-to-left sentence,
+   and keeps the tutor's own tool buttons where the child left them. */
+.chat[dir="rtl"] .msg { text-align: right; }
+.chat[dir="rtl"] .msg .tools { direction: ltr; }
+.katex { direction: ltr; unicode-bidi: isolate; }

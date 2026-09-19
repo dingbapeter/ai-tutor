@@ -88,24 +88,32 @@ fingerprint and the installed app opens full-screen with no browser bar.
 
 ## Apple App Store (iPhone and iPad)
 
-Apple only builds iOS apps from Xcode on a Mac. On a Mac with Xcode and
-CocoaPods installed:
+Apple only builds iOS apps from Xcode on a Mac, but the project is already
+in the repo (`apps/mobile/ios`), with the permission sentences and the
+store identity (`ai.dingba.app`) already in it and pinned by tests. On a
+Mac with Xcode and CocoaPods installed:
 
 ```sh
-pnpm install
+pnpm install             # the Podfile points into this install
 cd apps/mobile
-pnpm cap:add:ios         # first time only: generates the ios/ project
-pnpm cap:sync
+pnpm cap:sync            # regenerates the per-platform config and pods
 pnpm cap:open:ios        # opens Xcode
 ```
 
-In Xcode, open `App/App/Info.plist` and add the two permission sentences
-Apple requires (it shows them to the user):
+`pnpm cap:add:ios` is only for starting the project over; it already
+exists. The three sentences Apple shows a parent before granting a
+permission are in `ios/App/App/Info.plist`:
 
-- `NSMicrophoneUsageDescription`: "Dingba listens so you can talk to your
-  tutor and have a hands-free conversation."
-- `NSCameraUsageDescription`: "Dingba reads a photo of your homework to
-  help you with it."
+- **Microphone** — "Dingba uses the microphone only while you hold the
+  talk button or open a hands-free conversation, so your tutor can hear
+  your question."
+- **Camera** — "Dingba uses the camera only when you choose to show your
+  tutor a photo of your work or your timetable."
+- **Photos** — "Dingba opens your photos only when you pick one to show
+  your tutor."
+
+`ITSAppUsesNonExemptEncryption` is declared false there too, so uploads
+are not held up on the encryption question every time.
 
 Then Signing & Capabilities: choose your Apple Developer team (the account
 you own). Product > Archive > Distribute App > App Store Connect.

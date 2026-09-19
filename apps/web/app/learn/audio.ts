@@ -93,3 +93,33 @@ export function installAudioUnlock(): () => void {
   events.forEach((e) => window.addEventListener(e, onGesture, { passive: true }));
   return remove;
 }
+
+type RecordWinLike = {
+  MediaRecorder?: unknown;
+  navigator?: { mediaDevices?: { getUserMedia?: unknown } };
+};
+
+/**
+ * Can this browser actually CAPTURE the learner's voice?
+ *
+ * Opening the microphone and recording it are two different permissions of
+ * the browser's making: some in-app browsers and older Safari hand over a
+ * microphone and then have no recorder to put it in. Asking a child for
+ * their microphone and then failing is worse than not offering, so the
+ * talk button only appears where both halves exist.
+ */
+export function canCaptureVoice(win: RecordWinLike | undefined): boolean {
+  if (!win) return false;
+  return typeof win.MediaRecorder === "function" && typeof win.navigator?.mediaDevices?.getUserMedia === "function";
+}
+
+/** The audio format this browser can record in, or "" when it cannot say. */
+export const RECORDING_FORMATS = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"] as const;
+
+export function pickRecordingFormat(
+  isSupported: ((type: string) => boolean) | undefined,
+  formats: readonly string[] = RECORDING_FORMATS,
+): string {
+  if (!isSupported) return "";
+  return formats.find((t) => isSupported(t)) ?? "";
+}

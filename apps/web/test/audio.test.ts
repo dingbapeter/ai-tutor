@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAnalyse, hasWebAudio, resolveAudioContextCtor } from "../app/learn/audio";
+import { canAnalyse, canCaptureVoice, hasWebAudio, pickRecordingFormat, resolveAudioContextCtor } from "../app/learn/audio";
 
 /**
  * These rules are what keep iPhones working. Safari starts every audio
@@ -29,5 +29,31 @@ describe("iPhone-safe audio rules", () => {
     expect(canAnalyse({ state: "closed" })).toBe(false);
     expect(canAnalyse(null)).toBe(false);
     expect(canAnalyse(undefined)).toBe(false);
+  });
+});
+
+describe("voice capture: never offer what the browser cannot do", () => {
+  const rec = function () {} as unknown as typeof MediaRecorder;
+  const mic = { mediaDevices: { getUserMedia: () => {} } };
+
+  it("needs BOTH a microphone and a recorder", () => {
+    expect(canCaptureVoice({ MediaRecorder: rec, navigator: mic })).toBe(true);
+    // Some in-app browsers and older Safari open a microphone but have no
+    // recorder: asking a child for their microphone then failing is worse
+    // than not offering.
+    expect(canCaptureVoice({ navigator: mic })).toBe(false);
+    expect(canCaptureVoice({ MediaRecorder: rec, navigator: {} })).toBe(false);
+    expect(canCaptureVoice({})).toBe(false);
+    expect(canCaptureVoice(undefined)).toBe(false);
+  });
+
+  it("picks the first format the browser admits to, iPhone included", () => {
+    // Chrome and Firefox: webm/opus.
+    expect(pickRecordingFormat((t) => t.startsWith("audio/webm"))).toBe("audio/webm;codecs=opus");
+    // iOS Safari: mp4 only.
+    expect(pickRecordingFormat((t) => t === "audio/mp4")).toBe("audio/mp4");
+    // A browser that admits to nothing, and one with no opinion at all.
+    expect(pickRecordingFormat(() => false)).toBe("");
+    expect(pickRecordingFormat(undefined)).toBe("");
   });
 });

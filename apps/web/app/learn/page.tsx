@@ -5,8 +5,9 @@ import MathText from "../MathText";
 import Face from "./Face";
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
-import { audioContext, canAnalyse, installAudioUnlock, unlockAudio } from "./audio";
+import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
+import { directionFor } from "./rtl";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -86,6 +87,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Decided in the browser, after hydration: the server has no microphone.
+  const [canTalk, setCanTalk] = useState(false);
   const [format, setFormat] = useState<Format>("plain");
   const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
@@ -140,6 +143,10 @@ export default function Home() {
   // Wake the audio engine on the learner's first touch. iOS keeps it asleep
   // until then, and an asleep engine means a silent tutor.
   useEffect(() => installAudioUnlock(), []);
+
+  // Some browsers hand over a microphone and then have no recorder to put it
+  // in. Find out once, and never offer a button that cannot work.
+  useEffect(() => setCanTalk(canCaptureVoice(window)), []);
 
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
@@ -601,12 +608,22 @@ export default function Home() {
   async function startRecording() {
     if (busy || recording) return;
     setError(null);
+    if (!canCaptureVoice(window)) {
+      setError("This browser cannot record voice. You can still type, and your tutor still speaks back.");
+      return;
+    }
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("We can't reach your microphone. Check permissions and try again.");
+      return;
+    }
+    // Past this point the microphone is OPEN. Anything that goes wrong must
+    // close it again, or the recording light stays on after we have given up.
+    try {
       // iOS Safari records audio/mp4, not webm — pick the first supported type.
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find(
-        (t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(t),
-      );
+      const mime = pickRecordingFormat(MediaRecorder.isTypeSupported?.bind(MediaRecorder));
       const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunks.current = [];
       // Listen to HOW they sound while they speak: sample their voice loudness
@@ -655,7 +672,8 @@ export default function Home() {
       rec.start();
       setRecording(true);
     } catch {
-      setError("We can't reach your microphone. Check permissions and try again.");
+      stream.getTracks().forEach((t) => t.stop());
+      setError("This browser could not start recording. You can still type, and your tutor still speaks back.");
     }
   }
 
@@ -1171,7 +1189,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="chat" style={{ marginTop: 10 }}>
+      <div className="chat" dir={directionFor(language)} style={{ marginTop: 10 }}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role === "user" ? "user" : "tutor"}`}>
             {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
@@ -1196,7 +1214,7 @@ export default function Home() {
       </div>
 
       <div className="composer">
-        {!participantId && convo === "off" && <button
+        {!participantId && canTalk && convo === "off" && <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
           onMouseLeave={() => recording && stopRecording()}
@@ -1241,6 +1259,7 @@ export default function Home() {
         )}
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
+          dir={directionFor(language)}
           className="inp" placeholder={recording ? "listening…" : "Say something to your tutor…"} />
         <button onClick={send} disabled={busy} className="btn">Send</button>
       </div>
