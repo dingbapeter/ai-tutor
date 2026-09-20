@@ -8,6 +8,7 @@ import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearan
 import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 import { directionFor } from "./rtl";
+import Board from "./Board";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -89,6 +90,7 @@ export default function Home() {
   const [recording, setRecording] = useState(false);
   // Decided in the browser, after hydration: the server has no microphone.
   const [canTalk, setCanTalk] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [format, setFormat] = useState<Format>("plain");
   const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
@@ -723,32 +725,38 @@ export default function Home() {
     }
   }
 
-  async function sendPhoto(file: File) {
+  /** The whiteboard hands over a picture; it travels as a photo does. */
+  function sendDrawing(image: Blob) {
+    setBoardOpen(false);
+    void sendPhoto(new File([image], "board.png", { type: "image/png" }), "✏️ Showed my working");
+  }
+
+  async function sendPhoto(file: File, label = "📷 Shared a photo") {
     if (!sessionId || busy) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError("That photo is too large. Keep it under 5MB.");
+      setError("That picture is too large. Keep it under 5MB.");
       return;
     }
     setBusy(true);
     setError(null);
-    setMessages((m) => [...m, { role: "user", content: "📷 …" }]);
+    setMessages((m) => [...m, { role: "user", content: `${label.slice(0, 2)} …` }]);
     try {
       const res = await fetch(`${API}/sessions/${sessionId}/see`, {
         method: "POST",
         headers: { "content-type": file.type || "image/jpeg" },
         body: file,
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `photo failed (${res.status})`);
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `could not send that picture (${res.status})`);
       const json = await res.json();
       setMessages((m) => [
         ...m.slice(0, -1),
-        { role: "user", content: "📷 Shared a photo" },
+        { role: "user", content: label },
         { role: "assistant", content: json.reply },
       ]);
       if (voiceOn && json.reply) speakMessage(json.reply);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "photo failed");
-      setMessages((m) => (m[m.length - 1]?.content === "📷 …" ? m.slice(0, -1) : m));
+      setError(e instanceof Error ? e.message : "could not send that picture");
+      setMessages((m) => (m[m.length - 1]?.content === `${label.slice(0, 2)} …` ? m.slice(0, -1) : m));
     } finally {
       setBusy(false);
     }
@@ -1213,6 +1221,10 @@ export default function Home() {
         ))}
       </div>
 
+      {sessionId && boardOpen && !participantId && (
+        <Board onShow={sendDrawing} onClose={() => setBoardOpen(false)} busy={busy} />
+      )}
+
       <div className="composer">
         {!participantId && canTalk && convo === "off" && <button
           onMouseDown={startRecording}
@@ -1254,6 +1266,14 @@ export default function Home() {
               title="Show your tutor a photo"
               style={{ minWidth: 52, padding: "12px 14px" }}>
               📷
+            </button>
+            <button
+              onClick={() => setBoardOpen((open) => !open)}
+              disabled={busy}
+              className={`btn${boardOpen ? "" : " quiet"}`}
+              title="Work it out on the board"
+              style={{ minWidth: 52, padding: "12px 14px" }}>
+              ✏️
             </button>
           </>
         )}

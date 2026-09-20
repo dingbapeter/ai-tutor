@@ -37,8 +37,11 @@ It walks 69 checks per engine and takes a few minutes each, so the whole
 sweep is roughly a coffee break. Narrow it while working with
 `--engines webkit` (or chromium, or firefox).
 
-`tools/device/audio-probe.mjs` is the companion for sound, where iPhones
-are strictest: see docs/STORES.md.
+Two companions cover the parts that need their own kind of proof:
+`tools/device/audio-probe.mjs` for sound, where iPhones are strictest (see
+docs/STORES.md), and `tools/device/board-probe.mjs` for the whiteboard,
+which is the one surface that depends on pointer input, canvas and image
+export all working together. Both run on the same stack as the sweep.
 
 ## What every browser must give us, and does
 
@@ -75,6 +78,15 @@ full stops land on the correct side. Formulas stay left to right inside
 those sentences (`3 + 4 = 7` reads the same in any language), which the
 stylesheet isolates deliberately. The sweep checks an Arabic lesson on
 every engine.
+
+## Writing by hand
+
+The whiteboard takes a finger, a stylus or a mouse through one set of
+pointer handlers, so every engine speaks the same language. The canvas sets
+`touch-action: none`, without which a drawing gesture scrolls the page away
+on a phone and the child draws nothing; the board probe checks exactly that,
+along with ink appearing, undo, the eraser, and the tutor answering the
+finished work.
 
 ## Deliberately not required
 

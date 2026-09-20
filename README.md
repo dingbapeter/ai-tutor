@@ -158,6 +158,7 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
 | Everywhere it runs: the whole family journey walked on all three browser engines (WebKit for Safari and every iPhone browser, Chromium for Chrome/Edge/Samsung/Android WebView, Gecko for Firefox) at Windows-laptop, Mac, Android-phone and iPhone sizes, with page errors and sideways scroll treated as failures. Where a browser cannot record voice, the talk button is not offered and typing still works; the microphone is never left open after a failure | ✅ `tools/device/browser-sweep.mjs`, see docs/BROWSERS.md |
 | Reading right to left: an Arabic, Farsi, Hebrew, Kurdish, Urdu or Pashto lesson lays out right to left (chat and composer), while formulas stay left to right inside the sentence | ✅ rules unit-tested (regional tags, near-miss codes) + live-verified in a browser against an English control |
 | iOS project in the repo: `apps/mobile/ios` opens in Xcode with the store identity `ai.dingba.app`, the three permission sentences Apple shows a parent, and the non-exempt-encryption declaration | ✅ pinned by tests; the build itself needs a Mac day |
+| The whiteboard: a child works a problem out by hand (finger, stylus or mouse), rubs out, undoes, and shows the tutor, which travels the same road a photo does (vision slot, safety gate, metering). Nothing to show on a blank board, so an empty page never spends a family's allowance | ✅ rules unit-tested (stroke building, undo, blank detection, export sizing, board coordinates) + `tools/device/board-probe.mjs` draws on the real board on all three engines and checks the tutor answers the working |
 | WhatsApp nudges | ❌ later sprints |
 
 ## Roadmap
@@ -199,7 +200,11 @@ automated test suite (`pnpm test`, `pytest`) or a live run, not just written.
       referral loop, name-your-tutor, the living persona (voice-driven face,
       emotion engine, growing bond, aging, voice-tone care), look-like-anyone
       appearance, reviewed comp access
-- [ ] WhatsApp nudges; full-duplex live voice (LiveKit self-hosted); whiteboard;
+- [x] Sprints 46-48: the store-ready app shell (Google Play and the App Store,
+      with the iOS project in the repo), the iPhone audio fix, the
+      three-engine browser sweep with right-to-left lessons, and the
+      whiteboard
+- [ ] WhatsApp nudges; full-duplex live voice (LiveKit self-hosted);
       image generation for cartoon panels (IDEAS.md #001 full version);
       illustrated and, post-funding, photoreal persona art (docs/FUNDING-ASKS.md)
 
