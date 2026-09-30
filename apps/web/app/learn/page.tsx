@@ -9,8 +9,21 @@ import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickReco
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 import { directionFor } from "./rtl";
 import Board from "./Board";
+import {
+  enqueue, loadQueue, newId, partitionStale, readyFor, remove, saveQueue, shouldWait, waitingLine,
+  type Outgoing,
+} from "./outbox";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
+
+/** The browser's store, or nothing at all in private modes that refuse it. */
+function storageOrNull(): Storage | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 interface Persona {
   id: string;
@@ -91,6 +104,12 @@ export default function Home() {
   // Decided in the browser, after hydration: the server has no microphone.
   const [canTalk, setCanTalk] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  // Questions the network swallowed. They live in the browser's own store,
+  // so closing the tab does not lose them either.
+  const [waiting, setWaiting] = useState<Outgoing[]>([]);
+  const flushing = useRef(false);
+  /** Always the current flush, so the one-time listener is never stale. */
+  const flushRef = useRef<() => void>(() => {});
   const [format, setFormat] = useState<Format>("plain");
   const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
@@ -149,6 +168,23 @@ export default function Home() {
   // Some browsers hand over a microphone and then have no recorder to put it
   // in. Find out once, and never offer a button that cannot work.
   useEffect(() => setCanTalk(canCaptureVoice(window)), []);
+
+  // Anything the network swallowed last time, including before the tab was
+  // closed, and a flush the moment the connection comes back.
+  useEffect(() => {
+    setWaiting(loadQueue(storageOrNull()));
+    const onBack = () => void flushRef.current();
+    window.addEventListener("online", onBack);
+    return () => window.removeEventListener("online", onBack);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Also flush when the session opens, or when a message joins an empty queue
+  // while the connection is already back.
+  useEffect(() => {
+    if (sessionId && waiting.length && navigator.onLine) void flushOutbox();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, waiting.length]);
 
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
@@ -532,42 +568,45 @@ export default function Home() {
     }
   }
 
-  async function send() {
-    if (!input.trim() || !sessionId || busy) return;
-    const text = input.trim();
-    setInput("");
-    setError(null);
-    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    setBusy(true);
-
+  /**
+   * Deliver one message and stream the answer. Returns how it went, so the
+   * caller can tell a dead connection (worth waiting for) from an answer the
+   * server actually gave (never retried).
+   */
+  async function deliver(text: string, fmt: Format): Promise<{ ok: boolean; threw: boolean; status?: number; error?: string }> {
+    const attempt = () =>
+      fetch(`${API}/sessions/${sessionId}/message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          text,
+          ...(fmt !== "plain" ? { format: fmt } : {}),
+          ...(participantId ? { participantId } : {}),
+        }),
+      });
+    // One quick retry first: a blip is not an outage.
+    let res: Response;
     try {
-      const attempt = () =>
-        fetch(`${API}/sessions/${sessionId}/message`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            text,
-            ...(format !== "plain" ? { format } : {}),
-            ...(participantId ? { participantId } : {}),
-          }),
-        });
-      // One retry on network failure — flaky connections shouldn't eat a turn.
-      let res: Response;
+      res = await attempt();
+    } catch {
+      await new Promise((r) => setTimeout(r, 1200));
       try {
         res = await attempt();
       } catch {
-        await new Promise((r) => setTimeout(r, 1200));
-        res = await attempt();
+        return { ok: false, threw: true };
       }
-      if (res.status === 402) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? "You've reached today's limit. Upgrade to keep going.");
-      }
-      if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let full = "";
+    }
+    if (res.status === 402) {
+      const j = await res.json().catch(() => null);
+      return { ok: false, threw: false, status: 402, error: j?.error ?? "You've reached today's limit. Upgrade to keep going." };
+    }
+    if (!res.ok || !res.body) return { ok: false, threw: false, status: res.status, error: `tutor unavailable (${res.status})` };
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let full = "";
+    try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -598,14 +637,86 @@ export default function Home() {
           }
         }
       }
-      if (voiceOn && full.trim()) speakMessage(full);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "message failed");
+      // The answer was cut off part way. The tutor did hear the question, so
+      // this is not a message to send again.
+      return { ok: false, threw: false, status: res.status, error: e instanceof Error ? e.message : "message failed" };
+    }
+    if (voiceOn && full.trim()) speakMessage(full);
+    return { ok: true, threw: false };
+  }
+
+  async function send() {
+    if (!input.trim() || !sessionId || busy) return;
+    const text = input.trim();
+    setInput("");
+    setError(null);
+    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    setBusy(true);
+
+    const outcome = await deliver(text, format);
+    if (!outcome.ok) {
       setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+      if (shouldWait(outcome)) {
+        // The banner promises these send themselves later. Keep that promise.
+        const item: Outgoing = { id: newId(Date.now()), sessionId, text, format, queuedAt: Date.now() };
+        const next = enqueue(waiting, item);
+        if (next.accepted) {
+          setWaiting(next.queue);
+          saveQueue(storageOrNull(), next.queue);
+          setError(null);
+        } else {
+          setError("Too many messages are already waiting for the connection. Try again once you are back online.");
+        }
+      } else if (outcome.error) {
+        setError(outcome.error);
+      }
+    }
+    setBusy(false);
+  }
+
+  /** Send everything that has been waiting, oldest first, one at a time. */
+  async function flushOutbox() {
+    if (flushing.current || busy || !sessionId) return;
+    const { fresh, stale } = partitionStale(waiting, Date.now());
+    if (stale.length) {
+      // Say so rather than let a question vanish without a word.
+      setWaiting(fresh);
+      saveQueue(storageOrNull(), fresh);
+      setError(`${stale.length} message${stale.length === 1 ? "" : "s"} waited too long to be worth answering, so ${stale.length === 1 ? "it was" : "they were"} let go. Ask again if you still need to.`);
+    }
+    const mine = readyFor(fresh, sessionId);
+    if (!mine.length) return;
+    flushing.current = true;
+    setBusy(true);
+    try {
+      let queue = fresh;
+      for (const item of mine) {
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          const alreadyShown = last?.role === "user" && last.content === item.text;
+          return alreadyShown
+            ? [...m, { role: "assistant" as const, content: "" }]
+            : [...m, { role: "user" as const, content: item.text }, { role: "assistant" as const, content: "" }];
+        });
+        const outcome = await deliver(item.text, item.format as Format);
+        if (!outcome.ok) {
+          setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+          if (shouldWait(outcome)) break; // still no connection: leave the rest waiting
+          // The server answered, even to refuse. That is this message's fate.
+          if (outcome.error) setError(outcome.error);
+        }
+        queue = remove(queue, item.id);
+        setWaiting(queue);
+        saveQueue(storageOrNull(), queue);
+      }
     } finally {
+      flushing.current = false;
       setBusy(false);
     }
   }
+
+  flushRef.current = () => void flushOutbox();
 
   async function startRecording() {
     if (busy || recording) return;
@@ -1284,6 +1395,11 @@ export default function Home() {
         <button onClick={send} disabled={busy} className="btn">Send</button>
       </div>
       {error && <p className="err">{error}</p>}
+      {waiting.length > 0 && (
+        <p className="waiting" role="status">
+          {waitingLine(readyFor(waiting, sessionId ?? "").length || waiting.length)}
+        </p>
+      )}
     </main>
   );
 }

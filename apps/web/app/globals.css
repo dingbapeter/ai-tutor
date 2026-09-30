@@ -875,3 +875,14 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
   user-select: none;
 }
 .board-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+/* Messages held back by a dead connection. Calm, not alarming: the child
+   has not lost anything, and the line says so in plain words. */
+.waiting {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 12px;
+}

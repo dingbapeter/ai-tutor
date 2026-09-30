@@ -88,6 +88,16 @@ on a phone and the child draws nothing; the board probe checks exactly that,
 along with ink appearing, undo, the eraser, and the tutor answering the
 finished work.
 
+## A dead connection
+
+The banner has always told a child their messages "will send when the
+connection returns". Now that is true. A send that fails for network reasons
+waits in the browser's own store, keeps its place in the queue, and goes out
+when the connection comes back; a refusal the server actually made is never
+retried, because that would spend a family's daily allowance behind their
+back. `tools/device/outbox-probe.mjs` takes a real browser offline in the
+middle of a lesson on every engine and checks the whole round trip.
+
 ## Deliberately not required
 
 No Flash, no Java, no plugins, no extensions, no desktop-only APIs, no
