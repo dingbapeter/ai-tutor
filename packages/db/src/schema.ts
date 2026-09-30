@@ -206,6 +206,8 @@ export const students = pgTable("students", {
   lookSkin: text("look_skin"),
   lookHair: text("look_hair"),
   lookHairColor: text("look_hair_color"),
+  /** The account holder has let this learner turn on face hints (camera read on-device only). */
+  faceHints: boolean("face_hints").notNull().default(false),
   /** Set when the student belongs to a school/org roster. */
   orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -27,6 +27,7 @@
  *   pnpm --filter @tutor/api dev                     # the API, on 4100
  *   cd apps/web && NEXT_PUBLIC_API_URL=http://127.0.0.1:4100 pnpm build
  *   cp -r .next/static .next/standalone/apps/web/.next/static
+ *   cp -r public .next/standalone/apps/web/public
  *   (cd .next/standalone/apps/web && PORT=3100 node server.js)
  *   node tools/device/audio-probe.mjs [--url http://127.0.0.1:3100]
  *

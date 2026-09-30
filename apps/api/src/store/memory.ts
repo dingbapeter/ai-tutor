@@ -56,6 +56,7 @@ export class MemoryStore implements Store {
       displayName: string;
       tutorName?: string;
       look?: { skin: string | null; hair: string | null; hairColor: string | null };
+      faceHints?: boolean;
     }
   >();
 
@@ -426,6 +427,19 @@ export class MemoryStore implements Store {
 
   async getTutorLook(studentId: string) {
     return this.profiles.get(studentId)?.look ?? { skin: null, hair: null, hairColor: null };
+  }
+
+  async setFaceHints(studentId: string, enabled: boolean) {
+    const p = this.profiles.get(studentId);
+    if (p) p.faceHints = enabled;
+  }
+
+  async getFaceHints(studentId: string) {
+    return this.profiles.get(studentId)?.faceHints === true;
+  }
+
+  async orgOfStudent(studentId: string) {
+    return this.orgStudents.get(studentId) ?? null;
   }
 
   private incidents: Array<{

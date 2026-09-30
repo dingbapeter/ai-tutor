@@ -8,6 +8,10 @@ import type { Speech } from "./avatar/Avatar3D";
 // The 3D engine is heavy and only needed when a tutor has a rigged model,
 // so it arrives on demand and never on the server.
 const Avatar3D = dynamic(() => import("./avatar/Avatar3D"), { ssr: false });
+// The face reader is heavy too, and only for learners allowed to use it.
+const FaceSense = dynamic(() => import("./face/FaceSense"), { ssr: false });
+import { canSeeFace } from "./face/FaceSense";
+import { hintToSend, type Hint, type Label } from "./face/expression";
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
 import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
@@ -140,6 +144,19 @@ export default function Home() {
   // A browser without WebGL, or a model that would not load, gets the
   // drawn face instead. Remembered per model so it is not retried every render.
   const [avatarFallback, setAvatarFallback] = useState<string | null>(null);
+  // Face hints: allowed for this session by the account holder? And what the
+  // face has steadily been doing, plus what the tutor was last told.
+  const [faceAllowed, setFaceAllowed] = useState(false);
+  const steadyFace = useRef<Label>("none");
+  const lastFaceSent = useRef<{ hint: Hint | null; at: number }>({ hint: null, at: 0 });
+  /** The hint worth sending with this turn, if any. Records it as sent. */
+  function takeFaceHint(): Hint | null {
+    if (!faceAllowed) return null;
+    const now = Date.now();
+    const hint = hintToSend(steadyFace.current, lastFaceSent.current, now);
+    if (hint) lastFaceSent.current = { hint, at: now };
+    return hint;
+  }
   const busyRef = useRef(false);
   const speakingRef = useRef(false);
   // At most one utterance waits while the tutor is mid-reply; a newer one
@@ -437,6 +454,9 @@ export default function Home() {
       setLessonTitle(json.lesson?.title ?? null);
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
+      setFaceAllowed(json.faceHints === true);
+      steadyFace.current = "none";
+      lastFaceSent.current = { hint: null, at: 0 };
       setVerdicts({});
       if (json.greeting) {
         // The tutor speaks first, like a person would.
@@ -471,6 +491,7 @@ export default function Home() {
       const json = await res.json();
       setSessionId(json.sessionId);
       setParticipantId(json.participantId);
+      setFaceAllowed(false);
       setHostName(json.host);
       setPersonaId(json.persona.id);
       setMessages([
@@ -600,7 +621,7 @@ export default function Home() {
    * caller can tell a dead connection (worth waiting for) from an answer the
    * server actually gave (never retried).
    */
-  async function deliver(text: string, fmt: Format): Promise<{ ok: boolean; threw: boolean; status?: number; error?: string }> {
+  async function deliver(text: string, fmt: Format, faceHint: Hint | null = null): Promise<{ ok: boolean; threw: boolean; status?: number; error?: string }> {
     const attempt = () =>
       fetch(`${API}/sessions/${sessionId}/message`, {
         method: "POST",
@@ -609,6 +630,7 @@ export default function Home() {
           text,
           ...(fmt !== "plain" ? { format: fmt } : {}),
           ...(participantId ? { participantId } : {}),
+          ...(faceHint && !participantId ? { faceHint } : {}),
         }),
       });
     // One quick retry first: a blip is not an outage.
@@ -681,7 +703,7 @@ export default function Home() {
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setBusy(true);
 
-    const outcome = await deliver(text, format);
+    const outcome = await deliver(text, format, takeFaceHint());
     if (!outcome.ok) {
       setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
       if (shouldWait(outcome)) {
@@ -824,6 +846,7 @@ export default function Home() {
 
   async function sendVoice(blob: Blob, tone: "low" | "bright" | "neutral" = "neutral") {
     if (!sessionId) return;
+    const faceHintNow = participantId ? null : takeFaceHint();
     setBusy(true);
     busyRef.current = true;
     setMessages((m) => [...m, { role: "user", content: "🎤 …" }]);
@@ -834,6 +857,8 @@ export default function Home() {
           "content-type": blob.type || "audio/webm",
           // How they sounded, so the tutor can notice the person (never shown).
           ...(tone !== "neutral" ? { "x-voice-tone": tone } : {}),
+          // What their face has steadily been doing, when they allowed it.
+          ...(faceHintNow ? { "x-face-hint": faceHintNow } : {}),
         },
         body: blob,
       });
@@ -1219,6 +1244,12 @@ export default function Home() {
                       ? "in conversation, just talk"
                       : "listening"}
             </div>
+            {faceAllowed && !participantId && canSeeFace() && (
+              <FaceSense
+                tutorName={sessionTutorName ?? persona?.name ?? "your tutor"}
+                onSteady={(label) => { steadyFace.current = label; }}
+              />
+            )}
           </div>
         </div>
         <div className="session-actions">

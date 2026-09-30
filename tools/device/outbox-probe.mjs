@@ -49,7 +49,12 @@ for (const engineName of WANTED) {
   const engine = ENGINES[engineName];
   const browser = await engine.launch(engineName === "chromium" && CHROME ? { executablePath: CHROME } : {});
   console.log(`\n=== ${engineName} ${browser.version()} ===`);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  // Service workers off for this probe only. Ours leaves every message POST
+  // alone, but once a worker controls the page, Playwright's WebKit can no
+  // longer stand in for the server, so the refusal below would reach the
+  // real server instead. The outbox lives in the page, not the worker, and
+  // the sweep checks the worker itself.
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));

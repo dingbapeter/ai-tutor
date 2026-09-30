@@ -64,6 +64,9 @@ const WAV = speechWav();
 const parse = (s) => Object.fromEntries((s ?? "").split(" ").filter(Boolean).map((kv) => { const [k, v] = kv.split("="); return [k, Number(v)]; }));
 
 async function wire(context, withWebGL) {
+  // Service workers stay off in this probe: once one controls the page,
+  // Playwright's WebKit can no longer stand in for the server below, and
+  // Amara would quietly arrive without her test head.
   // Amara carries the test head, for this probe only.
   await context.route("**/personas", async (route) => {
     const res = await route.fetch();
@@ -104,7 +107,7 @@ for (const engineName of WANTED) {
 
   // ---- with WebGL: the rigged face must be alive ----
   {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
     await wire(context, true);
     const page = await context.newPage();
     const errors = [];
@@ -113,7 +116,12 @@ for (const engineName of WANTED) {
 
     const host = page.locator(".avatar3d");
     const rendered = await host.locator("canvas").count().then((c) => c > 0).catch(() => false);
-    if (!rendered) {
+    // Ask the engine itself, so a model that failed to load on an engine
+    // that can draw is a failure, not an excuse.
+    const hasWebGL = await page.evaluate(() => Boolean(document.createElement("canvas").getContext("webgl2") || document.createElement("canvas").getContext("webgl")));
+    if (!rendered && hasWebGL) {
+      check("the rigged model loaded and is drawn", false, "this engine offers WebGL, yet the drawn face was shown");
+    } else if (!rendered) {
       const fellBack = (await page.locator("svg").count()) > 0;
       check("no WebGL in this headless engine: the drawn face stepped in instead", fellBack);
       note("this engine build did not offer WebGL, so lip sync is proven on chromium");
@@ -145,7 +153,7 @@ for (const engineName of WANTED) {
 
   // ---- without WebGL: the drawn face steps in, with no error ----
   {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
     await wire(context, false);
     const page = await context.newPage();
     const errors = [];

@@ -886,3 +886,24 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
   border-radius: 10px;
   padding: 8px 12px;
 }
+
+/* Face hints: the learner always sees what the camera sees, and how to
+   turn it off. Nothing here is decoration; it is the consent made visible. */
+.face-sense { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; }
+.face-mirror {
+  width: 64px; height: 48px; object-fit: cover; border-radius: 10px;
+  transform: scaleX(-1); /* a mirror, the way a front camera should look */
+  border: 2px solid var(--ok);
+}
+.face-note { font-size: 13px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.face-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.face-ask {
+  flex: 1 1 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.face-ask p { margin: 6px 0; color: var(--text-dim); }
+.face-ask-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }

@@ -29,11 +29,19 @@ broken journey, or a layout that spills sideways.
 PORT=4100 GUEST_IP_CAP=500 pnpm --filter @tutor/api dev
 cd apps/web && NEXT_PUBLIC_API_URL=http://127.0.0.1:4100 pnpm build
 cp -r .next/static .next/standalone/apps/web/.next/static
+cp -r public .next/standalone/apps/web/public
 (cd .next/standalone/apps/web && PORT=3100 node server.js)
 node tools/device/browser-sweep.mjs            # from the repo root
 ```
 
-It walks 69 checks per engine and takes a few minutes each, so the whole
+Both copies matter. The standalone build leaves out the browser files and
+the public folder; without the second line the site still loads, but has no
+manifest, no service worker (so no offline shell and no reminders), no
+icons and no face model. The live site ran like that for months, so the
+sweep now checks those pieces are served and the service worker takes
+charge, and a test pins the Dockerfile lines that copy them.
+
+It walks 77 checks per engine and takes a few minutes each, so the whole
 sweep is roughly a coffee break. Narrow it while working with
 `--engines webkit` (or chromium, or firefox).
 
@@ -41,7 +49,9 @@ Two companions cover the parts that need their own kind of proof:
 `tools/device/audio-probe.mjs` for sound, where iPhones are strictest (see
 docs/STORES.md), and `tools/device/board-probe.mjs` for the whiteboard,
 which is the one surface that depends on pointer input, canvas and image
-export all working together. Both run on the same stack as the sweep.
+export all working together. `tools/device/avatar-probe.mjs` proves the 3D
+tutor's lip sync and its fallback, and `tools/device/face-probe.mjs` proves
+the face hints below. All run on the same stack as the sweep.
 
 ## What every browser must give us, and does
 
@@ -98,11 +108,43 @@ retried, because that would spend a family's daily allowance behind their
 back. `tools/device/outbox-probe.mjs` takes a real browser offline in the
 middle of a lesson on every engine and checks the whole round trip.
 
+## Seeing the learner's face
+
+A learner can let their tutor see their face, so the tutor can respond the
+way someone sitting beside them would. It is off unless the account holder
+switches it on from the family page, and it is never offered to guests, to
+learners on a school roster, to sessions opened through an API key, or in a
+shared class. Even then the learner is asked first, in plain words, and sees
+a small mirror of exactly what the camera sees, with a one-tap off.
+
+The face model (MediaPipe Face Landmarker, Apache-2.0) runs inside the page.
+Its engine and model are served from our own site, the model is checked
+against a pinned fingerprint at build time, and no picture or video leaves
+the device. What reaches the tutor is at most one plain word now and then:
+smiling, frowning, furrowed, drowsy or away, and only once a look has lasted
+(four seconds for a smile, twenty for looking away). It reaches the tutor as
+a private note for that one turn and is never saved in the transcript.
+
+These words describe what is visible, not what anyone feels, and the tutor
+is told to ask rather than tell a learner how they feel. That line is
+deliberate: the EU AI Act (Article 5(1)(f)) bans inferring the emotions of
+people in education, while detecting readily apparent expressions such as a
+smile or a frown is outside the ban when it is not used to infer emotions.
+It is also why school rosters are excluded outright. A lawyer should confirm
+this reading before launch in the EU.
+
+`tools/device/face-probe.mjs` drives the real build in Chromium with a fake
+camera and checks every one of these promises, including that no request
+goes anywhere but Dingba and none carries a picture. The first time, the
+learner's browser downloads about 15 MB.
+
 ## Deliberately not required
 
-No Flash, no Java, no plugins, no extensions, no desktop-only APIs, no
-WebGL, no camera (the photo question is a file the learner chooses, which
-every phone can do), and no geographic or network restriction of any kind.
+No Flash, no Java, no plugins, no extensions, no desktop-only APIs, and no
+geographic or network restriction of any kind. WebGL and the camera are
+used when they are there and never required: without WebGL the 3D tutor
+becomes the drawn face, the camera is only for face hints, and the photo
+question is a file the learner chooses, which every phone can do.
 
 ## Screen sizes
 

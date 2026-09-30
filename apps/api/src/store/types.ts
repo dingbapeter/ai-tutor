@@ -329,6 +329,11 @@ export interface Store {
    *  Each field null = the persona's default. */
   setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }): Promise<void>;
   getTutorLook(studentId: string): Promise<{ skin: string | null; hair: string | null; hairColor: string | null }>;
+  /** Face hints: off unless the account holder switched them on for this learner. */
+  setFaceHints(studentId: string, enabled: boolean): Promise<void>;
+  getFaceHints(studentId: string): Promise<boolean>;
+  /** The school or organisation a learner is on the roster of, if any. */
+  orgOfStudent(studentId: string): Promise<string | null>;
 
   // ---- Referral loop ----
 

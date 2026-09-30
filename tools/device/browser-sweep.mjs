@@ -19,6 +19,7 @@
  *   PORT=4100 GUEST_IP_CAP=500 pnpm --filter @tutor/api dev
  *   cd apps/web && NEXT_PUBLIC_API_URL=http://127.0.0.1:4100 pnpm build
  *   cp -r .next/static .next/standalone/apps/web/.next/static
+ *   cp -r public .next/standalone/apps/web/public
  *   (cd .next/standalone/apps/web && PORT=3100 node server.js)
  *   node tools/device/browser-sweep.mjs [--url http://127.0.0.1:3100]
  *                                       [--engines webkit,chromium,firefox]
@@ -150,6 +151,29 @@ for (const engineName of WANTED) {
     check(where, "streamed answers are supported", caps.streaming);
     check(where, "the session can be remembered (storage)", caps.storage);
     if (!caps.serviceWorker) console.log("    note: no service worker here, so no offline shell (the app still works online)");
+
+    // The pieces that make Dingba installable, work offline and send
+    // reminders. The live site once shipped without them for months while
+    // every page still loaded, so check they are actually served, and that
+    // the service worker actually takes charge, not just that it could.
+    const shell = await page.evaluate(async (hasWorker) => {
+      const ok = async (path) => (await fetch(path, { cache: "no-store" }).catch(() => null))?.status === 200;
+      const served = {
+        manifest: await ok("/manifest.json"),
+        worker: await ok("/sw.js"),
+        icon: await ok("/icon-192.png"),
+      };
+      let registered = !hasWorker;
+      if (hasWorker) {
+        for (let i = 0; i < 20 && !registered; i++) {
+          registered = Boolean(await navigator.serviceWorker.getRegistration("/"));
+          if (!registered) await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      return { ...served, registered };
+    }, caps.serviceWorker);
+    check(where, "the install pieces are served (manifest, service worker, icon)", shell.manifest && shell.worker && shell.icon, JSON.stringify(shell));
+    if (caps.serviceWorker) check(where, "the service worker takes charge", shell.registered);
 
     // 4. A lesson in a language that reads right to left must actually read
     //    right to left. Direction is the engine's business, not the

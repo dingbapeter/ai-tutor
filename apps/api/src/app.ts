@@ -21,6 +21,7 @@ import { masteryStage, type LearnerProfile, type Store } from "./store/types.js"
 import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
 import { cleanLook } from "./tutor/look.js";
+import { FACE_HINTS, faceHintNote, faceHintsAllowed, isFaceHint } from "./tutor/face.js";
 import { grantGivesAccess } from "./command/access.js";
 import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
@@ -71,6 +72,8 @@ interface LiveSession {
   createdAt: number;
   /** Copied from the API key at session start so quota holds mid-session. */
   apiKeyQuota?: number;
+  /** The learner may send one-word face hints this session (see tutor/face.ts). */
+  faceHints?: boolean;
 }
 
 export interface PlanLimits {
@@ -652,6 +655,46 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * Face hints for one learner: switched on or off only by the account
+   * holder (the parent, or an adult learner themselves). Never available to
+   * a learner on a school's roster: see tutor/face.ts for why.
+   */
+  app.put<{ Params: { id: string }; Body: { enabled: boolean } }>(
+    "/students/:id/face-hints",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["enabled"],
+          additionalProperties: false,
+          properties: { enabled: { type: "boolean" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      if (req.body.enabled && (await store.orgOfStudent(req.params.id))) {
+        return reply.code(409).send({ error: "face hints are not available for learners on a school roster" });
+      }
+      await store.setFaceHints(req.params.id, req.body.enabled);
+      return { faceHints: req.body.enabled };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/face-hints", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return { faceHints: await store.getFaceHints(req.params.id), schoolRoster: Boolean(await store.orgOfStudent(req.params.id)) };
+  });
+
   /** Parent dashboard: per student — recent sessions with recaps + mastery. */
   app.get("/dashboard", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -674,6 +717,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           profile: await store.getProfile(s.id),
           routine: await store.getRoutine(s.id),
           careContact: await store.getCareContact(s.id),
+          faceHints: await store.getFaceHints(s.id),
+          onSchoolRoster: Boolean(await store.orgOfStudent(s.id)),
         })),
       ),
     };
@@ -966,6 +1011,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       participants: new Map(),
       createdAt: Date.now(),
       apiKeyQuota,
+      faceHints: faceHintsAllowed({
+        enabledByAccountHolder: await store.getFaceHints(meta.studentId),
+        signedIn: Boolean(meta.ownerUserId) && !meta.apiKeyId,
+        onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
+        viaApiKey: Boolean(meta.apiKeyId),
+      }),
     };
     // Two concurrent requests can race the rebuild; the first one in wins.
     const raced = live.get(sessionId);
@@ -1114,6 +1165,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       let apiKeyId: string | undefined;
       let apiKeyQuota: number | undefined;
       let plan = "free";
+      let signedInLearner = false;
 
       // B2B path: Tutor-as-a-Service via X-Api-Key (guest-style body, metered per key).
       const rawKey = req.headers["x-api-key"];
@@ -1147,6 +1199,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         parentEmail = user.email.endsWith("@students.local") ? undefined : user.email;
         ownerUserId = user.userId;
         plan = await effectivePlan(user);
+        signedInLearner = true;
       } else if (req.body.studentName) {
         if (!apiKeyId) {
           const day = new Date().toISOString().slice(0, 10);
@@ -1174,6 +1227,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const tutorDisplayName = tutorName ?? persona.name;
       // The chosen appearance, so the tutor can look like anyone.
       const tutorLook = await store.getTutorLook(studentIdResolved);
+      // Face hints only where the account holder allowed them, and never on a
+      // school roster, through an API key, or for a guest.
+      const faceHints = faceHintsAllowed({
+        enabledByAccountHolder: await store.getFaceHints(studentIdResolved),
+        signedIn: signedInLearner,
+        onSchoolRoster: Boolean(await store.orgOfStudent(studentIdResolved)),
+        viaApiKey: Boolean(apiKeyId),
+      });
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
@@ -1224,6 +1285,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         participants: new Map(),
         createdAt: Date.now(),
         apiKeyQuota,
+        faceHints,
       });
       // A live tutor speaks first. Generate the opening line in-character;
       // if the model stalls or fails, a warm deterministic line covers it.
@@ -1264,6 +1326,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // together (how grown-up the tutor looks). Both only ever grow.
         bond: { sessions: bondSessions, days: bondDays },
         look: tutorLook,
+        // Whether this learner may offer face hints this session.
+        faceHints,
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
@@ -1286,7 +1350,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   /** Student turn in, tutor reply streamed out as SSE. */
-  app.post<{ Params: { id: string }; Body: { text: string; format?: string; participantId?: string } }>(
+  app.post<{ Params: { id: string }; Body: { text: string; format?: string; participantId?: string; faceHint?: string } }>(
     "/sessions/:id/message",
     {
       schema: {
@@ -1298,6 +1362,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             text: { type: "string", minLength: 1, maxLength: MAX_TEXT },
             format: { type: "string", enum: Object.keys(FORMATS) },
             participantId: { type: "string", format: "uuid" },
+            faceHint: { type: "string", enum: [...FACE_HINTS] },
           },
         },
       },
@@ -1384,9 +1449,18 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         if (!reply.raw.writableEnded) abort.abort();
       });
 
+      // A one-word face hint, when this learner is allowed to give one and it
+      // is their own turn (never a class guest's). Private and ephemeral: it
+      // shapes this one reply and is never saved.
+      const hint = req.body.faceHint;
+      const turnHistory =
+        session.faceHints && !req.body.participantId && isFaceHint(hint)
+          ? [...session.history, { role: "system" as const, content: faceHintNote(hint) }]
+          : session.history;
+
       let full = "";
       try {
-        for await (const delta of chatFor(session).chat(session.history, { signal: abort.signal })) {
+        for await (const delta of chatFor(session).chat(turnHistory, { signal: abort.signal })) {
           full += delta;
           reply.raw.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
@@ -1545,17 +1619,22 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           // (rule 8), even when the words themselves seem fine. The note is
           // ephemeral (not saved to the transcript) and never shown.
           const tone = req.headers["x-voice-tone"];
-          const toneHistory =
-            tone === "low"
+          const faceHeader = req.headers["x-face-hint"];
+          const toneHistory = [
+            ...session.history,
+            ...(tone === "low"
               ? [
-                  ...session.history,
                   {
                     role: "system" as const,
                     content:
                       "[Private note, not from the student: their voice just now sounded quiet and flat. Gently check how they're doing as a person before carrying on, in your own voice. Do not mention their tone of voice or this note.]",
                   },
                 ]
-              : session.history;
+              : []),
+            ...(session.faceHints && isFaceHint(faceHeader)
+              ? [{ role: "system" as const, content: faceHintNote(faceHeader) }]
+              : []),
+          ];
 
           replyText = "";
           for await (const delta of chatFor(session).chat(toneHistory, {

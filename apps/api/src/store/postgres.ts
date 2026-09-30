@@ -501,6 +501,28 @@ export class PostgresStore implements Store {
     return { skin: r?.skin ?? null, hair: r?.hair ?? null, hairColor: r?.hairColor ?? null };
   }
 
+  async setFaceHints(studentId: string, enabled: boolean) {
+    await this.db.update(schema.students).set({ faceHints: enabled }).where(eq(schema.students.id, studentId));
+  }
+
+  async getFaceHints(studentId: string) {
+    const rows = await this.db
+      .select({ on: schema.students.faceHints })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.on === true;
+  }
+
+  async orgOfStudent(studentId: string) {
+    const rows = await this.db
+      .select({ org: schema.students.orgId })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.org ?? null;
+  }
+
   async recordIncident(incident: {
     studentId: string;
     sessionId?: string;

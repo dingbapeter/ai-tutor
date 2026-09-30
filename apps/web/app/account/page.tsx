@@ -52,6 +52,9 @@ interface StudentRow {
   profile?: LearnerProfile | null;
   routine?: LearnerRoutine | null;
   careContact?: { name: string; phone: string; relationship?: string } | null;
+  /** The account holder has let this learner turn on face hints. */
+  faceHints?: boolean;
+  onSchoolRoster?: boolean;
   plan?: StudyPlan | null;
 }
 
@@ -297,6 +300,21 @@ export default function Account() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not save that contact");
     }
+  }
+
+  async function setFaceHints(studentId: string, enabled: boolean) {
+    if (!token) return;
+    setError(null);
+    const res = await fetch(`${API}/students/${studentId}/face-hints`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? "could not change face hints");
+      return;
+    }
+    setStudents((list) => list.map((st) => (st.id === studentId ? { ...st, faceHints: enabled } : st)));
   }
 
   async function removeCareContact(studentId: string) {
@@ -607,6 +625,26 @@ export default function Account() {
               </p>
             )}
           </div>
+
+          {!s.onSchoolRoster && (
+            <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: 14.5 }}>Face hints</b>
+                <button
+                  onClick={() => setFaceHints(s.id, !s.faceHints)}
+                  className={`btn small${s.faceHints ? " ghost" : " quiet"}`}
+                  aria-pressed={Boolean(s.faceHints)}
+                >
+                  {s.faceHints ? "Switch off" : "Allow"}
+                </button>
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
+                {s.faceHints
+                  ? `${s.displayName} may turn on their camera in a lesson, if they want to. It is off at the start of every lesson. The camera is read on their own device; no picture or video is recorded or sent. Their tutor only gets a plain word now and then, like "smiling" or "looking away", and never a guess at how they feel.`
+                  : `Off. If you allow it, ${s.displayName} can choose to turn on their camera in a lesson so their tutor can respond to their face the way a person in the room would. Pictures never leave their device.`}
+              </p>
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", flexWrap: "wrap" }}>
             <label className="btn quiet small" style={{ cursor: "pointer" }}>

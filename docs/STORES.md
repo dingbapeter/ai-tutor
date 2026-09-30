@@ -156,9 +156,10 @@ looking perfect on a laptop, so there is a probe for it:
 ```
 pnpm --filter @tutor/api dev                       # the API, on 4100
 cd apps/web && NEXT_PUBLIC_API_URL=http://127.0.0.1:4100 pnpm build
-# the web app builds standalone, so the browser files are copied in and it
-# is served by its own server, not `next start`:
+# the web app builds standalone, so the browser files and the public folder
+# are copied in and it is served by its own server, not `next start`:
 cp -r .next/static .next/standalone/apps/web/.next/static
+cp -r public .next/standalone/apps/web/public
 (cd .next/standalone/apps/web && PORT=3100 node server.js)
 node tools/device/audio-probe.mjs                  # from the repo root
 ```

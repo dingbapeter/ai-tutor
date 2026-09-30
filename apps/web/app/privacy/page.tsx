@@ -11,6 +11,16 @@ export default function Privacy() {
         practice results, and usage counts. Voice recordings are transcribed and then discarded;
         we keep the text, not the audio.
       </p>
+      <h3>The camera</h3>
+      <p>
+        A tutor can see a learner&apos;s face only if the parent or guardian allows it on the account
+        page, and the learner then says yes and can turn it off at any time. It is never offered to
+        guests, to learners added by a school, or in shared classes. The camera picture is read by a
+        program running on the learner&apos;s own device and is never recorded, saved or sent to us or
+        anyone else. What reaches the tutor is at most one plain word for a look that has lasted, such
+        as &ldquo;smiling&rdquo; or &ldquo;looking away&rdquo;, used for that one reply and not kept.
+        We do not work out anyone&apos;s emotions from their face.
+      </p>
       <h3>Why</h3>
       <p>
         Solely to run the tutoring: memory across sessions, progress tracking, parent visibility,
