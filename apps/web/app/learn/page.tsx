@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
 import Face from "./Face";
+import dynamic from "next/dynamic";
+import type { Speech } from "./avatar/Avatar3D";
+// The 3D engine is heavy and only needed when a tutor has a rigged model,
+// so it arrives on demand and never on the server.
+const Avatar3D = dynamic(() => import("./avatar/Avatar3D"), { ssr: false });
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
 import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
@@ -31,6 +36,8 @@ interface Persona {
   style: string;
   color?: string;
   accent?: string;
+  /** A rigged 3D character, when the artist has made one for this tutor. */
+  model?: string;
 }
 interface Pack {
   id: string;
@@ -128,6 +135,11 @@ export default function Home() {
   const photoInput = useRef<HTMLInputElement>(null);
   const convoLoop = useRef<ConversationLoop | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
+  /** The words behind the voice now playing, for lip shapes timed to it. */
+  const speechText = useRef<string>("");
+  // A browser without WebGL, or a model that would not load, gets the
+  // drawn face instead. Remembered per model so it is not retried every render.
+  const [avatarFallback, setAvatarFallback] = useState<string | null>(null);
   const busyRef = useRef(false);
   const speakingRef = useRef(false);
   // At most one utterance waits while the tutor is mid-reply; a newer one
@@ -149,9 +161,13 @@ export default function Home() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null);
   function getMouthLevel(): number {
+    return getMouthLevelOrNull() ?? 0;
+  }
+  /** Live loudness, or null when the voice cannot be analysed here. */
+  function getMouthLevelOrNull(): number | null {
     const analyser = analyserRef.current;
     const data = levelData.current;
-    if (!analyser || !data) return 0;
+    if (!analyser || !data) return null;
     analyser.getByteTimeDomainData(data);
     let sum = 0;
     for (let i = 0; i < data.length; i++) {
@@ -239,7 +255,18 @@ export default function Home() {
     };
   }, [sessionId]);
 
-  function playAudio(src: Blob | string) {
+  function getSpeech(): Speech | null {
+    const audio = currentAudio.current;
+    if (!audio) return null;
+    return {
+      text: speechText.current,
+      time: audio.currentTime,
+      duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+    };
+  }
+
+  function playAudio(src: Blob | string, text = "") {
+    speechText.current = text;
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
     // iPhones need the element itself marked inline, and a nudge in case the
@@ -339,7 +366,7 @@ export default function Home() {
         body: JSON.stringify({ text: text.slice(0, 2000), personaId, language }),
       });
       if (!res.ok) throw new Error("voice unavailable");
-      playAudio(await res.blob());
+      playAudio(await res.blob(), text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "voice unavailable");
     }
@@ -1139,6 +1166,21 @@ export default function Home() {
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className={`avatar-live${convo === "hearing" ? " avatar-hearing" : ""}`}>
+            {persona?.model && avatarFallback !== persona.model ? (
+              <Avatar3D
+                modelUrl={persona.model}
+                color={persona.color}
+                speaking={speaking}
+                thinking={busy && !speaking}
+                listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
+                attentive={input.trim().length > 0}
+                mood={tutorMood}
+                getLevel={getMouthLevelOrNull}
+                getSpeech={getSpeech}
+                onFallback={() => setAvatarFallback(persona.model ?? null)}
+                size={96}
+              />
+            ) : (
             <Face
               personaId={persona?.id}
               color={persona?.color}
@@ -1156,6 +1198,7 @@ export default function Home() {
               getLevel={getMouthLevel}
               size={96}
             />
+            )}
           </span>
           <div>
             <h2>

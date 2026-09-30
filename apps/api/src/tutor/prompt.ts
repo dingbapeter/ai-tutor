@@ -14,6 +14,8 @@ export interface Persona {
   systemStyle: string;
   color?: string;
   accent?: string;
+  /** A rigged glTF character (ARKit sliders), served from the web app, when the artist has made one. */
+  model?: string;
 }
 
 export interface CurriculumProblem {

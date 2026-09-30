@@ -1003,13 +1003,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   });
 
   app.get("/personas", async () =>
-    loadPersonas().map(({ id, name, style, voiceId, color, accent }) => ({
+    loadPersonas().map(({ id, name, style, voiceId, color, accent, model }) => ({
       id,
       name,
       style,
       voiceId,
       color,
       accent,
+      ...(model ? { model } : {}),
     })),
   );
 
