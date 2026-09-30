@@ -73,26 +73,45 @@ if (sizeMb < 0.5 && !lenient) warn("under half a megabyte: is this the real char
 // ---------------------------------------------------------------- accessors
 const COMP = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 const NUM = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+function readComponent(buf, p, componentType) {
+  switch (componentType) {
+    case 5126: return buf.readFloatLE(p);
+    case 5123: return buf.readUInt16LE(p);
+    case 5125: return buf.readUInt32LE(p);
+    case 5121: return buf.readUInt8(p);
+    case 5122: return buf.readInt16LE(p);
+    default: return buf.readInt8(p);
+  }
+}
+/**
+ * Read an accessor into plain numbers. Handles the two forms real exporters
+ * use for morph targets: a dense buffer, and "sparse" (no buffer of its own,
+ * meaning zeros, plus a short list of the vertices that actually move).
+ * Blender writes morph targets sparse, so this is the common case, not an
+ * edge case.
+ */
 function readAccessor(i) {
   const a = json.accessors[i];
-  const bv = json.bufferViews[a.bufferView];
   const n = NUM[a.type], cs = COMP[a.componentType];
-  const stride = bv.byteStride ?? n * cs;
-  const start = (bv.byteOffset ?? 0) + (a.byteOffset ?? 0);
   const out = new Float64Array(a.count * n);
-  for (let k = 0; k < a.count; k++) {
-    for (let c = 0; c < n; c++) {
-      const p = start + k * stride + c * cs;
-      let v;
-      switch (a.componentType) {
-        case 5126: v = bin.readFloatLE(p); break;
-        case 5123: v = bin.readUInt16LE(p); break;
-        case 5125: v = bin.readUInt32LE(p); break;
-        case 5121: v = bin.readUInt8(p); break;
-        case 5122: v = bin.readInt16LE(p); break;
-        default: v = bin.readInt8(p);
-      }
-      out[k * n + c] = v;
+  if (a.bufferView !== undefined) {
+    const bv = json.bufferViews[a.bufferView];
+    const stride = bv.byteStride ?? n * cs;
+    const start = (bv.byteOffset ?? 0) + (a.byteOffset ?? 0);
+    for (let k = 0; k < a.count; k++) {
+      for (let c = 0; c < n; c++) out[k * n + c] = readComponent(bin, start + k * stride + c * cs, a.componentType);
+    }
+  }
+  if (a.sparse) {
+    const sp = a.sparse;
+    const ibv = json.bufferViews[sp.indices.bufferView];
+    const vbv = json.bufferViews[sp.values.bufferView];
+    const ics = COMP[sp.indices.componentType];
+    const iStart = (ibv.byteOffset ?? 0) + (sp.indices.byteOffset ?? 0);
+    const vStart = (vbv.byteOffset ?? 0) + (sp.values.byteOffset ?? 0);
+    for (let k = 0; k < sp.count; k++) {
+      const idx = readComponent(bin, iStart + k * ics, sp.indices.componentType);
+      for (let c = 0; c < n; c++) out[idx * n + c] = readComponent(bin, vStart + (k * n + c) * cs, a.componentType);
     }
   }
   return { data: out, n, count: a.count };
