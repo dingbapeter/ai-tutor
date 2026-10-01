@@ -113,3 +113,13 @@ us more than the feature gains.
 3. Install the voice on the TTS box. Piper voices route automatically by id
    shape, no code change.
 4. Credit the source in `config/credits.json` if the licence asks for it.
+
+## The interface itself
+
+Teaching in a language and showing the app in it are two different
+things. The tutor's languages are the table above. The app's own words
+(buttons, labels, the status line, the home page, sign-in, the camera
+consent) are in `apps/web/app/i18n/`, one dictionary per language, with
+six drafts shipped and none shown to a child until a speaker has reviewed
+it. How that works, and how to review one: docs/BROWSERS.md, "The app's
+own words in other languages".

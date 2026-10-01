@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 import Boot from "./Boot";
 import Chrome from "./Chrome";
+import { LangProvider } from "./i18n";
 
 export const metadata = {
   title: "Dingba",
@@ -25,9 +26,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Boot />
-        <Chrome />
-        {children}
+        <LangProvider>
+          <Boot />
+          <Chrome />
+          {children}
+        </LangProvider>
       </body>
     </html>
   );

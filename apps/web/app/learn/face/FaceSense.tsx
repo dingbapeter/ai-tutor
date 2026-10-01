@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useLang } from "../../i18n";
 import { headTurn, labelFrame, prune, steadyLabel, type Label, type Sample } from "./expression";
 
 const SAMPLE_MS = 250;
@@ -38,6 +39,7 @@ export function canSeeFace(): boolean {
 }
 
 export default function FaceSense({ tutorName, onSteady }: Props) {
+  const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("off");
   const [problem, setProblem] = useState<string | null>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -85,7 +87,7 @@ export default function FaceSense({ tutorName, onSteady }: Props) {
       });
     } catch {
       cleanup();
-      setProblem("The camera could not be opened. Check the permission, or carry on without it.");
+      setProblem(t("The camera could not be opened. Check the permission, or carry on without it."));
       setPhase("failed");
       return;
     }
@@ -111,7 +113,7 @@ export default function FaceSense({ tutorName, onSteady }: Props) {
       landmarker = await make("GPU").catch(() => make("CPU"));
     } catch {
       cleanup();
-      setProblem("This device could not run the face reader. The lesson carries on as normal.");
+      setProblem(t("This device could not run the face reader. The lesson carries on as normal."));
       setPhase("failed");
       return;
     }
@@ -180,41 +182,38 @@ export default function FaceSense({ tutorName, onSteady }: Props) {
       <video
         ref={video}
         className="face-mirror"
-        aria-label="Your camera, as your tutor's face reader sees it"
+        aria-label={t("Your camera, as your tutor's face reader sees it")}
         style={{ display: phase === "on" ? "block" : "none" }}
       />
 
       {phase === "off" || phase === "failed" ? (
-        <button className="chip" onClick={ask} title={`Let ${tutorName} see your face`}>
-          🙂 Let {tutorName} see me
+        <button className="chip" onClick={ask} title={t("Let {tutor} see your face", { tutor: tutorName })}>
+          🙂 {t("Let {tutor} see me", { tutor: tutorName })}
         </button>
       ) : null}
 
-      {phase === "starting" && <span className="face-note">Opening the camera…</span>}
+      {phase === "starting" && <span className="face-note">{t("Opening the camera…")}</span>}
 
       {phase === "on" && (
         <span className="face-note">
-          <span className="face-dot" aria-hidden="true" /> Camera on, stays on this device{" "}
-          <button className="chip" onClick={stop}>Turn off</button>
+          <span className="face-dot" aria-hidden="true" /> {t("Camera on, stays on this device")}{" "}
+          <button className="chip" onClick={stop}>{t("Turn off")}</button>
         </span>
       )}
 
       {phase === "failed" && problem && <span className="face-note">{problem}</span>}
 
       {phase === "asking" && (
-        <div className="face-ask" role="dialog" aria-label={`Let ${tutorName} see your face?`}>
-          <b>Let {tutorName} see your face?</b>
+        <div className="face-ask" role="dialog" aria-label={t("Let {tutor} see your face?", { tutor: tutorName })}>
+          <b>{t("Let {tutor} see your face?", { tutor: tutorName })}</b>
+          <p>{t("Your camera stays on this device. No picture or video is recorded, saved or sent anywhere.")}</p>
           <p>
-            Your camera stays on this device. No picture or video is recorded, saved or sent anywhere.
+            {t("{tutor} only gets one plain word now and then, like \"smiling\" or \"looking away\", so {tutor} can respond the way someone sitting beside you would.", { tutor: tutorName })}
           </p>
-          <p>
-            {tutorName} only gets one plain word now and then, like &quot;smiling&quot; or &quot;looking away&quot;,
-            so {tutorName} can respond the way someone sitting beside you would.
-          </p>
-          <p>The first time, this downloads about 15 MB. You can turn it off any time.</p>
+          <p>{t("The first time, this downloads about 15 MB. You can turn it off any time.")}</p>
           <div className="face-ask-row">
-            <button className="btn" onClick={agree}>Turn on camera</button>
-            <button className="btn ghost" onClick={() => setPhase("off")}>Not now</button>
+            <button className="btn" onClick={agree}>{t("Turn on camera")}</button>
+            <button className="btn ghost" onClick={() => setPhase("off")}>{t("Not now")}</button>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { clearRef, storedRef } from "../referral";
+import { useLang } from "../i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -69,6 +70,7 @@ const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
 ];
 
 export default function Account() {
+  const { t, tx } = useLang();
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -405,7 +407,7 @@ export default function Account() {
 
   async function forgotPassword() {
     if (!email) {
-      setError("type your email above first, then tap forgot password");
+      setError(t("Type your email above first, then tap forgot password."));
       return;
     }
     await fetch(`${API}/auth/forgot`, {
@@ -420,7 +422,7 @@ export default function Account() {
     return (
       <main className="shell" style={{ maxWidth: 480 }}>
         <div className="hero fadeUp" style={{ paddingBottom: 12 }}>
-          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+          <h1>{mode === "login" ? t("Welcome back") : t("Create your account")}</h1>
         </div>
         {error && <p className="err">{error}</p>}
         <div className="card fadeUp">
@@ -429,30 +431,30 @@ export default function Account() {
           )}
           {mode === "register" && (
             <>
-              <label className="lbl">Your name</label>
+              <label className="lbl">{t("Your name")}</label>
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="inp" />
-              <label className="lbl">I am a…</label>
+              <label className="lbl">{t("I am a…")}</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setRole("parent")} className={`pill${role === "parent" ? " on" : ""}`} style={{ flex: 1 }}>
-                  <span><b>Parent</b><br /><small>my kids will learn</small></span>
+                  <span><b>{t("Parent")}</b><br /><small>{t("my kids will learn")}</small></span>
                 </button>
                 <button onClick={() => setRole("student")} className={`pill${role === "student" ? " on" : ""}`} style={{ flex: 1 }}>
-                  <span><b>Learner</b><br /><small>it&apos;s for me</small></span>
+                  <span><b>{t("Learner")}</b><br /><small>{t("it's for me")}</small></span>
                 </button>
               </div>
             </>
           )}
-          <label className="lbl">Email</label>
+          <label className="lbl">{t("Email")}</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} className="inp" type="email" />
-          <label className="lbl">Password {mode === "register" && <small>(8+ characters)</small>}</label>
+          <label className="lbl">{t("Password")} {mode === "register" && <small>{t("(8+ characters)")}</small>}</label>
           <input value={password} onChange={(e) => setPassword(e.target.value)} className="inp" type="password"
             onKeyDown={(e) => e.key === "Enter" && submit()} />
           {mode === "register" && (
             <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 0 }}>
-              By creating an account you confirm you are an adult, you agree to our{" "}
-              <a href="/terms">Terms</a> and{" "}
-              <a href="/privacy">Privacy Policy</a>, and you consent to your
-              children&apos;s learning data being processed to run their tutoring.
+              {tx("By creating an account you confirm you are an adult, you agree to our {terms} and {privacy}, and you consent to your children's learning data being processed to run their tutoring.", {
+                terms: <a href="/terms">{t("Terms")}</a>,
+                privacy: <a href="/privacy">{t("Privacy Policy")}</a>,
+              })}
             </p>
           )}
           <button
@@ -461,22 +463,22 @@ export default function Account() {
             style={{ marginTop: 18 }}
             disabled={mode === "register" && signupsPaused.paused}
           >
-            {mode === "login" ? "Sign in" : signupsPaused.paused ? "Signups are closed right now" : "Create account"}
+            {mode === "login" ? t("Sign in") : signupsPaused.paused ? t("Signups are closed right now") : t("Create account")}
           </button>
           <p style={{ textAlign: "center", marginBottom: 0 }}>
             <button onClick={() => setMode(mode === "login" ? "register" : "login")}
               style={{ border: "none", background: "none", color: "var(--brand)", cursor: "pointer", fontFamily: "inherit", fontSize: 14.5 }}>
-              {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
+              {mode === "login" ? t("New here? Create an account") : t("Already have an account? Sign in")}
             </button>
           </p>
           {mode === "login" && (
             <p style={{ textAlign: "center", marginBottom: 0 }}>
               {forgotSent ? (
-                <small style={{ color: "var(--ok)" }}>If that email has an account, a reset link is on its way. ✉️</small>
+                <small style={{ color: "var(--ok)" }}>{t("If that email has an account, a reset link is on its way.")} ✉️</small>
               ) : (
                 <button onClick={forgotPassword}
                   style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-                  Forgot password?
+                  {t("Forgot password?")}
                 </button>
               )}
             </p>

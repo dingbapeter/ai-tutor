@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LanguageSwitch, useLang } from "./i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -33,6 +34,7 @@ function PlatformNotice() {
  * home screen) so the tutor gets the whole screen. */
 export default function Chrome() {
   const path = usePathname();
+  const { t } = useLang();
   // The Command Centre carries its own chrome; the learner bar has no place there.
   if (path.startsWith("/command")) return null;
   return (
@@ -42,8 +44,9 @@ export default function Chrome() {
           Dingba<span>.</span>
         </a>
         <nav>
-          <a href="/learn" className={path.startsWith("/learn") ? "on" : ""}>Learn</a>
-          <a href="/account" className={path.startsWith("/account") ? "on" : ""}>Account</a>
+          <a href="/learn" className={path.startsWith("/learn") ? "on" : ""}>{t("Learn")}</a>
+          <a href="/account" className={path.startsWith("/account") ? "on" : ""}>{t("Account")}</a>
+          <LanguageSwitch />
         </nav>
       </header>
       <PlatformNotice />

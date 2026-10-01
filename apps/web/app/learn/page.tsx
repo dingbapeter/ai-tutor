@@ -18,6 +18,8 @@ import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearan
 import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
 import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
 import { directionFor } from "./rtl";
+import { useLang } from "../i18n";
+import Highlighted from "../Highlighted";
 import Board from "./Board";
 import {
   enqueue, loadQueue, newId, partitionStale, readyFor, remove, saveQueue, shouldWait, waitingLine,
@@ -69,12 +71,14 @@ type Format = "plain" | "story" | "comic" | "song";
 // The living persona lives in Face.tsx; its inner weather in face-logic.ts.
 
 export default function Home() {
+  const { t, suggest } = useLang();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [personaId, setPersonaId] = useState("");
   const [packId, setPackId] = useState("");
   const [languages, setLanguages] = useState<Language[]>([]);
   const [language, setLanguage] = useState("en");
+  useEffect(() => suggest(language), [language, suggest]);
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
@@ -357,7 +361,7 @@ export default function Home() {
       return;
     }
     if (!conversationSupported()) {
-      setError("This browser can't hold an open conversation. Use hold-to-talk instead.");
+      setError(t("This browser can't hold an open conversation. Use hold-to-talk instead."));
       return;
     }
     setError(null);
@@ -724,7 +728,7 @@ export default function Home() {
           saveQueue(storageOrNull(), next.queue);
           setError(null);
         } else {
-          setError("Too many messages are already waiting for the connection. Try again once you are back online.");
+          setError(t("Too many messages are already waiting for the connection. Try again once you are back online."));
         }
       } else if (outcome.error) {
         setError(outcome.error);
@@ -780,14 +784,14 @@ export default function Home() {
     if (busy || recording) return;
     setError(null);
     if (!canCaptureVoice(window)) {
-      setError("This browser cannot record voice. You can still type, and your tutor still speaks back.");
+      setError(t("This browser cannot record voice. You can still type, and your tutor still speaks back."));
       return;
     }
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setError("We can't reach your microphone. Check permissions and try again.");
+      setError(t("We can't reach your microphone. Check permissions and try again."));
       return;
     }
     // Past this point the microphone is OPEN. Anything that goes wrong must
@@ -861,7 +865,7 @@ export default function Home() {
       setRecording(true);
     } catch {
       stream.getTracks().forEach((t) => t.stop());
-      setError("This browser could not start recording. You can still type, and your tutor still speaks back.");
+      setError(t("This browser could not start recording. You can still type, and your tutor still speaks back."));
     }
   }
 
@@ -925,7 +929,7 @@ export default function Home() {
   async function sendPhoto(file: File, label = "📷 Shared a photo") {
     if (!sessionId || busy) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError("That picture is too large. Keep it under 5MB.");
+      setError(t("That picture is too large. Keep it under 5MB."));
       return;
     }
     setBusy(true);
@@ -946,7 +950,7 @@ export default function Home() {
       ]);
       if (voiceOn && json.reply) speakMessage(json.reply);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not send that picture");
+      setError(e instanceof Error ? e.message : t("That picture could not be sent."));
       setMessages((m) => (m[m.length - 1]?.content === `${label.slice(0, 2)} …` ? m.slice(0, -1) : m));
     } finally {
       setBusy(false);
@@ -979,11 +983,11 @@ export default function Home() {
       setVerdicts((v) => ({ ...v, [p.index]: json.correct }));
       setMessages((m) => [
         ...m,
-        { role: "user", content: `My answer to "${p.prompt}": ${answer}` },
+        { role: "user", content: t("My answer to \"{prompt}\": {answer}", { prompt: p.prompt, answer }) },
         { role: "assistant", content: json.feedback },
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "practice failed");
+      setError(e instanceof Error ? e.message : t("That answer could not be checked."));
     } finally {
       setBusy(false);
     }
@@ -1000,7 +1004,7 @@ export default function Home() {
       setSessionId(null);
       setShowPractice(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not end session");
+      setError(e instanceof Error ? e.message : t("The session could not be ended."));
     }
   }
 
@@ -1010,11 +1014,11 @@ export default function Home() {
         <div className="card fadeUp">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Face personaId={persona?.id} color={persona?.color} accent={persona?.accent} speaking={false} mood="warm" bond={bond} live={false} size={56} />
-            <h2 style={{ margin: 0 }}>Session recap from {sessionTutorName ?? persona?.name}</h2>
+            <h2 style={{ margin: 0 }}>{t("Session recap from {name}", { name: sessionTutorName ?? persona?.name ?? "" })}</h2>
           </div>
           <p style={{ whiteSpace: "pre-wrap" }}>{recap}</p>
           <button className="btn big" onClick={() => { setRecap(null); setMessages([]); }}>
-            Start another session
+            {t("Start another session")}
           </button>
         </div>
       </main>
@@ -1025,17 +1029,17 @@ export default function Home() {
     return (
       <main className="shell">
         <div className="hero fadeUp">
-          <h1>What do you want to <span>learn</span> today?</h1>
-          <p>Ask anything. Learn anything. Your tutor remembers you.</p>
+          <h1><Highlighted text={t("What do you want to {learn} today?")} /></h1>
+          <p>{t("Ask anything. Learn anything. Your tutor remembers you.")}</p>
         </div>
         {error && <p className="err">{error}</p>}
         {personas.length === 0 && (
-          <p className="notice">Waking your tutors up. Give it a moment, then try again.</p>
+          <p className="notice">{t("Waking your tutors up. Give it a moment, then try again.")}</p>
         )}
         <div className="card fadeUp">
           {family.length > 0 ? (
             <>
-              <label className="lbl">Who&apos;s learning today?</label>
+              <label className="lbl">{t("Who's learning today?")}</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {family.map((s) => (
                   <button key={s.id} onClick={() => { setStudentId(s.id); setTutorNameDraft(s.tutorName ?? ""); setTutorNameSaved(false); setLookDraft(s.look ?? emptyLook); }}
@@ -1047,21 +1051,21 @@ export default function Home() {
             </>
           ) : (
             <>
-              <label className="lbl">Your name</label>
+              <label className="lbl">{t("Your name")}</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder="Ada" />
 
-              <label className="lbl">Parent email (optional, for session recaps)</label>
+              <label className="lbl">{t("Parent email (optional, for session recaps)")}</label>
               <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className="inp" placeholder="parent@example.com" type="email" />
             </>
           )}
 
           {lessonSkillId && (
             <p className="notice" style={{ marginTop: 0 }}>
-              Starting from your plan: this session opens as a lesson. Pick your tutor and go.
+              {t("Starting from your plan: this session opens as a lesson. Pick your tutor and go.")}
             </p>
           )}
 
-          <label className="lbl">Pick your tutor</label>
+          <label className="lbl">{t("Pick your tutor")}</label>
           <div className="grid2">
             {personas.map((p) => (
               <button key={p.id} onClick={() => setPersonaId(p.id)}
@@ -1075,7 +1079,7 @@ export default function Home() {
           {token && studentId && personaId && (
             <>
               <label className="lbl">
-                Give your tutor their own name <small>(optional, they keep their personality)</small>
+                {t("Give your tutor their own name")} <small>{t("(optional, they keep their personality)")}</small>
               </label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
@@ -1083,16 +1087,16 @@ export default function Home() {
                   onChange={(e) => { setTutorNameDraft(e.target.value); setTutorNameSaved(false); }}
                   className="inp"
                   style={{ flex: 1 }}
-                  placeholder={persona?.name ?? "Their name"}
+                  placeholder={persona?.name ?? t("Their name")}
                   maxLength={30}
                 />
                 <button className="btn small" onClick={saveTutorName} disabled={tutorNameSaved}>
-                  {tutorNameSaved ? "Saved" : "Save name"}
+                  {tutorNameSaved ? t("Saved") : t("Save name")}
                 </button>
               </div>
 
               <label className="lbl">
-                Make your tutor look like anyone <small>(they keep their voice and personality)</small>
+                {t("Make your tutor look like anyone")} <small>{t("(they keep their voice and personality)")}</small>
               </label>
               <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <Face
@@ -1108,7 +1112,7 @@ export default function Home() {
                   size={92}
                 />
                 <div style={{ flex: 1, minWidth: 220 }}>
-                  <small style={{ color: "var(--text-dim)" }}>Skin tone</small>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Skin tone")}</small>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
                     {Object.entries(SKIN_TONES).map(([key, t]) => (
                       <button key={key} title={key} aria-label={`skin ${key}`}
@@ -1117,7 +1121,7 @@ export default function Home() {
                           border: lookDraft.skin === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
                     ))}
                   </div>
-                  <small style={{ color: "var(--text-dim)" }}>Hair</small>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Hair")}</small>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
                     {HAIR_STYLES.map((key) => (
                       <button key={key} onClick={() => saveLook({ hair: key })}
@@ -1125,7 +1129,7 @@ export default function Home() {
                         style={{ padding: "3px 9px", fontSize: 12 }}>{key}</button>
                     ))}
                   </div>
-                  <small style={{ color: "var(--text-dim)" }}>Hair colour</small>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Hair colour")}</small>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 0" }}>
                     {Object.entries(HAIR_COLORS).map(([key, hex]) => (
                       <button key={key} title={key} aria-label={`hair ${key}`}
@@ -1134,14 +1138,14 @@ export default function Home() {
                           border: lookDraft.hairColor === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
                     ))}
                     <button onClick={() => saveLook({ skin: null, hair: null, hairColor: null })}
-                      className="btn quiet small" style={{ marginLeft: 4 }}>Reset</button>
+                      className="btn quiet small" style={{ marginLeft: 4 }}>{t("Reset")}</button>
                   </div>
                 </div>
               </div>
             </>
           )}
 
-          <label className="lbl">What are we working on?</label>
+          <label className="lbl">{t("What are we working on?")}</label>
           <div className="grid2">
             {packs.map((p) => (
               <button key={p.id} onClick={() => setPackId(p.id)}
@@ -1151,7 +1155,7 @@ export default function Home() {
             ))}
           </div>
 
-          <label className="lbl">Which language should your tutor teach in?</label>
+          <label className="lbl">{t("Which language should your tutor teach in?")}</label>
           <select
             value={language}
             onChange={(e) => {
@@ -1159,20 +1163,19 @@ export default function Home() {
               localStorage.setItem("dingba_language", e.target.value);
             }}
             className="inp"
-            aria-label="Teaching language"
+            aria-label={t("Teaching language")}
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.native}
                 {l.native !== l.name ? ` (${l.name})` : ""}
-                {l.speaksAloud ? "" : " · text and listening"}
+                {l.speaksAloud ? "" : ` · ${t("text and listening")}`}
               </option>
             ))}
           </select>
           {languages.find((l) => l.code === language && !l.speaksAloud) && (
             <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "6px 0 0" }}>
-              Your tutor teaches and understands you in this language today. A speaking
-              voice for it is on the way.
+              {t("Your tutor teaches and understands you in this language today. A speaking voice for it is on the way.")}
             </p>
           )}
 
@@ -1181,34 +1184,34 @@ export default function Home() {
             onClick={startSession}
             className="btn big"
             style={{ marginTop: 22 }}>
-            Start session
+            {t("Start session")}
           </button>
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             {!joinOpen ? (
               <p style={{ textAlign: "center", margin: 0 }}>
                 <button onClick={() => setJoinOpen(true)} className="btn ghost small">
-                  Have a class code? Join a friend&apos;s live class
+                  {t("Have a class code? Join a friend's live class")}
                 </button>
               </p>
             ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)}
-                  className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Class code" />
+                  className="inp" style={{ flex: 1, minWidth: 110 }} placeholder={t("Class code")} />
                 {!token && (
                   <input value={joinName} onChange={(e) => setJoinName(e.target.value)}
-                    className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Your name" />
+                    className="inp" style={{ flex: 1, minWidth: 110 }} placeholder={t("Your name")} />
                 )}
-                <button onClick={joinClass} className="btn">Join class</button>
+                <button onClick={joinClass} className="btn">{t("Join class")}</button>
               </div>
             )}
           </div>
         </div>
         <p className="footlinks">
           <a href="/account">
-            {token ? "Family dashboard" : "Parents: create an account for progress reports"}
+            {token ? t("Family dashboard") : t("Parents: create an account for progress reports")}
           </a>
           {" · "}
-          <a href="/credits">Built on open work 💙</a>
+          <a href="/credits">{t("Built on open work 💙")}</a>
         </p>
       </main>
     );
@@ -1256,87 +1259,86 @@ export default function Home() {
           <div>
             <h2>
               {sessionTutorName ?? persona?.name}{" "}
-              <small style={{ fontWeight: 500, fontSize: 12, color: "var(--text-dim)" }} title="Your friendship grows with every session">
-                · {bondInfo.label}
+              <small style={{ fontWeight: 500, fontSize: 12, color: "var(--text-dim)" }} title={t("Your friendship grows with every session")}>
+                · {t(bondInfo.label)}
               </small>
             </h2>
             <div className="status">
-              {lessonTitle ? `Lesson: ${lessonTitle} · ` : ""}
+              {lessonTitle ? `${t("Lesson: {title}", { title: lessonTitle })} · ` : ""}
               {speaking
-                ? convo !== "off" ? "speaking, talk over me any time" : "speaking…"
+                ? convo !== "off" ? t("speaking, talk over me any time") : t("speaking…")
                 : busy
-                  ? "thinking…"
+                  ? t("thinking…")
                   : convo === "hearing"
-                    ? "hearing you…"
+                    ? t("hearing you…")
                     : convo === "listening"
-                      ? "in conversation, just talk"
-                      : "listening"}
+                      ? t("in conversation, just talk")
+                      : t("listening")}
             </div>
             {faceAllowed && !participantId && canSeeFace() && (
               <FaceSense
-                tutorName={sessionTutorName ?? persona?.name ?? "your tutor"}
+                tutorName={sessionTutorName ?? persona?.name ?? t("your tutor")}
                 onSteady={(label) => { steadyFace.current = label; }}
               />
             )}
           </div>
         </div>
         <div className="session-actions">
-          <button onClick={() => setVoiceOn(!voiceOn)} className="btn quiet small" title="Your tutor reads replies aloud">
-            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
+          <button onClick={() => setVoiceOn(!voiceOn)} className="btn quiet small" title={t("Your tutor reads replies aloud")}>
+            {voiceOn ? `🔊 ${t("Voice on")}` : `🔇 ${t("Voice off")}`}
           </button>
           {!participantId && (
             <>
-              {assessable && <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>}
-              <button onClick={inviteFriend} className="btn quiet small">Invite</button>
-              {examinable && <button onClick={startExam} className="btn quiet small">Mock exam</button>}
-              <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>
-              <button onClick={endSession} className="btn ghost small">End</button>
+              {assessable && <button onClick={startDiagnostic} className="btn quiet small">{t("Check my level")}</button>}
+              <button onClick={inviteFriend} className="btn quiet small">{t("Invite")}</button>
+              {examinable && <button onClick={startExam} className="btn quiet small">{t("Mock exam")}</button>}
+              <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>{t("Practice")}</button>
+              <button onClick={endSession} className="btn ghost small">{t("End")}</button>
             </>
           )}
-          {participantId && <span className="status">in {hostName}&apos;s class</span>}
+          {participantId && <span className="status">{t("in {name}'s class", { name: hostName ?? "" })}</span>}
         </div>
       </div>
 
       {inviteCode && (
         <div className="card tray" style={{ textAlign: "center" }}>
-          Friends join with code <span className="invite-code">{inviteCode}</span>
-          <div><small className="status">They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+          {t("Friends join with code")} <span className="invite-code">{inviteCode}</span>
+          <div><small className="status">{t("They tap \"Join a friend's live class\" on the home page and enter it.")}</small></div>
         </div>
       )}
 
       {care && (
         <div className="care-card fadeUp">
           <div style={{ flex: 1 }}>
-            <b>You don&apos;t have to sit with this alone.</b>
+            <b>{t("You don't have to sit with this alone.")}</b>
             <p style={{ margin: "4px 0 0", fontSize: 14.5 }}>
-              {care.name}
-              {care.relationship ? ` (${care.relationship})` : ""} is here for you. One tap and their phone rings.
+              {t("{who} is here for you. One tap and their phone rings.", { who: `${care.name}${care.relationship ? ` (${care.relationship})` : ""}` })}
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <a href={`tel:${care.phone.replace(/[^0-9+]/g, "")}`} className="btn care-call">
-              📞 Call {care.name.split(" ")[0]}
+              📞 {t("Call {name}", { name: care.name.split(" ")[0] })}
             </a>
-            <button onClick={() => setCare(null)} className="btn ghost small">Not now</button>
+            <button onClick={() => setCare(null)} className="btn ghost small">{t("Not now")}</button>
           </div>
         </div>
       )}
 
       {diagProblems && (
         <div className="card tray">
-          <b>Level check. Answer what you can, skip what you can&apos;t. Results at the end.</b>
+          <b>{t("Level check. Answer what you can, skip what you can't. Results at the end.")}</b>
           {diagProblems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>{diagSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
               <input value={diagAnswers[p.index] ?? ""} disabled={diagSubmitted.has(p.index)}
                 onChange={(e) => setDiagAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                className="inp" placeholder="answer" />
+                className="inp" placeholder={t("answer")} />
               <button onClick={() => submitDiagAnswer(p.index)} disabled={diagSubmitted.has(p.index)}
-                className="btn quiet small">Lock in</button>
+                className="btn quiet small">{t("Lock in")}</button>
             </div>
           ))}
           <button onClick={finishDiagnostic} disabled={busy || diagSubmitted.size === 0} className="btn" style={{ marginTop: 8 }}>
-            Show me where I stand
+            {t("Show me where I stand")}
           </button>
         </div>
       )}
@@ -1344,14 +1346,14 @@ export default function Home() {
       {diagResult && (
         <div className="card tray">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>Where you stand</b>
-            <button onClick={() => setDiagResult(null)} className="btn quiet small">Close</button>
+            <b>{t("Where you stand")}</b>
+            <button onClick={() => setDiagResult(null)} className="btn quiet small">{t("Close")}</button>
           </div>
           {diagResult.skills.map((s) => (
             <div key={s.skillId} style={{ margin: "8px 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 3 }}>
                 <span>{s.title}</span>
-                <span style={{ color: "var(--text-dim)" }}>{s.assessed ? `${s.pct}%` : "not assessed"}</span>
+                <span style={{ color: "var(--text-dim)" }}>{s.assessed ? `${s.pct}%` : t("not assessed")}</span>
               </div>
               <div style={{ background: "var(--surface-2)", borderRadius: 6, height: 9 }}>
                 <div style={{
@@ -1363,7 +1365,7 @@ export default function Home() {
             </div>
           ))}
           <p style={{ margin: "8px 0 0", fontSize: 14 }}>
-            Starting point: <b>{diagResult.recommend.title}</b>{" "}
+            {t("Starting point:")} <b>{diagResult.recommend.title}</b>{" "}
             <span style={{ color: "var(--text-dim)" }}>({diagResult.recommend.reason})</span>
           </p>
         </div>
@@ -1371,26 +1373,26 @@ export default function Home() {
 
       {examProblems && (
         <div className="card tray">
-          <b>Mock exam. Answers are checked at the end, keep moving.</b>
+          <b>{t("Mock exam. Answers are checked at the end, keep moving.")}</b>
           {examProblems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>{examSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
               <input value={examAnswers[p.index] ?? ""} disabled={examSubmitted.has(p.index)}
                 onChange={(e) => setExamAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                className="inp" placeholder="answer" />
+                className="inp" placeholder={t("answer")} />
               <button onClick={() => submitExamAnswer(p.index)} disabled={examSubmitted.has(p.index)}
-                className="btn quiet small">Lock in</button>
+                className="btn quiet small">{t("Lock in")}</button>
             </div>
           ))}
           <button onClick={finishExam} disabled={busy} className="btn" style={{ marginTop: 8 }}>
-            Finish exam and get my results
+            {t("Finish exam and get my results")}
           </button>
         </div>
       )}
 
       {showPractice && (
         <div className="card tray">
-          {problems.length === 0 && <small>No practice problems in this pack yet.</small>}
+          {problems.length === 0 && <small>{t("No practice problems in this pack yet.")}</small>}
           {problems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>
@@ -1402,9 +1404,9 @@ export default function Home() {
                 value={practiceAnswers[p.index] ?? ""}
                 onChange={(e) => setPracticeAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
                 className="inp"
-                placeholder="answer"
+                placeholder={t("answer")}
               />
-              <button onClick={() => submitPractice(p)} disabled={busy} className="btn quiet small">Check</button>
+              <button onClick={() => submitPractice(p)} disabled={busy} className="btn quiet small">{t("Check")}</button>
             </div>
           ))}
         </div>
@@ -1416,8 +1418,8 @@ export default function Home() {
             {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
             {m.role === "assistant" && m.content && !m.content.startsWith("(") && (
               <span className="tools">
-                <button onClick={() => speakMessage(m.content)} title="Hear this">🔊</button>
-                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title="Copy">📋</button>
+                <button onClick={() => speakMessage(m.content)} title={t("Hear this")}>🔊</button>
+                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title={t("Copy")}>📋</button>
               </span>
             )}
           </div>
@@ -1429,7 +1431,7 @@ export default function Home() {
         {(["plain", "story", "comic", "song"] as Format[]).map((f) => (
           <button key={f} onClick={() => setFormat(f)}
             className={`chip${format === f ? " on" : ""}`}>
-            {f === "plain" ? "normal" : `as a ${f}`}
+            {f === "plain" ? t("normal") : f === "story" ? t("as a story") : f === "comic" ? t("as a comic") : t("as a song")}
           </button>
         ))}
       </div>
@@ -1447,14 +1449,14 @@ export default function Home() {
           onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
           disabled={busy}
           className={`btn${recording ? " danger rec-pulse" : ""}`}
-          title="Hold to talk"
+          title={t("Hold to talk")}
           style={{ minWidth: 52, padding: "12px 14px" }}>
           🎤
         </button>}
         {!participantId && <button
           onClick={toggleConversation}
           className={`btn${convo !== "off" ? (convo === "hearing" ? " danger rec-pulse" : "") : " quiet"}`}
-          title={convo === "off" ? "Open conversation: your tutor listens, and you can talk over it" : "End the open conversation"}
+          title={convo === "off" ? t("Open conversation: your tutor listens, and you can talk over it") : t("End the open conversation")}
           style={{ minWidth: 52, padding: "12px 14px" }}>
           {convo === "off" ? "💬" : convo === "hearing" ? "👂" : "💬 on"}
         </button>}
@@ -1476,7 +1478,7 @@ export default function Home() {
               onClick={() => photoInput.current?.click()}
               disabled={busy}
               className="btn quiet"
-              title="Show your tutor a photo"
+              title={t("Show your tutor a photo")}
               style={{ minWidth: 52, padding: "12px 14px" }}>
               📷
             </button>
@@ -1484,7 +1486,7 @@ export default function Home() {
               onClick={() => setBoardOpen((open) => !open)}
               disabled={busy}
               className={`btn${boardOpen ? "" : " quiet"}`}
-              title="Work it out on the board"
+              title={t("Work it out on the board")}
               style={{ minWidth: 52, padding: "12px 14px" }}>
               ✏️
             </button>
@@ -1493,13 +1495,13 @@ export default function Home() {
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           dir={directionFor(language)}
-          className="inp" placeholder={recording ? "listening…" : "Say something to your tutor…"} />
-        <button onClick={send} disabled={busy} className="btn">Send</button>
+          className="inp" placeholder={recording ? t("listening…") : t("Say something to your tutor…")} />
+        <button onClick={send} disabled={busy} className="btn">{t("Send")}</button>
       </div>
       {error && <p className="err">{error}</p>}
       {waiting.length > 0 && (
         <p className="waiting" role="status">
-          {waitingLine(readyFor(waiting, sessionId ?? "").length || waiting.length)}
+          {waitingLine(readyFor(waiting, sessionId ?? "").length || waiting.length, t)}
         </p>
       )}
     </main>

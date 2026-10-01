@@ -91,11 +91,14 @@ export function readyFor(queue: Outgoing[], sessionId: string): Outgoing[] {
 }
 
 /** One line for the learner: plain, honest, never alarming. */
-export function waitingLine(count: number): string {
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+const english: Translate = (key, params) => key.replace("{n}", String(params?.n ?? ""));
+
+export function waitingLine(count: number, t: Translate = english): string {
   if (count <= 0) return "";
   return count === 1
-    ? "1 message is waiting for the connection. It sends itself when you are back online."
-    : `${count} messages are waiting for the connection. They send themselves when you are back online.`;
+    ? t("1 message is waiting for the connection. It sends itself when you are back online.")
+    : t("{n} messages are waiting for the connection. They send themselves when you are back online.", { n: count });
 }
 
 const KEY = "dingba_outbox";

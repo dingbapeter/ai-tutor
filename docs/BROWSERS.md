@@ -176,6 +176,35 @@ apps/api/test/voice-familiarity.test.ts, where the tutor notices the
 flatter, slower day and stays silent on an ordinary one. The legal line is
 the same as for face hints, and the same lawyer check applies.
 
+## The app's own words in other languages
+
+The tutor has taught in 91 languages for a while; the words around the
+tutor (buttons, labels, the status line, the home page, the sign-in
+screen, the camera consent) were English only. They now come from one
+dictionary per language in `apps/web/app/i18n/dict/`, keyed by the
+English sentence itself, so a missing line falls back to English rather
+than to a blank, and a test fails if a dictionary misses a sentence the
+app uses, keeps one it no longer uses, loses a `{token}` the sentence
+fills in, or carries an em dash.
+
+Which language a family sees: their own choice from the switch in the app
+bar (remembered on the device), else the language the tutor is teaching
+in, else the browser's, and only ever a language a person who speaks it
+has reviewed (`reviewed: true` in `app/i18n/locales.ts`). Six drafts ship
+(French, Spanish, Portuguese, Arabic, Swahili, Hindi), written without a
+native reviewer and therefore never chosen for a child automatically: a
+reviewer opens any page with `?uiDrafts=1`, picks the language from the
+switch, reads every screen in place, fixes the dictionary, and flips the
+flag. Arabic lays the whole page out right to left. The family dashboard,
+the legal pages, the Command Centre and the Studio stay English for now.
+
+`tools/device/lang-probe.mjs` proves it on every engine: a French browser
+still sees English while French is a draft and gets no switch; a reviewer
+gets the switch with drafts marked; French reaches the home page, the app
+bar and the lesson start screen and survives a reload; Arabic lays out
+right to left with nothing spilling sideways; a lesson taught in Spanish
+follows into Spanish when no choice was made; English comes back.
+
 ## Deliberately not required
 
 No Flash, no Java, no plugins, no extensions, no desktop-only APIs, and no

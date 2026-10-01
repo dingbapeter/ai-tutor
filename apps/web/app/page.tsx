@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { RandomCaricature } from "./Caricatures";
 import { HEADLINES } from "./headlines";
+import { useLang } from "./i18n";
+import Highlighted from "./Highlighted";
 
 /**
  * The Dingba storefront. The app itself lives at /learn; this page's one job
@@ -45,21 +47,6 @@ const MIC = "M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 
 const CLIP = "M21 12.5l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6L15 8.3";
 const CAM = "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z";
 
-/** Renders {braced} words in brand indigo. */
-function Highlighted({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(/(\{[^}]+\})/).map((part, i) =>
-        part.startsWith("{") && part.endsWith("}") ? (
-          <span key={i}>{part.slice(1, -1)}</span>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
 export default function HomePage() {
   const [ask, setAsk] = useState("");
   // One of many voices per visit. First paint is deterministic so hydration
@@ -67,6 +54,7 @@ export default function HomePage() {
   const [pick, setPick] = useState(0);
   useEffect(() => setPick(Math.floor(Math.random() * HEADLINES.length)), []);
   const line = HEADLINES[pick];
+  const { t } = useLang();
 
   function startLearning(question?: string) {
     const q = (question ?? ask).trim();
@@ -80,31 +68,31 @@ export default function HomePage() {
           <div className="hero-copy">
             <span className="live-pill">
               <span className="live-dot" aria-hidden />
-              LIVE classes that feel human. Only smarter.
+              {t("LIVE classes that feel human. Only smarter.")}
             </span>
-            <h1><Highlighted text={line.headline} /></h1>
-            <p className="lede">{line.sub}</p>
+            <h1><Highlighted text={t(line.headline)} /></h1>
+            <p className="lede">{t(line.sub)}</p>
 
             <div className="askbox big">
               <input
                 value={ask}
                 onChange={(e) => setAsk(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && startLearning()}
-                placeholder="What do you want to learn today?"
-                aria-label="What do you want to learn today?"
+                placeholder={t("What do you want to learn today?")}
+                aria-label={t("What do you want to learn today?")}
               />
               <div className="askbox-actions">
-                <button className="ask-ico" title="Talk it out with your tutor" onClick={() => startLearning()}>
-                  <Icon d={MIC} label="voice" />
+                <button className="ask-ico" title={t("Talk it out with your tutor")} onClick={() => startLearning()}>
+                  <Icon d={MIC} label={t("voice")} />
                 </button>
-                <button className="ask-ico" title="Upload your work in the session" onClick={() => startLearning()}>
-                  <Icon d={CLIP} label="upload" />
+                <button className="ask-ico" title={t("Upload your work in the session")} onClick={() => startLearning()}>
+                  <Icon d={CLIP} label={t("upload")} />
                 </button>
-                <button className="ask-ico" title="Show your tutor a photo in the session" onClick={() => startLearning()}>
-                  <Icon d={CAM} label="camera" />
+                <button className="ask-ico" title={t("Show your tutor a photo in the session")} onClick={() => startLearning()}>
+                  <Icon d={CAM} label={t("camera")} />
                 </button>
                 <span style={{ flex: 1 }} />
-                <button className="send-orb" title="Start learning" onClick={() => startLearning()} aria-label="Start learning">
+                <button className="send-orb" title={t("Start learning")} onClick={() => startLearning()} aria-label={t("Start learning")}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 19V5 M5 12l7-7 7 7" />
                   </svg>
@@ -113,9 +101,9 @@ export default function HomePage() {
             </div>
 
             <div className="try-chips" style={{ justifyContent: "flex-start" }}>
-              <span style={{ color: "var(--text-dim)", fontSize: 13.5, fontWeight: 700, alignSelf: "center" }}>Try:</span>
-              {TRY_THESE.map((t) => (
-                <button key={t} className="chip" onClick={() => startLearning(t)}>{t}</button>
+              <span style={{ color: "var(--text-dim)", fontSize: 13.5, fontWeight: 700, alignSelf: "center" }}>{t("Try:")}</span>
+              {TRY_THESE.map((line) => (
+                <button key={line} className="chip" onClick={() => startLearning(t(line))}>{t(line)}</button>
               ))}
             </div>
           </div>
@@ -132,59 +120,53 @@ export default function HomePage() {
       </section>
 
       <section>
-        <h2>Not just answers. Understanding.</h2>
-        <p className="sub">A search engine hands you the result. A good tutor walks you to it, and makes sure it sticks.</p>
+        <h2>{t("Not just answers. Understanding.")}</h2>
+        <p className="sub">{t("A search engine hands you the result. A good tutor walks you to it, and makes sure it sticks.")}</p>
         <div className="duo">
           <div className="card mini-chat">
-            <div className="msg user">Why is the derivative of x² equal to 2x?</div>
-            <div className="msg tutor">Let&apos;s work it out together. Before I explain: if x grows from 2 to 3, what happens to x²?</div>
-            <div className="msg user">It goes from 4 to 9... so it grew by 5?</div>
-            <div className="msg tutor">Exactly. Now shrink that step smaller and smaller. What number does the growth per step settle towards?</div>
+            <div className="msg user">{t("Why is the derivative of x² equal to 2x?")}</div>
+            <div className="msg tutor">{t("Let's work it out together. Before I explain: if x grows from 2 to 3, what happens to x²?")}</div>
+            <div className="msg user">{t("It goes from 4 to 9... so it grew by 5?")}</div>
+            <div className="msg tutor">{t("Exactly. Now shrink that step smaller and smaller. What number does the growth per step settle towards?")}</div>
           </div>
           <div className="card">
-            <b>Why it works this way</b>
+            <b>{t("Why it works this way")}</b>
             <p style={{ color: "var(--text-dim)", fontSize: 15 }}>
-              Your tutor teaches the way great human tutors do: one question at a time,
-              building on what you already know. Wrong answers aren&apos;t failures here,
-              they&apos;re information. Every checkable answer in maths is verified by a
-              real computer algebra system, so you&apos;re never confidently taught
-              something false.
+              {t("Your tutor teaches the way great human tutors do: one question at a time, building on what you already know. Wrong answers aren't failures here, they're information. Every checkable answer in maths is verified by a real computer algebra system, so you're never confidently taught something false.")}
             </p>
             <p style={{ color: "var(--text-dim)", fontSize: 15, marginBottom: 0 }}>
-              And when you say &quot;just show me&quot;, it shows you, then hands you a
-              similar problem so the understanding is yours.
+              {t("And when you say \"just show me\", it shows you, then hands you a similar problem so the understanding is yours.")}
             </p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>One tutor. Every subject.</h2>
-        <p className="sub">The same tutor who helps with fractions today can rehearse your visa interview tomorrow.</p>
+        <h2>{t("One tutor. Every subject.")}</h2>
+        <p className="sub">{t("The same tutor who helps with fractions today can rehearse your visa interview tomorrow.")}</p>
         <div className="subject-grid">
           {SUBJECTS.map(([ico, name]) => (
-            <div key={name} className="card"><span className="ico" aria-hidden>{ico}</span>{name}</div>
+            <div key={name} className="card"><span className="ico" aria-hidden>{ico}</span>{t(name)}</div>
           ))}
         </div>
       </section>
 
       <section>
-        <h2>Dingba gets to know you.</h2>
+        <h2>{t("Dingba gets to know you.")}</h2>
         <p className="sub">
-          Your tutor remembers what you&apos;ve learned. It knows what you&apos;re good at, where
-          you&apos;re struggling, what you&apos;ve already studied and what to work on next.
+          {t("Your tutor remembers what you've learned. It knows what you're good at, where you're struggling, what you've already studied and what to work on next.")}
         </p>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
           <div className="hero-cast" style={{ paddingBottom: 8 }}>
             <RandomCaricature size={120} slot={2} />
           </div>
         <div className="card" style={{ maxWidth: 460, margin: "0 auto 0 0", flex: "1 1 300px" }}>
-          <b>Peter&apos;s learning profile</b>
+          <b>{t("Peter's learning profile")}</b>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
             {PROFILE_DEMO.map(([subject, pct]) => (
               <div key={subject}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}>
-                  <span>{subject}</span>
+                  <span>{t(subject)}</span>
                   <span style={{ color: "var(--text-dim)" }}>{pct}%</span>
                 </div>
                 <div className="bar"><div style={{ width: `${pct}%` }} /></div>
@@ -192,55 +174,55 @@ export default function HomePage() {
             ))}
           </div>
           <p style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 0, marginTop: 12 }}>
-            Illustration. Your own profile builds from your real sessions.
+            {t("Illustration. Your own profile builds from your real sessions.")}
           </p>
         </div>
         </div>
       </section>
 
       <section>
-        <h2>Learn your way.</h2>
+        <h2>{t("Learn your way.")}</h2>
         <div className="way-grid">
           <div className="card">
-            <b>Talk to Dingba</b>
-            <p>Real voice conversation with your tutor. They greet you first, like a person would.</p>
+            <b>{t("Talk to Dingba")}</b>
+            <p>{t("Real voice conversation with your tutor. They greet you first, like a person would.")}</p>
           </div>
           <div className="card">
-            <b>Challenge Dingba</b>
-            <p>Practice problems, timed mock exams, and honest post-mortems on every miss.</p>
+            <b>{t("Challenge Dingba")}</b>
+            <p>{t("Practice problems, timed mock exams, and honest post-mortems on every miss.")}</p>
           </div>
           <div className="card">
-            <b>Show Dingba</b>
-            <p>Photograph your homework or a textbook page, and your tutor teaches from it.</p>
+            <b>{t("Show Dingba")}</b>
+            <p>{t("Photograph your homework or a textbook page, and your tutor teaches from it.")}</p>
           </div>
           <div className="card">
-            <b>Watch Dingba<span className="tag-soon">on the way</span></b>
-            <p>Visual, drawn-out explanations for the concepts words alone can&apos;t carry.</p>
+            <b>{t("Watch Dingba")}<span className="tag-soon">{t("on the way")}</span></b>
+            <p>{t("Visual, drawn-out explanations for the concepts words alone can't carry.")}</p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>From &quot;I don&apos;t understand&quot; to &quot;I get it.&quot;</h2>
+        <h2>{t("From \"I don't understand\" to \"I get it.\"")}</h2>
         <div className="journey" style={{ marginTop: 18 }}>
-          <span className="step">Question</span>
+          <span className="step">{t("Question")}</span>
           <span aria-hidden>→</span>
-          <span className="step">Explanation</span>
+          <span className="step">{t("Explanation")}</span>
           <span aria-hidden>→</span>
-          <span className="step">Guided practice</span>
+          <span className="step">{t("Guided practice")}</span>
           <span aria-hidden>→</span>
-          <span className="step">Feedback</span>
+          <span className="step">{t("Feedback")}</span>
           <span aria-hidden>→</span>
-          <span className="step">Mastery</span>
+          <span className="step">{t("Mastery")}</span>
         </div>
       </section>
 
       <section>
-        <h2>Your entire learning life.</h2>
-        <p className="sub">Dingba grows with you.</p>
+        <h2>{t("Your entire learning life.")}</h2>
+        <p className="sub">{t("Dingba grows with you.")}</p>
         <div className="life-chips">
           {["School", "University", "Exams", "Languages", "Coding", "Career", "Curiosity"].map((l) => (
-            <span key={l}>{l}</span>
+            <span key={l}>{t(l)}</span>
           ))}
         </div>
       </section>
@@ -249,14 +231,14 @@ export default function HomePage() {
         <div className="hero-cast" style={{ marginBottom: 6 }}>
           <RandomCaricature size={110} slot={4} />
         </div>
-        <h2>Ready to learn? Your tutor is waiting.</h2>
-        <button className="btn" onClick={() => startLearning()}>Start learning with Dingba</button>
+        <h2>{t("Ready to learn? Your tutor is waiting.")}</h2>
+        <button className="btn" onClick={() => startLearning()}>{t("Start learning with Dingba")}</button>
       </div>
 
       <footer className="site-footer">
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/credits">Built on open work 💙</a>
+        <a href="/terms">{t("Terms")}</a>
+        <a href="/privacy">{t("Privacy")}</a>
+        <a href="/credits">{t("Built on open work 💙")}</a>
       </footer>
     </div>
   );

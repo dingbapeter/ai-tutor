@@ -963,3 +963,28 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
 .studio-note > span:first-child { color: var(--text-dim); }
 .studio-help ul { padding-left: 18px; line-height: 1.6; }
 .studio-help code { font-size: 13px; }
+
+/* The language switch in the app bar. */
+.lang-switch {
+  margin-left: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  /* A fixed width: a select otherwise sizes itself to its longest option,
+     and "Français (brouillon)" would push the bar off a phone screen. */
+  width: 96px;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+[dir="rtl"] .lang-switch { margin-left: 0; margin-right: 6px; }
+/* overflow hidden: WebKit counts a select's hidden option text as page
+   width otherwise, and the bar would scroll sideways by a few pixels. */
+.appbar nav { min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; overflow: hidden; }
+@media (max-width: 420px) {
+  .appbar nav a { padding: 7px 10px; font-size: 14px; }
+  .lang-switch { width: 80px; font-size: 12px; }
+}
