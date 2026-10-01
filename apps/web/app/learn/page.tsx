@@ -12,6 +12,7 @@ const Avatar3D = dynamic(() => import("./avatar/Avatar3D"), { ssr: false });
 const FaceSense = dynamic(() => import("./face/FaceSense"), { ssr: false });
 import { canSeeFace } from "./face/FaceSense";
 import { hintToSend, type Hint, type Label } from "./face/expression";
+import { encodeVoice, pitchOf, rms, summarise, type Frame } from "./voice/features";
 import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
 import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
@@ -136,6 +137,10 @@ export default function Home() {
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const voiceEnergy = useRef<number[]>([]);
+  // Voice familiarity: only when the account holder allowed it for this
+  // learner. Two numbers per tenth of a second while they talk, never audio.
+  const voiceFamiliar = useRef(false);
+  const voiceFrames = useRef<Frame[]>([]);
   const photoInput = useRef<HTMLInputElement>(null);
   const convoLoop = useRef<ConversationLoop | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
@@ -161,7 +166,7 @@ export default function Home() {
   const speakingRef = useRef(false);
   // At most one utterance waits while the tutor is mid-reply; a newer one
   // replaces it (the learner's latest words are what they mean now).
-  const pendingSegment = useRef<Blob | null>(null);
+  const pendingSegment = useRef<{ blob: Blob; voice: string | null } | null>(null);
 
   const persona = personas.find((p) => p.id === personaId);
   const bondInfo = bondStage(bondSessions);
@@ -357,10 +362,12 @@ export default function Home() {
     }
     setError(null);
     const loop = new ConversationLoop({
-      onSegment: (blob) => {
-        if (busyRef.current) pendingSegment.current = blob;
-        else void sendVoice(blob);
+      onSegment: (blob, heard) => {
+        const voice = heard ? encodeVoice(heard) : null;
+        if (busyRef.current) pendingSegment.current = { blob, voice };
+        else void sendVoice(blob, "neutral", voice);
       },
+      measureVoice: () => voiceFamiliar.current && !participantId,
       onState: (s) => setConvo(s),
       isTutorSpeaking: () => speakingRef.current,
       onBargeIn: () => stopSpeaking(),
@@ -455,6 +462,7 @@ export default function Home() {
       setExaminable(json.examinable !== false);
       setAssessable(json.assessable !== false);
       setFaceAllowed(json.faceHints === true);
+      voiceFamiliar.current = json.voiceFamiliarity === true;
       steadyFace.current = "none";
       lastFaceSent.current = { hint: null, at: 0 };
       setVerdicts({});
@@ -492,6 +500,7 @@ export default function Home() {
       setSessionId(json.sessionId);
       setParticipantId(json.participantId);
       setFaceAllowed(false);
+      voiceFamiliar.current = false;
       setHostName(json.host);
       setPersonaId(json.persona.id);
       setMessages([
@@ -805,6 +814,16 @@ export default function Home() {
           analyser.fftSize = 256;
           srcNode.connect(analyser);
           const buf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+          // A longer window for pitch, only when voice familiarity is on:
+          // enough of the wave to hold two periods of a deep voice.
+          voiceFrames.current = [];
+          const listen = voiceFamiliar.current && !participantId;
+          const pitchTap = listen ? toneCtx.createAnalyser() : null;
+          if (pitchTap) {
+            pitchTap.fftSize = 2048;
+            srcNode.connect(pitchTap);
+          }
+          const wave = pitchTap ? new Float32Array(new ArrayBuffer(pitchTap.fftSize * 4)) : null;
           toneTimer = setInterval(() => {
             analyser.getByteTimeDomainData(buf);
             let sum = 0;
@@ -814,6 +833,11 @@ export default function Home() {
             }
             voiceEnergy.current.push(Math.sqrt(sum / buf.length));
             if (voiceEnergy.current.length > 400) voiceEnergy.current.shift();
+            if (pitchTap && wave) {
+              pitchTap.getFloatTimeDomainData(wave);
+              voiceFrames.current.push({ level: rms(wave), pitch: pitchOf(wave, toneCtx.sampleRate) });
+              if (voiceFrames.current.length > 1200) voiceFrames.current.shift();
+            }
           }, 100);
         }
       } catch {
@@ -828,7 +852,9 @@ export default function Home() {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
         if (blob.size < 1000) return; // accidental tap
-        await sendVoice(blob, voiceToneFromEnergy(voiceEnergy.current));
+        const heard = voiceFamiliar.current && !participantId ? summarise(voiceFrames.current) : null;
+        voiceFrames.current = [];
+        await sendVoice(blob, voiceToneFromEnergy(voiceEnergy.current), heard ? encodeVoice(heard) : null);
       };
       recorder.current = rec;
       rec.start();
@@ -844,7 +870,7 @@ export default function Home() {
     setRecording(false);
   }
 
-  async function sendVoice(blob: Blob, tone: "low" | "bright" | "neutral" = "neutral") {
+  async function sendVoice(blob: Blob, tone: "low" | "bright" | "neutral" = "neutral", voiceFeatures: string | null = null) {
     if (!sessionId) return;
     const faceHintNow = participantId ? null : takeFaceHint();
     setBusy(true);
@@ -859,6 +885,8 @@ export default function Home() {
           ...(tone !== "neutral" ? { "x-voice-tone": tone } : {}),
           // What their face has steadily been doing, when they allowed it.
           ...(faceHintNow ? { "x-face-hint": faceHintNow } : {}),
+          // Four numbers about how they sounded, when voice familiarity is on.
+          ...(voiceFeatures ? { "x-voice-features": voiceFeatures } : {}),
         },
         body: blob,
       });
@@ -883,7 +911,7 @@ export default function Home() {
       const next = pendingSegment.current;
       if (next && convoLoop.current) {
         pendingSegment.current = null;
-        void sendVoice(next);
+        void sendVoice(next.blob, "neutral", next.voice);
       }
     }
   }

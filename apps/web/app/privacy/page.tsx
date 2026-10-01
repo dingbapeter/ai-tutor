@@ -21,6 +21,15 @@ export default function Privacy() {
         as &ldquo;smiling&rdquo; or &ldquo;looking away&rdquo;, used for that one reply and not kept.
         We do not work out anyone&apos;s emotions from their face.
       </p>
+      <h3>Knowing a learner&apos;s voice</h3>
+      <p>
+        Only if the parent or guardian allows it, a tutor gets to know how a learner usually sounds, so it
+        can notice on a day they sound unlike themselves. For this we keep a few running averages per
+        learner: how high their voice is, how much it moves, and how loud and fast they speak. We keep no
+        recording and nothing that could identify a voice, and we never use it to tell who is speaking.
+        It is never used for learners added by a school. Switching it off, or deleting the learner,
+        erases it.
+      </p>
       <h3>Why</h3>
       <p>
         Solely to run the tutoring: memory across sessions, progress tracking, parent visibility,

@@ -22,6 +22,7 @@ import { buildStudyPlan, planReminder } from "./tutor/plan.js";
 import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
 import { cleanLook } from "./tutor/look.js";
 import { FACE_HINTS, faceHintNote, faceHintsAllowed, isFaceHint } from "./tutor/face.js";
+import { familiarityStatus, hear, parseVoiceFeatures, readProfile, voiceFamiliarityAllowed } from "./tutor/voice.js";
 import { grantGivesAccess } from "./command/access.js";
 import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
@@ -74,6 +75,8 @@ interface LiveSession {
   apiKeyQuota?: number;
   /** The learner may send one-word face hints this session (see tutor/face.ts). */
   faceHints?: boolean;
+  /** The tutor may get to know how this learner sounds (see tutor/voice.ts). */
+  voiceFamiliar?: boolean;
 }
 
 export interface PlanLimits {
@@ -682,6 +685,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         return reply.code(409).send({ error: "face hints are not available for learners on a school roster" });
       }
       await store.setFaceHints(req.params.id, req.body.enabled);
+      // Switching off holds from the very next turn of a lesson under way.
+      if (!req.body.enabled) for (const s of live.values()) if (s.studentId === req.params.id) s.faceHints = false;
       return { faceHints: req.body.enabled };
     },
   );
@@ -693,6 +698,54 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return reply.code(403).send({ error: "that student is not in your family" });
     }
     return { faceHints: await store.getFaceHints(req.params.id), schoolRoster: Boolean(await store.orgOfStudent(req.params.id)) };
+  });
+
+  /**
+   * Voice familiarity for one learner: the tutor gets to know how they
+   * usually sound. Switched on or off only by the account holder; switching
+   * it off forgets everything it learned. Never for a school roster.
+   */
+  app.put<{ Params: { id: string }; Body: { enabled: boolean } }>(
+    "/students/:id/voice-familiarity",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["enabled"],
+          additionalProperties: false,
+          properties: { enabled: { type: "boolean" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      if (req.body.enabled && (await store.orgOfStudent(req.params.id))) {
+        return reply.code(409).send({ error: "voice familiarity is not available for learners on a school roster" });
+      }
+      await store.setVoiceFamiliarity(req.params.id, req.body.enabled);
+      // A lesson already under way follows the switch from its next turn.
+      for (const s of live.values()) {
+        if (s.studentId === req.params.id) s.voiceFamiliar = req.body.enabled && Boolean(s.voiceFamiliar);
+      }
+      return { voiceFamiliarity: req.body.enabled };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/voice-familiarity", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return {
+      voiceFamiliarity: await store.getVoiceFamiliarity(req.params.id),
+      status: familiarityStatus(readProfile(await store.getVoiceProfile(req.params.id))),
+      schoolRoster: Boolean(await store.orgOfStudent(req.params.id)),
+    };
   });
 
   /** Parent dashboard: per student — recent sessions with recaps + mastery. */
@@ -718,6 +771,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           routine: await store.getRoutine(s.id),
           careContact: await store.getCareContact(s.id),
           faceHints: await store.getFaceHints(s.id),
+          voiceFamiliarity: await store.getVoiceFamiliarity(s.id),
+          voiceStatus: familiarityStatus(readProfile(await store.getVoiceProfile(s.id))),
           onSchoolRoster: Boolean(await store.orgOfStudent(s.id)),
         })),
       ),
@@ -1017,6 +1072,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
         viaApiKey: Boolean(meta.apiKeyId),
       }),
+      voiceFamiliar: voiceFamiliarityAllowed({
+        enabledByAccountHolder: await store.getVoiceFamiliarity(meta.studentId),
+        signedIn: Boolean(meta.ownerUserId) && !meta.apiKeyId,
+        onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
+        viaApiKey: Boolean(meta.apiKeyId),
+      }),
     };
     // Two concurrent requests can race the rebuild; the first one in wins.
     const raced = live.get(sessionId);
@@ -1235,6 +1296,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         onSchoolRoster: Boolean(await store.orgOfStudent(studentIdResolved)),
         viaApiKey: Boolean(apiKeyId),
       });
+      // Voice familiarity on the same terms.
+      const voiceFamiliar = voiceFamiliarityAllowed({
+        enabledByAccountHolder: await store.getVoiceFamiliarity(studentIdResolved),
+        signedIn: signedInLearner,
+        onSchoolRoster: Boolean(await store.orgOfStudent(studentIdResolved)),
+        viaApiKey: Boolean(apiKeyId),
+      });
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
@@ -1286,6 +1354,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         createdAt: Date.now(),
         apiKeyQuota,
         faceHints,
+        voiceFamiliar,
       });
       // A live tutor speaks first. Generate the opening line in-character;
       // if the model stalls or fails, a warm deterministic line covers it.
@@ -1328,6 +1397,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         look: tutorLook,
         // Whether this learner may offer face hints this session.
         faceHints,
+        // Whether the device should measure how they sound when they talk.
+        voiceFamiliarity: voiceFamiliar,
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
@@ -1620,9 +1691,24 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           // ephemeral (not saved to the transcript) and never shown.
           const tone = req.headers["x-voice-tone"];
           const faceHeader = req.headers["x-face-hint"];
+          // Voice familiarity: compared with how THIS learner usually sounds.
+          // Once the tutor knows them, that replaces the one-size quiet-voice
+          // nudge, so a naturally soft-spoken child is not flagged every turn.
+          // Left out while friends sit in, whose voices are not theirs.
+          let heard: ReturnType<typeof hear> | null = null;
+          if (session.voiceFamiliar && session.participants.size === 0) {
+            heard = hear(
+              readProfile(await store.getVoiceProfile(session.studentId)),
+              parseVoiceFeatures(req.headers["x-voice-features"]),
+              transcript,
+              session.id,
+            );
+            await store.saveVoiceProfile(session.studentId, heard.profile);
+          }
           const toneHistory = [
             ...session.history,
-            ...(tone === "low"
+            ...(heard?.note ? [{ role: "system" as const, content: heard.note }] : []),
+            ...(tone === "low" && !heard?.known
               ? [
                   {
                     role: "system" as const,

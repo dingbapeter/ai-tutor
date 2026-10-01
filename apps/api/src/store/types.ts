@@ -332,6 +332,13 @@ export interface Store {
   /** Face hints: off unless the account holder switched them on for this learner. */
   setFaceHints(studentId: string, enabled: boolean): Promise<void>;
   getFaceHints(studentId: string): Promise<boolean>;
+  /** Voice familiarity: off unless the account holder switched it on.
+   *  Switching it off also forgets the profile. */
+  setVoiceFamiliarity(studentId: string, enabled: boolean): Promise<void>;
+  getVoiceFamiliarity(studentId: string): Promise<boolean>;
+  /** Running averages of how they usually sound (tutor/voice.ts); null if none yet. */
+  getVoiceProfile(studentId: string): Promise<unknown | null>;
+  saveVoiceProfile(studentId: string, profile: unknown): Promise<void>;
   /** The school or organisation a learner is on the roster of, if any. */
   orgOfStudent(studentId: string): Promise<string | null>;
 

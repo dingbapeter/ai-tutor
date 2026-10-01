@@ -50,8 +50,9 @@ Two companions cover the parts that need their own kind of proof:
 docs/STORES.md), and `tools/device/board-probe.mjs` for the whiteboard,
 which is the one surface that depends on pointer input, canvas and image
 export all working together. `tools/device/avatar-probe.mjs` proves the 3D
-tutor's lip sync and its fallback, and `tools/device/face-probe.mjs` proves
-the face hints below. All run on the same stack as the sweep.
+tutor's lip sync and its fallback, `tools/device/face-probe.mjs` proves
+the face hints below, and `tools/device/voice-probe.mjs` proves voice
+familiarity. All run on the same stack as the sweep.
 
 ## What every browser must give us, and does
 
@@ -137,6 +138,41 @@ this reading before launch in the EU.
 camera and checks every one of these promises, including that no request
 goes anywhere but Dingba and none carries a picture. The first time, the
 learner's browser downloads about 15 MB.
+
+## Knowing a learner's voice
+
+When the account holder allows it, the tutor gets to know how a learner
+usually sounds over their first two spoken lessons, and can then notice a
+day they sound unlike themselves. Same exclusions as face hints: never for
+guests, school rosters, API-key sessions, or while friends sit in a class.
+
+While they talk, the page measures, ten times a second, how loud the voice
+is and its pitch, and keeps nothing else. Each spoken turn then carries
+four numbers (typical pitch, how much it moved, loudness, seconds of
+speech); the server adds pace from the transcript and keeps running
+averages per learner. No recording and no voiceprint: nothing that could
+tell one voice from another, and it is never used to decide who is
+speaking. Learning is even over the first two lessons, then slow, so a
+gradual change such as a voice breaking becomes the new normal, while a
+sudden difference is noticed. The tutor is told only what is audible
+("flatter and slower than usual"), once a lesson, and asked to check in
+gently without guessing feelings. Once the tutor knows a learner, this
+replaces the one-size "quiet voice" nudge, so a naturally soft-spoken child
+is not flagged every lesson.
+
+Browsers level a microphone's volume on their own (automatic gain
+control). The probe played a recording at an eighth of the volume and the
+browser read it as loud as the normal one. So loudness rarely tells
+anything, and pitch, pitch movement and pace carry the comparison. The same
+levelling means the older one-size "quiet voice" nudge, which listens only
+to loudness, fires less often in real browsers than its rule suggests.
+
+`tools/device/voice-probe.mjs` drives the real build in Chromium with a
+fake microphone playing speech-like recordings made in the probe itself,
+and the numbers it measures are replayed through the real voice route in
+apps/api/test/voice-familiarity.test.ts, where the tutor notices the
+flatter, slower day and stays silent on an ordinary one. The legal line is
+the same as for face hints, and the same lawyer check applies.
 
 ## Deliberately not required
 

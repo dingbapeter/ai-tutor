@@ -514,6 +514,40 @@ export class PostgresStore implements Store {
     return rows[0]?.on === true;
   }
 
+  async setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    await this.db
+      .update(schema.students)
+      .set(enabled ? { voiceFamiliarity: true } : { voiceFamiliarity: false, voiceProfile: null })
+      .where(eq(schema.students.id, studentId));
+  }
+
+  async getVoiceFamiliarity(studentId: string) {
+    const rows = await this.db
+      .select({ on: schema.students.voiceFamiliarity })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.on === true;
+  }
+
+  async getVoiceProfile(studentId: string) {
+    const rows = await this.db
+      .select({ profile: schema.students.voiceProfile })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.profile ?? null;
+  }
+
+  async saveVoiceProfile(studentId: string, profile: unknown) {
+    // Only while it is switched on: a turn that finishes after the parent
+    // switched it off must not bring the profile back.
+    await this.db
+      .update(schema.students)
+      .set({ voiceProfile: profile })
+      .where(and(eq(schema.students.id, studentId), eq(schema.students.voiceFamiliarity, true)));
+  }
+
   async orgOfStudent(studentId: string) {
     const rows = await this.db
       .select({ org: schema.students.orgId })

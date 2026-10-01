@@ -54,6 +54,8 @@ interface StudentRow {
   careContact?: { name: string; phone: string; relationship?: string } | null;
   /** The account holder has let this learner turn on face hints. */
   faceHints?: boolean;
+  voiceFamiliarity?: boolean;
+  voiceStatus?: { stage: "listening" | "knows"; sessionsHeard: number };
   onSchoolRoster?: boolean;
   plan?: StudyPlan | null;
 }
@@ -315,6 +317,28 @@ export default function Account() {
       return;
     }
     setStudents((list) => list.map((st) => (st.id === studentId ? { ...st, faceHints: enabled } : st)));
+  }
+
+  async function setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    if (!token) return;
+    setError(null);
+    const res = await fetch(`${API}/students/${studentId}/voice-familiarity`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? "could not change voice familiarity");
+      return;
+    }
+    // Switching off forgets what was learned, so it starts again from scratch.
+    setStudents((list) =>
+      list.map((st) =>
+        st.id === studentId
+          ? { ...st, voiceFamiliarity: enabled, voiceStatus: enabled ? st.voiceStatus : { stage: "listening", sessionsHeard: 0 } }
+          : st,
+      ),
+    );
   }
 
   async function removeCareContact(studentId: string) {
@@ -642,6 +666,30 @@ export default function Account() {
                 {s.faceHints
                   ? `${s.displayName} may turn on their camera in a lesson, if they want to. It is off at the start of every lesson. The camera is read on their own device; no picture or video is recorded or sent. Their tutor only gets a plain word now and then, like "smiling" or "looking away", and never a guess at how they feel.`
                   : `Off. If you allow it, ${s.displayName} can choose to turn on their camera in a lesson so their tutor can respond to their face the way a person in the room would. Pictures never leave their device.`}
+              </p>
+            </div>
+          )}
+
+          {!s.onSchoolRoster && (
+            <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: 14.5 }}>Knowing their voice</b>
+                <button
+                  onClick={() => setVoiceFamiliarity(s.id, !s.voiceFamiliarity)}
+                  className={`btn small${s.voiceFamiliarity ? " ghost" : " quiet"}`}
+                  aria-pressed={Boolean(s.voiceFamiliarity)}
+                >
+                  {s.voiceFamiliarity ? "Switch off and forget" : "Allow"}
+                </button>
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
+                {s.voiceFamiliarity
+                  ? `${
+                      s.voiceStatus?.stage === "knows"
+                        ? `Their tutor knows how ${s.displayName} usually sounds.`
+                        : `Their tutor is getting to know how ${s.displayName} usually sounds (${s.voiceStatus?.sessionsHeard ?? 0} of 2 spoken lessons so far).`
+                    } When they talk, it keeps a few running averages (how high their voice is, how much it moves, how loud and how fast they speak), never a recording. If one day they sound quite unlike themselves, their tutor may gently ask how they are, and never guesses how they feel. Switching off forgets it all.`
+                  : `Off. If you allow it, their tutor gets to know how ${s.displayName} usually sounds over their first two spoken lessons, so it can notice on a day they sound unlike themselves, the way someone who knows them would. It keeps a few averages, never a recording, and nothing that could identify their voice.`}
               </p>
             </div>
           )}

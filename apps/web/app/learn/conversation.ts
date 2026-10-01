@@ -1,4 +1,5 @@
 import { audioContext, hasWebAudio, unlockAudio } from "./audio";
+import { pitchOf, rms as rmsOf, summarise, type Frame, type TurnVoice } from "./voice/features";
 /**
  * Conversation mode: the tutor listens continuously, hears the learner out,
  * answers, and can be interrupted by simply speaking over it.
@@ -113,8 +114,11 @@ export class VadFsm {
 }
 
 export interface ConversationHooks {
-  /** A finished utterance, ready for the /voice round trip. */
-  onSegment(blob: Blob): void;
+  /** A finished utterance, ready for the /voice round trip, with how it
+   *  sounded when voice familiarity is on (null otherwise). */
+  onSegment(blob: Blob, voice: TurnVoice | null): void;
+  /** Whether to measure how the learner sounds (voice familiarity). */
+  measureVoice?(): boolean;
   onState(state: ConversationState): void;
   /** The tutor's voice is playing right now. */
   isTutorSpeaking(): boolean;
@@ -149,6 +153,12 @@ export class ConversationLoop {
   private timer: ReturnType<typeof setInterval> | null = null;
   private mime = "";
   private stopping = false;
+  /** A longer tap for pitch, only while voice familiarity is on. */
+  private voiceTap: AnalyserNode | null = null;
+  private voiceWave: Float32Array<ArrayBuffer> | null = null;
+  private voiceFrames: Frame[] = [];
+  private hearing = false;
+  private ticks = 0;
 
   constructor(hooks: ConversationHooks, tuning: Partial<ConversationTuning> = {}) {
     this.hooks = hooks;
@@ -186,6 +196,14 @@ export class ConversationLoop {
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 1024;
     source.connect(this.analyser);
+    if (this.hooks.measureVoice?.()) {
+      // Two periods of a deep voice need a longer window than the one
+      // that decides when speech starts and stops.
+      this.voiceTap = this.audioCtx.createAnalyser();
+      this.voiceTap.fftSize = 2048;
+      source.connect(this.voiceTap);
+      this.voiceWave = new Float32Array(new ArrayBuffer(this.voiceTap.fftSize * 4));
+    }
     this.mime =
       ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find((t) =>
         MediaRecorder.isTypeSupported?.(t),
@@ -222,6 +240,10 @@ export class ConversationLoop {
     this.micSource = null;
     this.audioCtx = null;
     this.analyser = null;
+    this.voiceTap = null;
+    this.voiceWave = null;
+    this.voiceFrames = [];
+    this.hearing = false;
     this.hooks.onState("off");
   }
 
@@ -258,14 +280,24 @@ export class ConversationLoop {
 
   private tick(): void {
     if (!this.analyser || this.stopping) return;
+    // How they sound, ten times a second, only while they are speaking.
+    if (this.hearing && this.voiceTap && this.voiceWave && this.audioCtx && this.ticks++ % 2 === 0) {
+      this.voiceTap.getFloatTimeDomainData(this.voiceWave);
+      this.voiceFrames.push({ level: rmsOf(this.voiceWave), pitch: pitchOf(this.voiceWave, this.audioCtx.sampleRate) });
+      if (this.voiceFrames.length > 1200) this.voiceFrames.shift();
+    }
     const evt = this.fsm.feed(this.rms(), this.hooks.isTutorSpeaking(), TICK_MS);
     if (!evt) return;
     if (evt.kind === "open") {
       if (evt.bargeIn) this.hooks.onBargeIn();
+      this.hearing = true;
+      this.voiceFrames = [];
       this.hooks.onState("hearing");
       return;
     }
     if (evt.kind === "recycle") {
+      this.hearing = false;
+      this.voiceFrames = [];
       // Nothing said for a while: throw the silent recording away so it
       // never grows without bound, and start fresh.
       void this.harvest().then(() => {
@@ -273,11 +305,14 @@ export class ConversationLoop {
       });
       return;
     }
+    this.hearing = false;
+    const voice = this.voiceTap ? summarise(this.voiceFrames) : null;
+    this.voiceFrames = [];
     void this.harvest().then((blob) => {
       if (this.stopping) return;
       this.startRecorder();
       this.hooks.onState("listening");
-      if (evt.voicedEnough && blob.size > 1000) this.hooks.onSegment(blob);
+      if (evt.voicedEnough && blob.size > 1000) this.hooks.onSegment(blob, voice);
     });
   }
 }

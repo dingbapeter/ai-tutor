@@ -57,6 +57,8 @@ export class MemoryStore implements Store {
       tutorName?: string;
       look?: { skin: string | null; hair: string | null; hairColor: string | null };
       faceHints?: boolean;
+      voiceFamiliarity?: boolean;
+      voiceProfile?: unknown;
     }
   >();
 
@@ -436,6 +438,28 @@ export class MemoryStore implements Store {
 
   async getFaceHints(studentId: string) {
     return this.profiles.get(studentId)?.faceHints === true;
+  }
+
+  async setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    const p = this.profiles.get(studentId);
+    if (!p) return;
+    p.voiceFamiliarity = enabled;
+    if (!enabled) delete p.voiceProfile;
+  }
+
+  async getVoiceFamiliarity(studentId: string) {
+    return this.profiles.get(studentId)?.voiceFamiliarity === true;
+  }
+
+  async getVoiceProfile(studentId: string) {
+    return this.profiles.get(studentId)?.voiceProfile ?? null;
+  }
+
+  async saveVoiceProfile(studentId: string, profile: unknown) {
+    const p = this.profiles.get(studentId);
+    // Only while it is switched on: a turn that finishes after the parent
+    // switched it off must not bring the profile back.
+    if (p?.voiceFamiliarity) p.voiceProfile = profile;
   }
 
   async orgOfStudent(studentId: string) {

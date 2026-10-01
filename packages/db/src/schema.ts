@@ -208,6 +208,10 @@ export const students = pgTable("students", {
   lookHairColor: text("look_hair_color"),
   /** The account holder has let this learner turn on face hints (camera read on-device only). */
   faceHints: boolean("face_hints").notNull().default(false),
+  /** The account holder has let the tutor get to know how this learner usually sounds. */
+  voiceFamiliarity: boolean("voice_familiarity").notNull().default(false),
+  /** Running averages of how they usually sound (see apps/api/src/tutor/voice.ts). No audio. */
+  voiceProfile: jsonb("voice_profile"),
   /** Set when the student belongs to a school/org roster. */
   orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
