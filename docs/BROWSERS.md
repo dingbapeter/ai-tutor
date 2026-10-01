@@ -52,7 +52,9 @@ which is the one surface that depends on pointer input, canvas and image
 export all working together. `tools/device/avatar-probe.mjs` proves the 3D
 tutor's lip sync and its fallback, `tools/device/face-probe.mjs` proves
 the face hints below, and `tools/device/voice-probe.mjs` proves voice
-familiarity. All run on the same stack as the sweep.
+familiarity, and `tools/device/data-probe.mjs` has a parent download all
+their data and then delete the account on every engine. All run on the
+same stack as the sweep.
 
 ## What every browser must give us, and does
 

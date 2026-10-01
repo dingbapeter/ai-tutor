@@ -3,6 +3,7 @@ import {
   mergeProfile,
   mintReferralCode,
   scheduleAttempt,
+  type AccountExport,
   type AuditEntry,
   type BillingEventRecord,
   type BillingEventRow,
@@ -344,9 +345,68 @@ export class MemoryStore implements Store {
     this.verifiedUsers.delete(userId);
     await this.revokeUserTokens(userId);
     this.plans.delete(userId);
+    this.planBoosts.delete(userId);
+    const code = this.referralCodeOf.get(userId);
+    if (code) this.referralCodes.delete(code);
+    this.referralCodeOf.delete(userId);
+    this.referredBy.delete(userId);
+    this.referralPaid.delete(userId);
+    this.accessGrants.delete(userId);
+    this.accessReviews = this.accessReviews.filter((r) => r.userId !== userId);
     this.staff.delete(userId);
     for (const [id, o] of this.orgs) if (o.ownerUserId === userId) this.orgs.delete(id);
     for (const [email, a] of this.accounts) if (a.userId === userId) this.accounts.delete(email);
+  }
+
+  async exportAccount(userId: string): Promise<AccountExport | null> {
+    const acct = this.accountFor(userId);
+    if (!acct) return null;
+    // Shaped like the database row: `id`, not the map's own `userId`.
+    const { passwordHash: _secret, userId: id, ...account } = acct;
+    const learners: AccountExport["learners"] = [...this.profiles.values()]
+      .filter((p) => p.ownerUserId === userId)
+      .map((p) => ({
+        learner: { ...p, orgId: this.orgStudents.get(p.id) ?? null },
+        learnerProfile: this.learnerProfiles.get(p.id) ?? null,
+        routine: this.routines.get(p.id) ?? null,
+        careContact: this.careContacts.get(p.id) ?? null,
+        memories: this.memories.get(p.id) ?? [],
+        mastery: [...(this.mastery.get(p.id)?.values() ?? [])],
+        safetyIncidents: this.incidents.filter((i) => i.studentId === p.id),
+        usage: this.usage.filter((u) => u.studentId === p.id),
+        sessions: [...this.sessions.entries()]
+          .filter(([, s]) => s.meta.studentId === p.id)
+          .map(([id, s]) => ({ session: { id, ...s }, messages: this.sessionMessages.get(id) ?? [] })),
+      }));
+    return {
+      account: {
+        id,
+        ...account,
+        plan: this.plans.get(userId) ?? "free",
+        emailVerified: this.verifiedUsers.has(userId),
+        referralCode: this.referralCodeOf.get(userId) ?? null,
+      },
+      learners,
+      usage: this.usage.filter((u) => u.userId === userId),
+      apiKeys: [...this.apiKeys.values()].filter((k) => k.ownerUserId === userId),
+      pushDevices: [...this.pushSubs.values()]
+        .filter((s) => s.userId === userId)
+        .map((s) => {
+          let service = "unknown";
+          try {
+            service = new URL(s.endpoint).hostname;
+          } catch {
+            /* not a URL */
+          }
+          return { service, createdAt: null };
+        }),
+      billingSubscriptions: [...this.subscriptions.values()].filter((s) => s.userId === userId),
+      paymentRecords: this.billingEvents.filter((e) => e.email?.toLowerCase() === acct.email.toLowerCase()),
+      orgsOwned: [...this.orgs.values()].filter((o) => o.ownerUserId === userId),
+      staff: this.staff.get(userId) ?? null,
+      accessGrant: this.accessGrants.get(userId) ?? null,
+      accessReviews: this.accessReviews.filter((r) => r.userId === userId),
+    };
   }
 
   async listRecentMessages(studentId: string, limit: number) {

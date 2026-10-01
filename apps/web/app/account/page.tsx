@@ -79,6 +79,7 @@ export default function Account() {
   const [meEmail, setMeEmail] = useState("");
   const [newChild, setNewChild] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [usage, setUsage] = useState<{
     plan: string;
     today: { messages: number; voiceTurns: number; limits: { messages: number; voiceTurns: number } };
@@ -361,8 +362,34 @@ export default function Account() {
     if (res.ok) setTranscript({ studentId, messages: (await res.json()).messages });
   }
 
+  /** The family's own copy of everything we hold, as one file. */
+  async function downloadEverything() {
+    if (!token) return;
+    setError(null);
+    setExporting(true);
+    try {
+      const res = await fetch(`${API}/me/export`, { headers: { authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "could not prepare your download");
+      const name =
+        res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ??
+        `dingba-data-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not prepare your download");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function deleteEverything() {
-    const sure = prompt('This permanently erases your account, every student, and all their history. Type DELETE to confirm.');
+    const sure = prompt('This permanently erases your account, every student, and all their history. If you want a copy, use "Download all our data" first. Type DELETE to confirm.');
     if (sure !== "DELETE" || !token) return;
     const res = await fetch(`${API}/me`, {
       method: "DELETE",
@@ -566,14 +593,17 @@ export default function Account() {
 
       {students.length === 0 && <p>No students yet. Add one above, then start a session from the <a href="/">home page</a>.</p>}
 
-      {students.length > 0 && (
-        <p style={{ textAlign: "right" }}>
-          <button onClick={deleteEverything}
-            style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-            Delete my account and all data
-          </button>
-        </p>
-      )}
+      <p className="data-rights">
+        <button onClick={downloadEverything} disabled={exporting}
+          title="Everything Dingba holds about your family, as one file you keep"
+          style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit", textDecoration: "underline" }}>
+          {exporting ? "Preparing your download…" : "Download all our data"}
+        </button>
+        <button onClick={deleteEverything}
+          style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+          Delete my account and all data
+        </button>
+      </p>
 
       {students.map((s) => (
         <div key={s.id} className="card fadeUp" style={{ marginBottom: 14 }}>

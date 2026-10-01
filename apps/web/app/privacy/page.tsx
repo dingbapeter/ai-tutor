@@ -49,9 +49,11 @@ export default function Privacy() {
       </p>
       <h3>Your rights</h3>
       <p>
-        Access, correction, export, and full deletion: the &ldquo;Delete my account and all data&rdquo;
-        button on your account page erases the account, every student profile, all conversations,
-        progress, and safety records, immediately and irreversibly.
+        Access, correction, export, and full deletion. &ldquo;Download all our data&rdquo; on your account
+        page gives you one file with everything we hold about your family: the account, every learner and
+        their settings, every lesson word for word, progress, safety records, usage and billing. Passwords
+        and sign-in keys are left out, because we only keep scrambled forms of them. &ldquo;Delete my
+        account and all data&rdquo; erases all of that, immediately and irreversibly.
       </p>
       <h3>Security</h3>
       <p>

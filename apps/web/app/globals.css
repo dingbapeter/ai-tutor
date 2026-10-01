@@ -907,3 +907,11 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
 }
 .face-ask p { margin: 6px 0; color: var(--text-dim); }
 .face-ask-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* The family's data rights: take a copy, or erase it all. */
+.data-rights {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}

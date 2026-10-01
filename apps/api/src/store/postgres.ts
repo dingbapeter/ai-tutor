@@ -5,6 +5,7 @@ import {
   mergeProfile,
   mintReferralCode,
   scheduleAttempt,
+  type AccountExport,
   type AuditEntry,
   type BillingEventRecord,
   type BillingEventRow,
@@ -1116,34 +1117,99 @@ export class PostgresStore implements Store {
 
   async deleteAccount(userId: string) {
     const students = await this.listStudentProfiles(userId);
-    for (const s of students) {
-      const sessions = await this.db
-        .select({ id: schema.sessions.id })
-        .from(schema.sessions)
-        .where(eq(schema.sessions.studentId, s.id));
-      for (const sess of sessions) {
-        await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sess.id));
+    // All or nothing: a failure part way must not leave an account standing
+    // with its children's data half erased.
+    await this.db.transaction(async (tx) => {
+      for (const s of students) {
+        const sessions = await tx
+          .select({ id: schema.sessions.id })
+          .from(schema.sessions)
+          .where(eq(schema.sessions.studentId, s.id));
+        for (const sess of sessions) {
+          await tx.delete(schema.messages).where(eq(schema.messages.sessionId, sess.id));
+        }
+        await tx.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
+        await tx.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
+        await tx.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
+        await tx.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
+        await tx.delete(schema.careContacts).where(eq(schema.careContacts.studentId, s.id));
+        await tx.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
+        await tx.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
+        await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
+        await tx.delete(schema.students).where(eq(schema.students.id, s.id));
       }
-      await this.db.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
-      await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
-      await this.db.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
-      await this.db.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
-      await this.db.delete(schema.careContacts).where(eq(schema.careContacts.studentId, s.id));
-      await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
-      await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
-      await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
-      await this.db.delete(schema.students).where(eq(schema.students.id, s.id));
+      await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
+      await tx.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
+      await tx.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+      await tx.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
+      await tx.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
+      await tx.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
+      await tx.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
+      await tx.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+      // Free-access grants and their reviews point at the account; without
+      // these two lines the database refused to erase anyone who ever held
+      // one. The audit log, which has no such link, keeps that it happened.
+      await tx.delete(schema.accessReviews).where(eq(schema.accessReviews.userId, userId));
+      await tx.delete(schema.accessGrants).where(eq(schema.accessGrants.userId, userId));
+      await tx.delete(schema.staffMembers).where(eq(schema.staffMembers.userId, userId));
+      await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    });
+  }
+
+  async exportAccount(userId: string): Promise<AccountExport | null> {
+    const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    if (!user) return null;
+    const { passwordHash: _secret, ...account } = user;
+    const owned = await this.listStudentProfiles(userId);
+    const learners: AccountExport["learners"] = [];
+    for (const s of owned) {
+      const [learner] = await this.db.select().from(schema.students).where(eq(schema.students.id, s.id)).limit(1);
+      if (!learner) continue;
+      const sessions = await this.db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.studentId, s.id))
+        .orderBy(schema.sessions.startedAt);
+      const withMessages = [];
+      for (const session of sessions) {
+        const messages = await this.db
+          .select()
+          .from(schema.messages)
+          .where(eq(schema.messages.sessionId, session.id))
+          .orderBy(schema.messages.createdAt);
+        withMessages.push({ session, messages });
+      }
+      const one = async <T>(rows: Promise<T[]>) => (await rows)[0] ?? null;
+      learners.push({
+        learner,
+        learnerProfile: await one(this.db.select().from(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id))),
+        routine: await one(this.db.select().from(schema.routines).where(eq(schema.routines.studentId, s.id))),
+        careContact: await one(this.db.select().from(schema.careContacts).where(eq(schema.careContacts.studentId, s.id))),
+        memories: await this.db.select().from(schema.memories).where(eq(schema.memories.studentId, s.id)),
+        mastery: await this.db.select().from(schema.mastery).where(eq(schema.mastery.studentId, s.id)),
+        safetyIncidents: await this.db.select().from(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id)),
+        usage: await this.db.select().from(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id)),
+        sessions: withMessages,
+      });
     }
-    await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
-    await this.db.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
-    await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
-    await this.db.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
-    await this.db.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
-    await this.db.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
-    await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
-    await this.db.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
-    await this.db.delete(schema.staffMembers).where(eq(schema.staffMembers.userId, userId));
-    await this.db.delete(schema.users).where(eq(schema.users.id, userId));
+    const keys = await this.db.select().from(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
+    const push = await this.db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+    return {
+      account,
+      learners,
+      usage: await this.db.select().from(schema.usageEvents).where(eq(schema.usageEvents.userId, userId)),
+      apiKeys: keys.map(({ keyHash: _hash, ...k }) => k),
+      pushDevices: push.map((p) => ({ service: pushService(p.endpoint), createdAt: p.createdAt })),
+      billingSubscriptions: await this.db.select().from(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId)),
+      paymentRecords: await this.db
+        .select()
+        .from(schema.billingEvents)
+        .where(sql`lower(${schema.billingEvents.email}) = ${user.email.toLowerCase()}`),
+      orgsOwned: await this.db.select().from(schema.orgs).where(eq(schema.orgs.ownerUserId, userId)),
+      staff: (await this.db.select().from(schema.staffMembers).where(eq(schema.staffMembers.userId, userId)))[0] ?? null,
+      accessGrant: (await this.db.select().from(schema.accessGrants).where(eq(schema.accessGrants.userId, userId)))[0] ?? null,
+      accessReviews: await this.db.select().from(schema.accessReviews).where(eq(schema.accessReviews.userId, userId)),
+    };
   }
 
   async listRecentMessages(studentId: string, limit: number) {
@@ -1696,5 +1762,14 @@ export class PostgresStore implements Store {
       students: Number(r.students),
       createdAt: new Date(r.created_at),
     }));
+  }
+}
+
+/** Which push service a device uses, without the address that reaches it. */
+function pushService(endpoint: string): string {
+  try {
+    return new URL(endpoint).hostname;
+  } catch {
+    return "unknown";
   }
 }

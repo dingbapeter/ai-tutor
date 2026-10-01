@@ -15,6 +15,38 @@ export interface SessionMeta {
   apiKeyId?: string;
 }
 
+/**
+ * Everything held about one account, for the family to download: exactly
+ * what deleteAccount erases, minus secrets (password hash, token and key
+ * hashes, push keys). Rows are as stored, so nothing is reworded away.
+ */
+export interface AccountExport {
+  account: Record<string, unknown>;
+  learners: Array<{
+    learner: Record<string, unknown>;
+    learnerProfile: unknown;
+    routine: unknown;
+    careContact: unknown;
+    memories: unknown[];
+    mastery: unknown[];
+    safetyIncidents: unknown[];
+    usage: unknown[];
+    sessions: Array<{ session: Record<string, unknown>; messages: unknown[] }>;
+  }>;
+  usage: unknown[];
+  apiKeys: unknown[];
+  /** Devices that get reminders: which push service and when, never the keys. */
+  pushDevices: Array<{ service: string; createdAt: Date | null }>;
+  billingSubscriptions: unknown[];
+  /** Payments the card processors told us about for this email. Kept after
+   *  deletion, as accounting law requires, so the family sees them here. */
+  paymentRecords: unknown[];
+  orgsOwned: unknown[];
+  staff: unknown;
+  accessGrant: unknown;
+  accessReviews: unknown[];
+}
+
 export interface SessionRecap {
   summary: string;
   nextFocus: string;
@@ -396,6 +428,8 @@ export interface Store {
 
   /** GDPR/COPPA erasure: the account and every trace of its students. */
   deleteAccount(userId: string): Promise<void>;
+  /** Everything deleteAccount would erase, for the family to keep. Null if no such account. */
+  exportAccount(userId: string): Promise<AccountExport | null>;
 
   /** Recent conversation lines for the guardian transcript view. */
   listRecentMessages(

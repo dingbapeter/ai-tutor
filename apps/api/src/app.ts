@@ -2531,6 +2531,54 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * The family's own copy of everything we hold: the right to a copy and to
+   * take it elsewhere (GDPR articles 15 and 20, and their equivalents). It
+   * covers exactly what DELETE /me erases, so "download, then delete" leaves
+   * a family with everything and us with nothing. Secrets stay out: no
+   * password hash, no token or key hashes, no push keys.
+   */
+  app.get(
+    "/me/export",
+    {
+      config: {
+        rateLimit: {
+          max: Number(env.EXPORT_RATE_LIMIT ?? 5),
+          timeWindow: "1 hour",
+          // Counted per signed-in account, not per address: whole schools and
+          // mobile networks share one address, and one family's downloads
+          // must never use up another's.
+          keyGenerator: (req: { headers: { authorization?: string }; ip: string }) =>
+            req.headers.authorization
+              ? `export:${createHash("sha256").update(req.headers.authorization).digest("hex")}`
+              : `export-ip:${req.ip}`,
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      const data = await store.exportAccount(user.userId);
+      if (!data) return reply.code(404).send({ error: "no such account" });
+      const day = new Date().toISOString().slice(0, 10);
+      reply.header("content-disposition", `attachment; filename="dingba-data-${day}.json"`);
+      reply.header("cache-control", "no-store");
+      return {
+        format: "dingba-export/1",
+        exportedAt: new Date().toISOString(),
+        about: [
+          "Everything Dingba holds about this account and its learners, as stored.",
+          "Lessons include every message, with the times they were sent.",
+          "Voice familiarity, when switched on, is a few running averages per learner (voiceProfile). No recordings are kept.",
+          "Face hints keep nothing about a face; only whether they are allowed (faceHints).",
+          "Left out on purpose: your password (we only ever kept a scrambled form of it) and the secret keys that keep you signed in.",
+          "Deleting the account on the account page erases all of this, except paymentRecords: payment records are kept as accounting law requires.",
+        ],
+        ...data,
+      };
+    },
+  );
+
   /** GDPR/COPPA erasure: the account and every trace of its students. */
   app.delete<{ Body: { confirm: string } }>(
     "/me",
