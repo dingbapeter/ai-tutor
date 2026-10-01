@@ -69,6 +69,12 @@ export interface Avatar3DProps {
   onFallback?: (reason: string) => void;
   /** For tests and probes: the live slider weights after each frame. */
   onFrame?: (weights: Weights, extras: { lid: number; headYaw: number; headPitch: number }) => void;
+  /**
+   * For the Studio: when this returns weights, they are applied as they
+   * are, with the life (blink, gaze, sway) held still, so an artist can
+   * watch one slider at a time. Null hands control back to the engine.
+   */
+  override?: () => Weights | null;
 }
 
 /** The sliders we ever ask for, so a mesh's lookup table is built once. */
@@ -118,12 +124,13 @@ export default function Avatar3D({
   color = "#6C5CE7",
   onFallback,
   onFrame,
+  override,
 }: Avatar3DProps) {
   const host = useRef<HTMLDivElement>(null);
   // The latest props, readable from inside the animation loop without
   // restarting it every render.
-  const live = useRef({ speaking, thinking, listening, attentive, mood, getLevel, getSpeech, onFrame });
-  live.current = { speaking, thinking, listening, attentive, mood, getLevel, getSpeech, onFrame };
+  const live = useRef({ speaking, thinking, listening, attentive, mood, getLevel, getSpeech, onFrame, override });
+  live.current = { speaking, thinking, listening, attentive, mood, getLevel, getSpeech, onFrame, override };
 
   useEffect(() => {
     const el = host.current;
@@ -284,7 +291,8 @@ export default function Avatar3D({
       nod = approach(nod, speechNod(level, prevLevel), dt, 120);
       prevLevel = approach(prevLevel, level, dt, 60);
 
-      const weights = compose(mouthMix, moodMix, blinkToArkit(lid), gazeToArkit(gaze.x, gaze.y));
+      const held = p.override?.() ?? null;
+      const weights = held ?? compose(mouthMix, moodMix, blinkToArkit(lid), gazeToArkit(gaze.x, gaze.y));
 
       // Apply to every face mesh that has the slider.
       for (const f of faces) {
@@ -297,7 +305,11 @@ export default function Avatar3D({
       const b = breath(now);
       const lean = attention === "listening" || attention === "attentive" ? 0.03 : 0;
       let yaw = 0, pitch = 0;
-      if (head) {
+      if (head && held) {
+        // One slider at a time: the head and eyes hold still.
+        head.rotation.copy(headRest);
+        head.scale.setScalar(1);
+      } else if (head) {
         yaw = sway.yaw + gaze.x * 0.12;
         pitch = sway.pitch + nod + lean - gaze.y * 0.08;
         head.rotation.set(headRest.x + pitch, headRest.y + yaw, headRest.z + sway.roll);
@@ -306,8 +318,8 @@ export default function Avatar3D({
         head.position.y += 0; // position is the artist's; breath is in scale
       }
       // Eyes, if the model has eye bones: a real glance.
-      if (leftEye) leftEye.rotation.set(-gaze.y * 0.25, gaze.x * 0.3, 0);
-      if (rightEye) rightEye.rotation.set(-gaze.y * 0.25, gaze.x * 0.3, 0);
+      if (leftEye) leftEye.rotation.set(held ? 0 : -gaze.y * 0.25, held ? 0 : gaze.x * 0.3, 0);
+      if (rightEye) rightEye.rotation.set(held ? 0 : -gaze.y * 0.25, held ? 0 : gaze.x * 0.3, 0);
 
       renderer!.render(scene, camera);
       p.onFrame?.(weights, { lid, headYaw: yaw, headPitch: pitch });

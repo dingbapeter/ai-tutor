@@ -8,7 +8,9 @@ deliver, how it is checked, and what happens where it cannot run.
 A tutor is a glTF 2.0 binary (`.glb`) with the 52 ARKit face sliders, eye
 and head nodes, textures embedded, under 15 MB. The full brief the artist
 works from is in the handoff pack the founder holds; the machine-checkable
-part of it is `tools/avatar/validate-glb.mjs`.
+part of it is `apps/web/app/studio/check.ts`, which the Studio page runs
+in the artist's browser and `tools/avatar/validate-glb.ts` runs from the
+command line. Same code, same verdict.
 
 When a model passes, it is dropped into the web app's public folder and
 named on its persona in `config/personas.json`:
@@ -22,14 +24,81 @@ persona, and the lesson page loads the 3D engine on demand for any tutor
 that has one. Tutors without a model keep the drawn face. Nothing else in
 the product changes.
 
-## Check a delivery before it goes anywhere near a child
+## The Studio: the artist checks their own work
+
+`/studio` on any running web app (the live site too). Drop a .glb on the
+page and three things happen in the browser, with nothing uploaded:
+
+- the file is checked against the contract and every line is written in
+  the artist's own terms ("sliders that move nothing: mouthPucker",
+  "textures referenced as separate files: skin.png (embed them)"), with a
+  verdict and a count of things to fix. A "work in progress" switch turns
+  the budgets (size, triangles, skeleton) into warnings so a half-built
+  character can still be looked at; the rig checks always count;
+- the same engine the lesson uses brings it to life: a sample line with
+  lip sync from a stand-in voice (the words decide the mouth shapes, the
+  sound decides the timing; `app/studio/voice.ts`), each mood, each
+  attention state;
+- a walk through every slider, one at a time, up and back down, with its
+  name on screen and the head held still, so a slider that pulls the wrong
+  part of the face is caught by eye before anyone else sees it.
+
+`/studio?model=/tutors/amara.glb` opens a character already installed.
+"Copy report" puts the whole check on the clipboard for whoever is asked
+to help. The page is public and harmless: it reads only the file it is
+given, and the lesson page is unchanged by it.
+
+## From a raw export to a tutor file
+
+What Unreal (a MetaHuman) or any DCC exports is close to the contract and
+never exactly it: several levels of detail, a whole body, bones named the
+tool's way, 8K textures, centimetres, and face sliders with a prefix. One
+Blender command takes that and writes the contract file:
 
 ```
-node tools/avatar/validate-glb.mjs path/to/amara.glb
+blender -b -P tools/avatar/prepare-character.py -- --in face.fbx --out amara.glb
 ```
 
-It reads the file directly, with no 3D software, and says in the artist's
-own terms what is wrong. It is stricter than a name check: a slider with
+It imports FBX, glTF or OBJ; drops every level of detail but the highest;
+brings centimetres to metres; cuts the body to a bust below a chest bone
+(`--cut-at spine_03` by default, `--no-cut` to keep it all), never touching
+the face; renames bones from MetaHuman, Mixamo and Blender names to Hips,
+Spine, Neck, Head, LeftEye and RightEye, and steps a mesh aside if it
+would share a bone's name; renames sliders to the exact ARKit names
+whatever prefix or casing the tool used (`CTRL_expressions_JawOpen` becomes
+`jawOpen`); zeroes every slider and clears the pose; shrinks textures over
+2048 px and packs them in (`--jpeg` for a smaller file); and exports one
+.glb, +Y up, with morph targets, skin and materials. Blender 4.0 or newer,
+nothing else to install.
+
+It is proven through real headless Blender: `tools/avatar/make-fake-export.py`
+builds a stand-in Unreal export from the test head (lower levels of
+detail, a body to the floor, MetaHuman bone names, Unreal slider names, a
+4096 px texture, centimetres), and `apps/web/test/prepare-character.test.ts`
+runs the pipeline on it and checks every step's log line and the result's
+rig checks. The test runs wherever Blender is installed and says so where
+it is not; CI has no Blender.
+
+Then, when the Studio says "Ready":
+
+```
+node tools/avatar/install-character.ts amara path/to/amara.glb
+```
+
+It checks the file again (it refuses one that fails), copies it to
+`apps/web/public/tutors/amara.glb`, names it on Amara in
+`config/personas.json`, and says what to commit. Deploy web and API, and
+every lesson with Amara loads the 3D engine from then on.
+
+## Check a delivery from the command line
+
+```
+node tools/avatar/validate-glb.ts path/to/amara.glb
+```
+
+The Studio's check, from a terminal (Node 22.18 or newer runs it as it
+is). It reads the file directly, with no 3D software, and says in the
+artist's own terms what is wrong. It is stricter than a name check: a slider with
 the right name that moves no vertices is a failure, because a slider that
 does nothing is a mouth that does not move. It checks the container, the
 size, the triangle budget, the skeleton and eye nodes and their hierarchy,
@@ -79,7 +148,17 @@ blank square. The probe checks this path on every engine.
 
 ```
 node tools/device/avatar-probe.mjs
+node tools/device/studio-probe.mjs
 ```
+
+The Studio probe opens `/studio` in a real browser, drops the test head
+on it, reads the strict and lenient verdicts and the lines, sees the
+character drawn, says the line and watches the jaw move on the words,
+walks sliders by name with the head held still, drops a file that is not
+a character and one with a slider that moves nothing and reads both
+explanations, and proves no request carried the file anywhere. Chromium
+and WebKit draw; Firefox headless has no WebGL and the probe checks the
+honest message there instead.
 
 Loads the real build with a persona carrying the licence-free test head
 (`apps/web/test/fixtures/test-head.glb`, made by

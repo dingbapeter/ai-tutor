@@ -201,7 +201,7 @@ for (const engineName of WANTED) {
     check(where, "the family page fits the screen", await fits(page));
 
     // 6. The pages a parent reads before trusting us, and the staff door.
-    for (const [path, label] of [["/terms", "terms"], ["/privacy", "privacy"], ["/command", "command centre"]]) {
+    for (const [path, label] of [["/terms", "terms"], ["/privacy", "privacy"], ["/command", "command centre"], ["/studio", "tutor studio"]]) {
       await page.goto(`${URL_BASE}${path}`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(300);
       check(where, `the ${label} page opens and fits`, (await page.locator("body").innerText()).length > 80 && (await fits(page)));
