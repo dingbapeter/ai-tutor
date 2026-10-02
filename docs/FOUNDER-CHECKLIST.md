@@ -179,23 +179,44 @@ untested backup is not a backup.
 
 ## Part 2: make it good (the week after)
 
-### 2.1 Billing, when you want money
+### 2.1 Billing, when you want money (both processors at once, 2026-10-02)
+
+Stripe and Paystack can both be live. Paystack takes naira, cedis,
+shillings and rand (and offers mobile money on its own page); Stripe takes
+everything else. A family sees prices in the currency their device
+suggests, can change it, and pays through whichever processor serves that
+currency. Set both blocks and both are live; set `BILLING_PROVIDER=stripe`
+or `=paystack` to keep only one.
 
 ```bash
-BILLING_PROVIDER=stripe          # or paystack for Nigeria
+# Stripe: one price per plan. Give each price its other currencies in the
+# dashboard ("currency options"); they are read from Stripe, never typed here.
 STRIPE_SECRET_KEY=<sk_live_...>
 STRIPE_WEBHOOK_SECRET=<whsec_...>
 STRIPE_PRICE_PLUS=<price_...>
 STRIPE_PRICE_PREMIUM=<price_...>
-# or:
+
+# Paystack: one plan per currency. The main pair is naira; more currencies
+# come as extra pairs named by their code. Amounts and currencies are read
+# from Paystack.
 PAYSTACK_SECRET_KEY=<sk_live_...>
-PAYSTACK_PLAN_PLUS=<plan code>
-PAYSTACK_PLAN_PREMIUM=<plan code>
+PAYSTACK_PLAN_PLUS=<PLN_... naira>
+PAYSTACK_PLAN_PREMIUM=<PLN_... naira>
+PAYSTACK_PLAN_PLUS_GHS=<PLN_... cedis>        # optional
+PAYSTACK_PLAN_PREMIUM_GHS=<PLN_... cedis>     # optional
 ```
-Create the products/prices in the dashboard first, point the webhook at
-`https://api.dingba.ai/billing/webhook`, then **run one real checkout with a
-real card** and confirm the plan flips on the account page. Paystack is the
-right default for Nigerian cards.
+
+**No price is typed into the code.** The account page shows what the
+processors report, so the number a parent sees is the number they are
+charged, and a change in a dashboard is a change on the page within the
+hour. A processor whose prices cannot be read is simply not on offer until
+it can be; the other carries on.
+
+Webhooks: point Stripe at `https://api.dingba.ai/billing/webhook/stripe`
+and Paystack at `https://api.dingba.ai/billing/webhook/paystack` (the
+plain `/billing/webhook` also works for both; it tells them apart by the
+signature header). Then **run one real checkout with a real card on each
+processor** and confirm the plan flips on the account page.
 
 ### 2.2 Real-device testing (register item A)
 

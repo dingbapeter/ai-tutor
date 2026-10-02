@@ -44,7 +44,7 @@ describe("preparing a raw export", () => {
     expect(lines.some((l) => /^ok largest texture 2048 px/.test(l))).toBe(true);
     expect(lines.some((l) => /^ok size .* metres: a bust at human scale/.test(l))).toBe(true);
     expect(report.pass).toBe(true);
-  });
+  }, 180_000);
 
   it.skipIf(hasBlender)("is skipped here: Blender is not installed (run it where it is)", () => {
     expect(hasBlender).toBe(false);

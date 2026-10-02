@@ -93,6 +93,10 @@ export default function Account() {
   const [emailVerified, setEmailVerified] = useState(true);
   const [verifySent, setVerifySent] = useState(false);
   const [billingOn, setBillingOn] = useState(false);
+  // What this family would pay, in the currency their device suggests or the
+  // one they chose; the amounts are what the processor will charge.
+  const [quote, setQuote] = useState<{ currency: string; provider: string; currencies: string[]; monthly: { plus: { amount: number }; premium: { amount: number } } } | null>(null);
+  const [pricesDown, setPricesDown] = useState(false);
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [routineBusy, setRoutineBusy] = useState<string | null>(null);
   const [careEditing, setCareEditing] = useState<string | null>(null);
@@ -155,7 +159,10 @@ export default function Account() {
       const r = await fetch(`${API}/account/referral`, { headers: { authorization: `Bearer ${t}` } });
       if (r.ok) setReferral(await r.json());
       const b = await fetch(`${API}/billing/status`);
-      if (b.ok) setBillingOn((await b.json()).configured === true);
+      if (b.ok && (await b.json()).configured === true) {
+        setBillingOn(true);
+        await loadQuote(null);
+      }
     } catch {
       setError("could not load dashboard");
     }
@@ -207,6 +214,46 @@ export default function Account() {
     }
   }
 
+  /** The family's own currency choice is kept on this device. */
+  async function loadQuote(chosen: string | null) {
+    let stored: string | null = null;
+    try {
+      stored = chosen ?? localStorage.getItem("dingba_currency");
+    } catch {
+      /* no storage: the device's suggestion is used */
+    }
+    const q = new URLSearchParams({
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "",
+      lang: navigator.language ?? "",
+      ...(stored ? { currency: stored } : {}),
+    });
+    const res = await fetch(`${API}/billing/quote?${q}`).catch(() => null);
+    if (res?.ok) {
+      setQuote(await res.json());
+      setPricesDown(false);
+    } else {
+      setQuote(null);
+      setPricesDown(true);
+    }
+  }
+
+  function chooseCurrency(code: string) {
+    try {
+      localStorage.setItem("dingba_currency", code);
+    } catch {
+      /* kept for this visit only */
+    }
+    void loadQuote(code);
+  }
+
+  function money(amount: number, currency: string) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
+    } catch {
+      return `${amount} ${currency}`;
+    }
+  }
+
   async function upgrade(plan: "plus" | "premium") {
     if (!token) return;
     setUpgrading(plan);
@@ -215,7 +262,7 @@ export default function Account() {
       const res = await fetch(`${API}/billing/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, ...(quote ? { currency: quote.currency } : {}) }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "checkout unavailable");
       window.location.href = (await res.json()).url;
@@ -534,15 +581,27 @@ export default function Account() {
             <button onClick={enableNotifications} className="btn quiet small">🔔 Enable study reminders</button>
           )}
           {billingOn && usage.plan !== "premium" && (
-            <span style={{ display: "flex", gap: 8 }}>
+            <span className="plan-offer">
               {usage.plan === "free" && (
                 <button disabled={upgrading !== null} onClick={() => upgrade("plus")} className="btn small">
-                  {upgrading === "plus" ? "Opening checkout…" : "⭐ Upgrade to Plus"}
+                  {upgrading === "plus" ? "Opening checkout…" : quote ? `⭐ Plus, ${money(quote.monthly.plus.amount, quote.currency)} a month` : "⭐ Upgrade to Plus"}
                 </button>
               )}
               <button disabled={upgrading !== null} onClick={() => upgrade("premium")} className="btn small" style={{ background: "var(--brand-deep)" }}>
-                {upgrading === "premium" ? "Opening checkout…" : "👑 Go Premium"}
+                {upgrading === "premium" ? "Opening checkout…" : quote ? `👑 Premium, ${money(quote.monthly.premium.amount, quote.currency)} a month` : "👑 Go Premium"}
               </button>
+              {quote && quote.currencies.length > 1 && (
+                <label className="plan-currency">
+                  Prices in{" "}
+                  <select value={quote.currency} onChange={(e) => chooseCurrency(e.target.value)} aria-label="Currency">
+                    {quote.currencies.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {quote && <small className="plan-note">Cancel any time. Paid through {quote.provider === "paystack" ? "Paystack" : quote.provider === "stripe" ? "Stripe" : quote.provider}.</small>}
+              {pricesDown && <small className="plan-note">Prices are not available right now. The buttons still work; the price is shown at checkout.</small>}
             </span>
           )}
         </div>

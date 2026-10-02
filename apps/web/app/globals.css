@@ -988,3 +988,9 @@ textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
   .appbar nav a { padding: 7px 10px; font-size: 14px; }
   .lang-switch { width: 80px; font-size: 12px; }
 }
+
+/* The plan offer on the family page: prices in the family's own currency. */
+.plan-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plan-currency { font-size: 13px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 4px; }
+.plan-currency select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.plan-note { flex-basis: 100%; color: var(--text-dim); }
