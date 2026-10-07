@@ -29,6 +29,17 @@ def test_equivalent():
     assert r.json()["correct"] is True
 
 
+def test_equivalent_no_parentheses_blocks_typing_the_question_back():
+    # Expand tasks demand a bracket-free answer: the prompt itself must not score.
+    r = c.post("/check/equivalent", json={"expression": "4*(x + 3)", "student_expression": "4(x+3)", "no_parentheses": True})
+    assert r.json()["correct"] is False
+    r = c.post("/check/equivalent", json={"expression": "4*(x + 3)", "student_expression": "4x + 12", "no_parentheses": True})
+    assert r.json()["correct"] is True
+    # Without the flag, equivalence alone decides (backwards compatible).
+    r = c.post("/check/equivalent", json={"expression": "4*(x + 3)", "student_expression": "4(x+3)"})
+    assert r.json()["correct"] is True
+
+
 def test_rejects_exponent_bombs():
     r = c.post("/check/solve", json={"equation": "x = 1", "variable": "x", "student_answer": "9**99999"})
     assert r.status_code == 400

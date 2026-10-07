@@ -28,13 +28,25 @@ Founder idea parking lot (a living protocol — keep using it): `IDEAS.md`.
 ## State: what is DONE and VERIFIED
 
 See the honesty table in `README.md` — it is the single source of truth and
-you MUST keep it updated. Summary: Sprints 1–6a complete + 6b core
-(billing, email verification) + Sprint 7 (rebrand, adult verticals, app
-shell, live presence) + Brain v1 + homepage + adaptive engine v1.
-68 API + 7 gateway + 7 mathcheck tests pass. Show Dingba (photo input) and routine upload shipped. The stack was live-verified
-against Postgres 16 and a real Qwen 0.5B via llama.cpp (protocol-identical
-to production). Billing (Stripe/Paystack), password reset, WhatsApp, and
-full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
+you MUST keep it updated. Summary as of 2026-08-29: Sprints 1–29 complete.
+On top of the original tutor stack (personas, voice, memory, verified math,
+safety, billing, 91 languages) the platform now has: the Command Centre at
+`/command` (RBAC with investors on the smallest capability surface, staff +
+HR with an org chart, safety desk, platform controls that bite, audit trail,
+CSV exports, the money ledger with failed payments and refunds), study plans
+(deterministic weekly planner), plan-aware push reminders and a guardian
+weekly digest (both cron-triggered), lessons (structured briefs the
+personas deliver, problems only from the verified bank), sessions that
+survive restarts and scale across instances (migration 0014), observability
+(Ops tab + Prometheus at /admin/metrics), a load driver with honest numbers
+in docs/PERF.md, a pedagogy eval harness (`pnpm evals`, binding against the
+real model at deploy), and an evasion-hardened safety floor. 201 TypeScript
++ 7 Python tests (after the sprint-29 stub sweep, which closed the mock
+exam's rubric-pack scoring hole), all CI-green on branch
+`claude/ai-tutor-continuation-dwrohy`. Register items B, D, I and the
+machine half of J are closed. WhatsApp and full-duplex LiveKit voice/video
+are NOT built: WhatsApp needs credentials, LiveKit needs the founder's
+interface code.
 
 ## House rules (the founder's standing instructions)
 
@@ -61,6 +73,12 @@ full-duplex voice are NOT built (Sprint 6b+ / Phase 2 — see README roadmap).
    rule in `docs/VISION-DINGBA.md` (no em dashes, no assistant-isms).
 8. **Commit style**: imperative summary + honest body listing what was
    verified vs pending. Small, complete sprints.
+9. **This is a global build.** Founder's standing instruction (2026-08-28):
+   resist the temptation to build for any one exam body or country. The
+   market is the world: Africa, Europe, America and beyond as peers. Local
+   audience tests come first, but curriculum, copy, currencies, names and
+   defaults must never assume one region. Deepen curriculum wide (SAT,
+   GCSE, IB, CFA, visa prep, WAEC/JAMB alongside, never instead).
 
 ## Architecture in 60 seconds
 
@@ -90,17 +108,25 @@ rebrand → new homepage → Brain v1 → adaptive engine v1 (the scoped
 warm-ups/scheduling work folds in here) → Ask/Show Dingba. The founder's
 infrastructure (Contabo, SMTP, etc.) is confirmed available.
 
-1. ~~Push (step zero), then set up CI~~ DONE 2026-08-24: GitHub Actions
-   (`.github/workflows/ci.yml`) runs typecheck + all three test suites on
-   every push and PR.
-2. ~~Sprint 6b core~~ BUILT 2026-08-24: Stripe/Paystack billing (checkout,
-   signature-verified webhooks → plan flips, cancellation downgrade) and
-   email verification. Needs live keys + a real checkout at deploy.
-   Remaining 6b: study plans & scheduling, WhatsApp nudges.
-3. Deploy per `deploy/DEPLOY.md` (7B model minimum — 0.5B was only a
-   protocol test; pedagogy quality demands the bigger model).
-4. Phase 2: LiveKit full-duplex voice, whiteboard, homework camera, avatar
-   v1, group voice classes, cartoon formats (IDEAS.md #001/#006).
+1. ~~CI~~ DONE. ~~Sprint 6b core~~ DONE. ~~Command Centre~~ DONE
+   (15–19). ~~Plans, reminders, digest, lessons~~ DONE (20–23).
+   ~~Session survival, observability, load, evals, safety floor~~ DONE
+   (24–28). ~~Full-platform stub sweep~~ DONE (29).
+   ~~Curriculum depth: 272-problem verified bank, spread sampling~~ DONE (31).
+   ~~AI request queue (32); rubric mock exams (33); conversation-mode voice (34); school portal (35); growth analytics (36)~~ DONE.
+   Pile 2 (the founder's 'build the entire list') is complete: 31 through 36.
+   ~~Zero-terminal switch-on (auto-migrate, auto keys, in-app alarm clock)~~ DONE (37).
+   FOUNDER IS MID-DEPLOY: Railway boxes + Postgres exist; his Railway must build THIS branch (guide v2 step 1).
+2. NEXT: the founder deploys per `deploy/DEPLOY.md` and
+   `docs/FOUNDER-CHECKLIST.md` (migrations through 0013,
+   COMMAND_OWNER_EMAILS, plan prices, two cron curls for
+   /admin/nudge-plans and /admin/weekly-digest, 7B model minimum).
+3. THEN: judge everything marked "quality rides the real model" against the
+   deployed 7B (greeting, attunement, lesson narration, vision
+   transcription) and iterate on prompts, not plumbing.
+4. Phase 2, blocked on the founder: LiveKit full-duplex voice/video (needs
+   their interface code), WhatsApp nudges (needs Business API credentials).
+   Parked in IDEAS.md: whiteboard, avatar v1, cartoon formats (#001/#006).
 
 Keep the energy: this project moves in decisive, fully-tested sprints with
 honest reporting. The founder says "go" and means it.

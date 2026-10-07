@@ -57,9 +57,52 @@ const RULES: Rule[] = [
     category: "jailbreak",
     severity: "concern",
     pattern:
-      /\b(ignore (all|your|previous) (instructions|rules)|you are no longer|pretend (you'?re|to be) (not )?(an? )?(ai|tutor)|system prompt|developer mode|DAN mode|forget (everything|(all )?(your |the )?(rules|instructions))|act as (an? )?(unrestricted|uncensored|jailbroken)|repeat (your|the) (instructions|prompt)|what (are|were) your instructions|roleplay as)\b/i,
+      /\b(ignore (all |your |previous |the )+(instructions|rules)|you are no longer|pretend (you'?re|to be) (not )?(an? )?(ai|tutor)|system prompt|developer mode|DAN mode|forget (everything|(all |your |the )*(rules|instructions))|act as (an? )?(unrestricted|uncensored|jailbroken)|repeat (your|the) (instructions|prompt)|what (are|were) your instructions|roleplay as)\b/i,
   },
 ];
+
+/**
+ * Evasion-resistant views of the text. The patterns run against every view,
+ * so writing "k!ll myself", "kiiiill myself", or "k i l l m y s e l f" lands
+ * on the same rule as the plain words. Views are additive: the raw text is
+ * always checked too, so normalization can only widen the net, never let
+ * something through that plain matching would have caught.
+ */
+function viewsOf(text: string): string[] {
+  // Zero-width characters and NFKC fold homoglyph tricks (ｋｉｌｌ, ᴋɪʟʟ partly)
+  // before anything else looks at the text.
+  const base = text.normalize("NFKC").replace(/[\u200b-\u200f\u2060\ufeff\u00ad]/g, "");
+  const views = [text, base];
+
+  // Leetspeak: digits and symbols standing in for letters, only mapped when
+  // the character sits inside a word so "route 66" stays a route.
+  const leet = base.replace(/[013457$@!|]/g, (ch, i) => {
+    const table: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", $: "s", "@": "a", "!": "i", "|": "l" };
+    // A leet character next to a letter OR another leet character sits
+    // inside a word ("addre55"); a lone digit in "route 66" does not.
+    const wordish = /[a-z013457$@!|]/i;
+    const before = base[i - 1] ?? " ";
+    const after = base[i + 1] ?? " ";
+    return wordish.test(before) || wordish.test(after) ? table[ch] : ch;
+  });
+  if (leet !== base) views.push(leet);
+
+  // Stretched letters: "kiiiill" collapses to "kill" (double letters kept,
+  // so "cutting" survives as itself).
+  const unstretched = base.replace(/([a-z])\1{2,}/gi, "$1");
+  if (unstretched !== base) views.push(unstretched);
+
+  // Spaced-out letters: a run of single letters ("k i l l  m y s e l f")
+  // reads as evasion, never as prose; the run is joined and word breaks are
+  // guessed at by re-inserting a space before known standalone words.
+  if (/\b(?:[a-z] ){3,}[a-z]\b/i.test(base)) {
+    const joined = base.replace(/\b((?:[a-z] ){3,}[a-z])\b/gi, (run) => run.replace(/ /g, ""));
+    views.push(joined);
+    // "killmyself" needs a seam for \b patterns; offer a seamed view too.
+    views.push(joined.replace(/(myself|my life|me|you|yourself)/gi, " $1 "));
+  }
+  return views;
+}
 
 export class RulesModerationProvider implements ModerationProvider {
   readonly name = "rules";
@@ -67,8 +110,9 @@ export class RulesModerationProvider implements ModerationProvider {
   async moderate(text: string): Promise<ModerationVerdict> {
     const categories: string[] = [];
     let severity: ModerationVerdict["severity"] = "none";
+    const views = viewsOf(text);
     for (const rule of RULES) {
-      if (rule.pattern.test(text)) {
+      if (views.some((view) => rule.pattern.test(view))) {
         categories.push(rule.category);
         if (rule.severity === "danger") severity = "danger";
         else if (severity === "none") severity = "concern";

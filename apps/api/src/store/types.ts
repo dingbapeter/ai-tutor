@@ -3,6 +3,50 @@
  * talks to this interface only. `memory` runs anywhere with zero setup;
  * `postgres` is production. Selected by DATABASE_URL presence.
  */
+/** What a session needs to be picked back up by any process. */
+export interface SessionMeta {
+  studentId: string;
+  personaId: string;
+  packId: string;
+  language: string;
+  plan: string;
+  ownerUserId?: string;
+  parentEmail?: string;
+  apiKeyId?: string;
+}
+
+/**
+ * Everything held about one account, for the family to download: exactly
+ * what deleteAccount erases, minus secrets (password hash, token and key
+ * hashes, push keys). Rows are as stored, so nothing is reworded away.
+ */
+export interface AccountExport {
+  account: Record<string, unknown>;
+  learners: Array<{
+    learner: Record<string, unknown>;
+    learnerProfile: unknown;
+    routine: unknown;
+    careContact: unknown;
+    memories: unknown[];
+    mastery: unknown[];
+    safetyIncidents: unknown[];
+    usage: unknown[];
+    sessions: Array<{ session: Record<string, unknown>; messages: unknown[] }>;
+  }>;
+  usage: unknown[];
+  apiKeys: unknown[];
+  /** Devices that get reminders: which push service and when, never the keys. */
+  pushDevices: Array<{ service: string; createdAt: Date | null }>;
+  billingSubscriptions: unknown[];
+  /** Payments the card processors told us about for this email. Kept after
+   *  deletion, as accounting law requires, so the family sees them here. */
+  paymentRecords: unknown[];
+  orgsOwned: unknown[];
+  staff: unknown;
+  accessGrant: unknown;
+  accessReviews: unknown[];
+}
+
 export interface SessionRecap {
   summary: string;
   nextFocus: string;
@@ -27,6 +71,21 @@ export const EMPTY_PROFILE: LearnerProfile = {
   interests: [],
   preferences: [],
 };
+
+/** Plan ordering for the referral boost: a boost can only ever improve. */
+export const PLAN_RANK: Record<string, number> = { free: 0, plus: 1, premium: 2 };
+
+export function betterPlan(a: string, b: string): string {
+  return (PLAN_RANK[b] ?? 0) > (PLAN_RANK[a] ?? 0) ? b : a;
+}
+
+/** Short, shareable, readable-aloud: no 0/o, 1/l/i lookalikes. */
+export function mintReferralCode(): string {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (const byte of crypto.getRandomValues(new Uint8Array(8))) out += alphabet[byte % alphabet.length];
+  return out;
+}
 
 /**
  * Adaptive engine v1: an SM-2-family scheduler (not full FSRS yet — the
@@ -141,7 +200,11 @@ export interface Store {
   /** Find-or-create a student by display name (auth comes later). */
   ensureStudent(name: string, parentEmail?: string): Promise<{ id: string }>;
 
-  createSession(studentId: string, personaId: string, packId: string): Promise<string>;
+  createSession(meta: SessionMeta): Promise<string>;
+  /** Everything needed to rehydrate a live session on a fresh process. */
+  getSessionMeta(sessionId: string): Promise<(SessionMeta & { endedAt: Date | null }) | null>;
+  /** The session's saved turns, oldest first, for rebuilding history. */
+  listSessionMessages(sessionId: string): Promise<Array<{ role: "user" | "assistant"; content: string }>>;
   saveMessage(sessionId: string, role: "user" | "assistant", content: string): Promise<void>;
   endSession(sessionId: string, recap: SessionRecap): Promise<void>;
 
@@ -198,7 +261,14 @@ export interface Store {
 
   addStudentProfile(parentUserId: string, displayName: string): Promise<{ id: string }>;
   /** Profiles this account may act for: own profile plus children. */
-  listStudentProfiles(userId: string): Promise<Array<{ id: string; displayName: string }>>;
+  listStudentProfiles(userId: string): Promise<
+    Array<{
+      id: string;
+      displayName: string;
+      tutorName?: string | null;
+      look?: { skin: string | null; hair: string | null; hairColor: string | null };
+    }>
+  >;
   ownsStudent(userId: string, studentId: string): Promise<boolean>;
   getStudentName(studentId: string): Promise<string | null>;
   listSessionSummaries(
@@ -240,8 +310,97 @@ export interface Store {
     since: Date,
   ): Promise<number>;
 
+  /** The EFFECTIVE plan: the better of the paid plan and any un-expired
+   *  referral boost. Everything that gates on plan reads this. */
   getUserPlan(userId: string): Promise<string>;
   setUserPlan(email: string, plan: string): Promise<boolean>;
+
+  // ---- Comp access grants (see command/access.ts) ----
+
+  /** The comp grant for a user, or null. Raw record; activity is computed. */
+  getAccessGrant(userId: string): Promise<AccessGrant | null>;
+  /** Create or replace a grant. Resets the review clock. */
+  setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }): Promise<void>;
+  /** Mark a grant revoked (kept for the record). */
+  revokeAccessGrant(userId: string): Promise<void>;
+  /** Log a performance review and roll the grant's review clock / state forward. */
+  recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }): Promise<void>;
+  /** Every grant, for the Command Centre HR view. */
+  listAccessGrants(): Promise<Array<AccessGrant & { email: string }>>;
+
+  /** How many sessions this student has ever had — the bond the tutor and
+   *  student have built, which the living persona wears visibly. */
+  countStudentSessions(studentId: string): Promise<number>;
+  /** When this friendship began (the earliest session), or null if none
+   *  yet. Drives the tutor aging alongside the child over real time. */
+  firstSessionAt(studentId: string): Promise<Date | null>;
+
+  // ---- Name your tutor ----
+
+  /** The student's own name for their tutor; null clears back to default. */
+  setTutorName(studentId: string, name: string | null): Promise<void>;
+  getTutorName(studentId: string): Promise<string | null>;
+
+  /** The tutor's appearance the student chose, so it can look like anyone.
+   *  Each field null = the persona's default. */
+  setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }): Promise<void>;
+  getTutorLook(studentId: string): Promise<{ skin: string | null; hair: string | null; hairColor: string | null }>;
+  /** Face hints: off unless the account holder switched them on for this learner. */
+  setFaceHints(studentId: string, enabled: boolean): Promise<void>;
+  getFaceHints(studentId: string): Promise<boolean>;
+  /** Voice familiarity: off unless the account holder switched it on.
+   *  Switching it off also forgets the profile. */
+  setVoiceFamiliarity(studentId: string, enabled: boolean): Promise<void>;
+  getVoiceFamiliarity(studentId: string): Promise<boolean>;
+  /** Running averages of how they usually sound (tutor/voice.ts); null if none yet. */
+  getVoiceProfile(studentId: string): Promise<unknown | null>;
+  saveVoiceProfile(studentId: string, profile: unknown): Promise<void>;
+  /** The school or organisation a learner is on the roster of, if any. */
+  orgOfStudent(studentId: string): Promise<string | null>;
+
+  // ---- Referral loop ----
+
+  /** My shareable code; minted on first ask, stable afterwards. */
+  getReferralCode(userId: string): Promise<string>;
+  userIdByReferralCode(code: string): Promise<string | null>;
+  /** Recorded once at signup; silently ignored if already set. */
+  setReferredBy(userId: string, referrerId: string): Promise<void>;
+  /** One-shot: the first call after the referred account verifies returns
+   *  the referrer's id and marks the reward paid; every later call returns
+   *  null. This is what stops re-verification from paying twice. */
+  claimReferralReward(referredUserId: string): Promise<string | null>;
+  /** Extend the thank-you plan by `days` from max(now, current expiry).
+   *  Returns the new expiry. Never touches the billing-owned plan. */
+  grantPlanBoost(userId: string, plan: string, days: number): Promise<Date>;
+  referralSummary(userId: string): Promise<{
+    code: string;
+    invited: number;
+    rewarded: number;
+    boostPlan: string | null;
+    boostUntil: Date | null;
+  }>;
+  /** For the Command Centre: how the loop is doing platform-wide. */
+  referralStats(topN: number): Promise<{
+    totalReferred: number;
+    rewarded: number;
+    top: Array<{ email: string; invited: number; rewarded: number }>;
+  }>;
 
   createOrg(ownerUserId: string, name: string, seats: number): Promise<{ id: string }>;
   getOrgByOwner(ownerUserId: string): Promise<{ id: string; name: string; seats: number; plan: string } | null>;
@@ -253,6 +412,12 @@ export interface Store {
 
   savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
   listPushSubscriptions(userId: string): Promise<Array<{ endpoint: string; p256dh: string; auth: string }>>;
+  /** Every real account, for the weekly digest run. Generated learner
+   *  bookkeeping accounts are not included. */
+  listAccounts(): Promise<Array<{ userId: string; email: string }>>;
+
+  /** Every device on the platform that asked for reminders, with its owner. */
+  listAllPushSubscriptions(): Promise<Array<{ userId: string; endpoint: string; p256dh: string; auth: string }>>;
   deletePushSubscription(endpoint: string): Promise<void>;
 
   /** Store sha256(raw); raw goes to the user by email. 1h validity, single use. */
@@ -263,6 +428,8 @@ export interface Store {
 
   /** GDPR/COPPA erasure: the account and every trace of its students. */
   deleteAccount(userId: string): Promise<void>;
+  /** Everything deleteAccount would erase, for the family to keep. Null if no such account. */
+  exportAccount(userId: string): Promise<AccountExport | null>;
 
   /** Recent conversation lines for the guardian transcript view. */
   listRecentMessages(
@@ -300,6 +467,102 @@ export interface Store {
     ref: { customerRef?: string; subscriptionRef?: string },
   ): Promise<{ userId: string; email: string } | null>;
 
+  // ---- Command Centre ----
+
+  /** Staff roster, investors included. */
+  listStaff(): Promise<StaffMember[]>;
+  getStaff(userId: string): Promise<StaffMember | null>;
+  upsertStaff(member: {
+    userId: string;
+    role: string;
+    title?: string;
+    status?: "active" | "suspended";
+    invitedBy?: string;
+  }): Promise<void>;
+  removeStaff(userId: string): Promise<boolean>;
+  /** Writes the employment half of a record. Only the keys given are touched. */
+  updateStaffHr(userId: string, hr: StaffHr): Promise<boolean>;
+  touchStaffSeen(userId: string): Promise<void>;
+
+  /** Append-only audit trail. */
+  recordAudit(entry: AuditEntry): Promise<void>;
+  listAudit(limit: number, opts?: { action?: string }): Promise<AuditRow[]>;
+
+  /**
+   * Every safety flag across the platform, newest first. Names the learner and
+   * the account behind them, so it is gated on safety:read and nothing less.
+   */
+  listPlatformIncidents(
+    limit: number,
+    opts?: { severity?: "concern" | "danger" },
+  ): Promise<PlatformIncident[]>;
+  /** Flags raised since a moment, split by severity. For the desk's headline. */
+  countIncidentsSince(since: Date): Promise<{ concern: number; danger: number }>;
+
+  /**
+   * The money ledger. record returns false when the event was already seen
+   * (processors retry webhooks), so the caller can skip re-applying it.
+   */
+  recordBillingEvent(event: BillingEventRecord): Promise<boolean>;
+  listBillingEvents(limit: number, opts?: { type?: string }): Promise<BillingEventRow[]>;
+  /** Failures and refunds since a moment, for the Money tab's warning tiles. */
+  countBillingTroubleSince(since: Date): Promise<{ failed: number; refunded: number }>;
+
+  /** Operational switches, flipped from the Command Centre without a deploy. */
+  getSetting(key: string): Promise<unknown | null>;
+  /** updatedBy is a user id, or null when the platform itself writes. */
+  setSetting(key: string, value: unknown, updatedBy: string | null): Promise<void>;
+
+  /**
+   * Atomic once-only claim for a scheduled job (e.g. "digest:2026-09-13").
+   * Exactly one caller across all api instances gets true; everyone else
+   * gets false. This is what makes the in-app alarm clock safe to run on
+   * every instance without double-sending anything.
+   */
+  claimDailyJob(key: string): Promise<boolean>;
+
+  /** Aggregate metrics for the Command Centre. No PII. */
+  platformMetrics(days: number): Promise<PlatformMetrics>;
+
+  /**
+   * Growth analytics: the activation funnel and weekly signup cohorts with
+   * retention. Counts only, never PII. Guests are invisible here on purpose:
+   * a funnel is about accounts.
+   */
+  growthAnalytics(now?: Date): Promise<GrowthAnalytics>;
+
+  /** One account by id, for the support view. Returns PII, so it is gated. */
+  getAccountById(userId: string): Promise<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    plan: string;
+    createdAt: Date;
+  } | null>;
+
+  /** Recent subscriptions, newest first. Names payers, so finance:detail only. */
+  listSubscriptions(limit: number): Promise<Array<{
+    userId: string;
+    email: string;
+    provider: string;
+    plan: string;
+    status: string;
+    subscriptionRef: string;
+    updatedAt: Date;
+  }>>;
+
+  /** Account search for support. Returns PII, so it is capability-gated. */
+  searchAccounts(query: string, limit: number): Promise<Array<{
+    userId: string;
+    email: string;
+    displayName: string | null;
+    role: string;
+    plan: string;
+    students: number;
+    createdAt: Date;
+  }>>;
+
   createApiKey(
     ownerUserId: string,
     name: string,
@@ -314,6 +577,144 @@ export interface Store {
     ownerUserId: string,
   ): Promise<Array<{ id: string; name: string; scopes: string[]; monthlyQuota: number; revoked: boolean }>>;
   revokeApiKey(ownerUserId: string, keyId: string): Promise<boolean>;
+}
+
+/** A Command Centre staff member (investors included, on their own role). */
+/** A comp access grant record (see command/access.ts for the rules). */
+export interface AccessGrant {
+  userId: string;
+  level: string;
+  reason: string | null;
+  grantedBy: string | null;
+  grantedAt: Date;
+  expiresAt: Date | null;
+  reviewIntervalDays: number;
+  nextReviewAt: Date | null;
+  lastReviewAt: Date | null;
+  lastRating: string | null;
+  revokedAt: Date | null;
+}
+
+export interface StaffMember {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+  title: string | null;
+  status: "active" | "suspended";
+  createdAt: Date;
+  lastSeenAt: Date | null;
+  /** The employment record. Null throughout until someone fills it in. */
+  fullName: string | null;
+  employmentType: EmploymentType | null;
+  startDate: string | null;
+  endDate: string | null;
+  managerUserId: string | null;
+  location: string | null;
+  notes: string | null;
+}
+
+export const EMPLOYMENT_TYPES = ["employee", "contractor", "advisor", "investor"] as const;
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
+
+/** The employment half of a staff record, all of it optional. */
+export interface StaffHr {
+  fullName?: string | null;
+  employmentType?: EmploymentType | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  managerUserId?: string | null;
+  location?: string | null;
+  notes?: string | null;
+}
+
+export interface AuditEntry {
+  actorUserId: string;
+  actorEmail: string;
+  actorRole: string;
+  action: string;
+  target?: string;
+  meta: Record<string, unknown>;
+  ip?: string;
+}
+
+export interface AuditRow extends AuditEntry {
+  id: string;
+  createdAt: Date;
+}
+
+/** One verified processor webhook, as recorded. */
+export interface BillingEventRecord {
+  provider: string;
+  eventRef: string;
+  type: "activated" | "canceled" | "payment_failed" | "refunded";
+  email?: string;
+  customerRef?: string;
+  subscriptionRef?: string;
+  plan?: string;
+  amountMinor?: number;
+  currency?: string;
+  matched: boolean;
+}
+
+export interface BillingEventRow extends BillingEventRecord {
+  id: string;
+  createdAt: Date;
+}
+
+/** A safety flag with enough context to act on it. Contains PII by design. */
+export interface PlatformIncident {
+  id: string;
+  studentId: string;
+  studentName: string;
+  /** The account that owns this learner, for reaching a guardian. */
+  guardianEmail: string | null;
+  direction: string;
+  categories: string[];
+  severity: string;
+  excerpt: string;
+  createdAt: Date;
+}
+
+/** Aggregate platform metrics. Contains no personally identifying data. */
+export interface GrowthAnalytics {
+  funnel: {
+    /** Accounts ever created. */
+    registered: number;
+    /** Accounts whose family started at least one session. */
+    startedSession: number;
+    /** Accounts with sessions on two or more different days: the habit signal. */
+    returnedAnotherDay: number;
+    /** Accounts with an active paid subscription. */
+    subscribed: number;
+  };
+  /**
+   * Weekly signup cohorts (Mondays, UTC), newest last. retainedByWeek[k] is
+   * the percentage of the cohort with at least one session during week k
+   * after their signup week; null marks a week that has not fully elapsed,
+   * because "0%" and "too early to say" must never look the same.
+   */
+  cohorts: Array<{ weekStart: string; signups: number; retainedByWeek: Array<number | null> }>;
+}
+
+export interface PlatformMetrics {
+  learners: number;
+  guardians: number;
+  sessions: number;
+  sessionsToday: number;
+  activeToday: number;
+  activeThisWeek: number;
+  activeThisMonth: number;
+  messages: number;
+  voiceTurns: number;
+  practiceAttempts: number;
+  safetyIncidents: number;
+  safetyDanger: number;
+  paidSubscriptions: number;
+  planMix: Array<{ plan: string; count: number }>;
+  /** Daily counts, oldest first, for the trend charts. */
+  sessionsSeries: Array<{ day: string; count: number }>;
+  signupsSeries: Array<{ day: string; count: number }>;
 }
 
 export type UsageKind = "message" | "voice_turn" | "tts_chars" | "practice" | "exam" | "api_call" | "camera_solve";

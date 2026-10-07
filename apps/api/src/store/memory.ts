@@ -1,18 +1,31 @@
 import {
+  betterPlan,
   mergeProfile,
+  mintReferralCode,
   scheduleAttempt,
+  type AccountExport,
+  type AuditEntry,
+  type BillingEventRecord,
+  type BillingEventRow,
+  type AuditRow,
   type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
   type MasteryState,
+  type PlatformIncident,
+  type PlatformMetrics,
+  type SessionMeta,
   type SessionRecap,
+  type StaffHr,
+  type StaffMember,
   type Store,
   type UsageKind,
 } from "./types.js";
 
 export class MemoryStore implements Store {
   readonly kind = "memory";
-  private students = new Map<string, { id: string; parentEmail?: string }>();
+  /** name+parent key -> student id. The record itself lives in `profiles`. */
+  private studentKeys = new Map<string, string>();
   private memories = new Map<string, Array<{ kind: string; content: string }>>();
   private learnerProfiles = new Map<string, LearnerProfile>();
   private routines = new Map<string, LearnerRoutine>();
@@ -20,11 +33,11 @@ export class MemoryStore implements Store {
   private mastery = new Map<string, Map<string, MasteryState>>();
   private sessions = new Map<
     string,
-    { studentId: string; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
+    { meta: SessionMeta; startedAt: Date; endedAt: Date | null; recap?: SessionRecap }
   >();
   private accounts = new Map<
     string,
-    { userId: string; passwordHash: string; role: "parent" | "student"; displayName: string }
+    { userId: string; passwordHash: string; role: "parent" | "student"; displayName: string; createdAt: Date }
   >();
   private tokens = new Map<string, { userId: string; createdAt: Date }>(); // tokenHash -> record
   private pushSubs = new Map<string, { userId: string; endpoint: string; p256dh: string; auth: string }>();
@@ -36,24 +49,51 @@ export class MemoryStore implements Store {
     { userId: string; provider: string; customerRef: string; subscriptionRef: string; plan: string; status: "active" | "canceled"; updatedAt: Date }
   >();
   private sessionMessages = new Map<string, Array<{ role: string; content: string; createdAt: Date }>>();
-  private profiles = new Map<string, { id: string; ownerUserId: string; displayName: string }>();
+  private profiles = new Map<
+    string,
+    {
+      id: string;
+      ownerUserId: string;
+      displayName: string;
+      tutorName?: string;
+      look?: { skin: string | null; hair: string | null; hairColor: string | null };
+      faceHints?: boolean;
+      voiceFamiliarity?: boolean;
+      voiceProfile?: unknown;
+    }
+  >();
 
   async ensureStudent(name: string, parentEmail?: string) {
     // Scope identity by parent email so two families' "Ada"s never collide.
     // Real accounts/auth replace this in the auth sprint.
     const key = `${name.toLowerCase()}::${(parentEmail ?? "").toLowerCase()}`;
-    let s = this.students.get(key);
-    if (!s) {
-      s = { id: crypto.randomUUID(), parentEmail };
-      this.students.set(key, s);
-    }
-    return { id: s.id };
+    const known = this.studentKeys.get(key);
+    if (known) return { id: known };
+    const id = crypto.randomUUID();
+    this.studentKeys.set(key, id);
+    // One student record, one home. PostgresStore puts guest students in the
+    // same table the family views read, so this store must do the same or
+    // rosters, counts and the support desk quietly disagree with production.
+    const owner = parentEmail ? this.accounts.get(parentEmail.toLowerCase())?.userId : undefined;
+    this.profiles.set(id, { id, ownerUserId: owner ?? `guest:${key}`, displayName: name });
+    return { id };
   }
 
-  async createSession(studentId: string, _personaId: string, _packId: string) {
+  async createSession(meta: SessionMeta) {
     const id = crypto.randomUUID();
-    this.sessions.set(id, { studentId, startedAt: new Date(), endedAt: null });
+    this.sessions.set(id, { meta, startedAt: new Date(), endedAt: null });
     return id;
+  }
+
+  async getSessionMeta(sessionId: string) {
+    const s = this.sessions.get(sessionId);
+    return s ? { ...s.meta, endedAt: s.endedAt } : null;
+  }
+
+  async listSessionMessages(sessionId: string) {
+    return (this.sessionMessages.get(sessionId) ?? [])
+      .filter((m): m is { role: "user" | "assistant"; content: string; createdAt: Date } => m.role !== "system")
+      .map(({ role, content }) => ({ role, content }));
   }
 
   async saveMessage(sessionId: string, role: "user" | "assistant", content: string) {
@@ -146,7 +186,7 @@ export class MemoryStore implements Store {
     const key = email.toLowerCase();
     if (this.accounts.has(key)) return null;
     const userId = crypto.randomUUID();
-    this.accounts.set(key, { userId, passwordHash, role, displayName });
+    this.accounts.set(key, { userId, passwordHash, role, displayName, createdAt: new Date() });
     let studentId: string | undefined;
     if (role === "student") {
       studentId = crypto.randomUUID();
@@ -192,6 +232,14 @@ export class MemoryStore implements Store {
 
   async deletePushSubscription(endpoint: string) {
     this.pushSubs.delete(endpoint);
+  }
+
+  async listAccounts() {
+    return [...this.accounts.entries()].map(([email, a]) => ({ userId: a.userId, email }));
+  }
+
+  async listAllPushSubscriptions() {
+    return [...this.pushSubs.values()].map(({ userId, endpoint, p256dh, auth }) => ({ userId, endpoint, p256dh, auth }));
   }
 
   async createPasswordReset(userId: string, tokenHash: string) {
@@ -272,6 +320,7 @@ export class MemoryStore implements Store {
     const studentIds = [...this.profiles.values()].filter((p) => p.ownerUserId === userId).map((p) => p.id);
     for (const sid of studentIds) {
       this.profiles.delete(sid);
+      for (const [key, id] of this.studentKeys) if (id === sid) this.studentKeys.delete(key);
       this.learnerProfiles.delete(sid);
       this.routines.delete(sid);
       this.careContacts.delete(sid);
@@ -279,7 +328,7 @@ export class MemoryStore implements Store {
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);
       for (const [id, s] of this.sessions) {
-        if (s.studentId === sid) {
+        if (s.meta.studentId === sid) {
           this.sessions.delete(id);
           this.sessionMessages.delete(id);
         }
@@ -296,14 +345,74 @@ export class MemoryStore implements Store {
     this.verifiedUsers.delete(userId);
     await this.revokeUserTokens(userId);
     this.plans.delete(userId);
+    this.planBoosts.delete(userId);
+    const code = this.referralCodeOf.get(userId);
+    if (code) this.referralCodes.delete(code);
+    this.referralCodeOf.delete(userId);
+    this.referredBy.delete(userId);
+    this.referralPaid.delete(userId);
+    this.accessGrants.delete(userId);
+    this.accessReviews = this.accessReviews.filter((r) => r.userId !== userId);
+    this.staff.delete(userId);
     for (const [id, o] of this.orgs) if (o.ownerUserId === userId) this.orgs.delete(id);
     for (const [email, a] of this.accounts) if (a.userId === userId) this.accounts.delete(email);
+  }
+
+  async exportAccount(userId: string): Promise<AccountExport | null> {
+    const acct = this.accountFor(userId);
+    if (!acct) return null;
+    // Shaped like the database row: `id`, not the map's own `userId`.
+    const { passwordHash: _secret, userId: id, ...account } = acct;
+    const learners: AccountExport["learners"] = [...this.profiles.values()]
+      .filter((p) => p.ownerUserId === userId)
+      .map((p) => ({
+        learner: { ...p, orgId: this.orgStudents.get(p.id) ?? null },
+        learnerProfile: this.learnerProfiles.get(p.id) ?? null,
+        routine: this.routines.get(p.id) ?? null,
+        careContact: this.careContacts.get(p.id) ?? null,
+        memories: this.memories.get(p.id) ?? [],
+        mastery: [...(this.mastery.get(p.id)?.values() ?? [])],
+        safetyIncidents: this.incidents.filter((i) => i.studentId === p.id),
+        usage: this.usage.filter((u) => u.studentId === p.id),
+        sessions: [...this.sessions.entries()]
+          .filter(([, s]) => s.meta.studentId === p.id)
+          .map(([id, s]) => ({ session: { id, ...s }, messages: this.sessionMessages.get(id) ?? [] })),
+      }));
+    return {
+      account: {
+        id,
+        ...account,
+        plan: this.plans.get(userId) ?? "free",
+        emailVerified: this.verifiedUsers.has(userId),
+        referralCode: this.referralCodeOf.get(userId) ?? null,
+      },
+      learners,
+      usage: this.usage.filter((u) => u.userId === userId),
+      apiKeys: [...this.apiKeys.values()].filter((k) => k.ownerUserId === userId),
+      pushDevices: [...this.pushSubs.values()]
+        .filter((s) => s.userId === userId)
+        .map((s) => {
+          let service = "unknown";
+          try {
+            service = new URL(s.endpoint).hostname;
+          } catch {
+            /* not a URL */
+          }
+          return { service, createdAt: null };
+        }),
+      billingSubscriptions: [...this.subscriptions.values()].filter((s) => s.userId === userId),
+      paymentRecords: this.billingEvents.filter((e) => e.email?.toLowerCase() === acct.email.toLowerCase()),
+      orgsOwned: [...this.orgs.values()].filter((o) => o.ownerUserId === userId),
+      staff: this.staff.get(userId) ?? null,
+      accessGrant: this.accessGrants.get(userId) ?? null,
+      accessReviews: this.accessReviews.filter((r) => r.userId === userId),
+    };
   }
 
   async listRecentMessages(studentId: string, limit: number) {
     const out: Array<{ role: string; content: string; createdAt: Date }> = [];
     for (const [sessionId, s] of this.sessions) {
-      if (s.studentId === studentId) out.push(...(this.sessionMessages.get(sessionId) ?? []));
+      if (s.meta.studentId === studentId) out.push(...(this.sessionMessages.get(sessionId) ?? []));
     }
     return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit).reverse();
   }
@@ -311,7 +420,7 @@ export class MemoryStore implements Store {
   async getStreakDays(studentId: string) {
     const days = new Set(
       [...this.sessions.values()]
-        .filter((s) => s.studentId === studentId)
+        .filter((s) => s.meta.studentId === studentId)
         .map((s) => s.startedAt.toISOString().slice(0, 10)),
     );
     let streak = 0;
@@ -333,7 +442,12 @@ export class MemoryStore implements Store {
   async listStudentProfiles(userId: string) {
     return [...this.profiles.values()]
       .filter((p) => p.ownerUserId === userId)
-      .map((p) => ({ id: p.id, displayName: p.displayName }));
+      .map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        tutorName: p.tutorName ?? null,
+        look: p.look ?? { skin: null, hair: null, hairColor: null },
+      }));
   }
 
   async ownsStudent(userId: string, studentId: string) {
@@ -344,7 +458,76 @@ export class MemoryStore implements Store {
     return this.profiles.get(studentId)?.displayName ?? null;
   }
 
+  async countStudentSessions(studentId: string) {
+    let n = 0;
+    for (const s of this.sessions.values()) if (s.meta.studentId === studentId) n += 1;
+    return n;
+  }
+
+  async firstSessionAt(studentId: string) {
+    let earliest: Date | null = null;
+    for (const s of this.sessions.values()) {
+      if (s.meta.studentId !== studentId) continue;
+      if (!earliest || s.startedAt < earliest) earliest = s.startedAt;
+    }
+    return earliest;
+  }
+
+  async setTutorName(studentId: string, name: string | null) {
+    const p = this.profiles.get(studentId);
+    if (p) p.tutorName = name ?? undefined;
+  }
+
+  async getTutorName(studentId: string) {
+    return this.profiles.get(studentId)?.tutorName ?? null;
+  }
+
+  async setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }) {
+    const p = this.profiles.get(studentId);
+    if (p) p.look = look;
+  }
+
+  async getTutorLook(studentId: string) {
+    return this.profiles.get(studentId)?.look ?? { skin: null, hair: null, hairColor: null };
+  }
+
+  async setFaceHints(studentId: string, enabled: boolean) {
+    const p = this.profiles.get(studentId);
+    if (p) p.faceHints = enabled;
+  }
+
+  async getFaceHints(studentId: string) {
+    return this.profiles.get(studentId)?.faceHints === true;
+  }
+
+  async setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    const p = this.profiles.get(studentId);
+    if (!p) return;
+    p.voiceFamiliarity = enabled;
+    if (!enabled) delete p.voiceProfile;
+  }
+
+  async getVoiceFamiliarity(studentId: string) {
+    return this.profiles.get(studentId)?.voiceFamiliarity === true;
+  }
+
+  async getVoiceProfile(studentId: string) {
+    return this.profiles.get(studentId)?.voiceProfile ?? null;
+  }
+
+  async saveVoiceProfile(studentId: string, profile: unknown) {
+    const p = this.profiles.get(studentId);
+    // Only while it is switched on: a turn that finishes after the parent
+    // switched it off must not bring the profile back.
+    if (p?.voiceFamiliarity) p.voiceProfile = profile;
+  }
+
+  async orgOfStudent(studentId: string) {
+    return this.orgStudents.get(studentId) ?? null;
+  }
+
   private incidents: Array<{
+    id: string;
     studentId: string;
     sessionId?: string;
     direction: "student" | "tutor";
@@ -362,7 +545,7 @@ export class MemoryStore implements Store {
     severity: "concern" | "danger";
     excerpt: string;
   }) {
-    this.incidents.push({ ...incident, createdAt: new Date() });
+    this.incidents.push({ ...incident, id: crypto.randomUUID(), createdAt: new Date() });
   }
 
   async listIncidents(studentId: string, limit: number) {
@@ -374,7 +557,7 @@ export class MemoryStore implements Store {
 
   async listSessionSummaries(studentId: string, limit: number) {
     return [...this.sessions.values()]
-      .filter((s) => s.studentId === studentId)
+      .filter((s) => s.meta.studentId === studentId)
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
       .slice(0, limit)
       .map((s) => ({
@@ -395,6 +578,11 @@ export class MemoryStore implements Store {
     createdAt: Date;
   }> = [];
   private plans = new Map<string, string>(); // userId -> plan
+  private referralCodes = new Map<string, string>(); // code -> userId
+  private referralCodeOf = new Map<string, string>(); // userId -> code
+  private referredBy = new Map<string, string>(); // referred userId -> referrer userId
+  private referralPaid = new Set<string>(); // referred userIds whose invite has paid out
+  private planBoosts = new Map<string, { plan: string; until: Date }>();
   private orgs = new Map<string, { id: string; name: string; ownerUserId: string; seats: number; plan: string }>();
   private orgStudents = new Map<string, string>(); // studentId -> orgId
   private apiKeys = new Map<
@@ -424,7 +612,9 @@ export class MemoryStore implements Store {
   }
 
   async getUserPlan(userId: string) {
-    return this.plans.get(userId) ?? "free";
+    const paid = this.plans.get(userId) ?? "free";
+    const boost = this.planBoosts.get(userId);
+    return boost && boost.until > new Date() ? betterPlan(paid, boost.plan) : paid;
   }
 
   async setUserPlan(email: string, plan: string) {
@@ -432,6 +622,146 @@ export class MemoryStore implements Store {
     if (!a) return false;
     this.plans.set(a.userId, plan);
     return true;
+  }
+
+  private accessGrants = new Map<string, import("./types.js").AccessGrant>();
+  private accessReviews: Array<{
+    userId: string;
+    reviewedBy: string | null;
+    reviewedAt: Date;
+    rating: string;
+    decision: string;
+    note: string | null;
+  }> = [];
+
+  async getAccessGrant(userId: string) {
+    return this.accessGrants.get(userId) ?? null;
+  }
+
+  async setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }) {
+    this.accessGrants.set(grant.userId, {
+      ...grant,
+      grantedAt: new Date(),
+      lastReviewAt: null,
+      lastRating: null,
+      revokedAt: null,
+    });
+  }
+
+  async revokeAccessGrant(userId: string) {
+    const g = this.accessGrants.get(userId);
+    if (g) g.revokedAt = new Date();
+  }
+
+  async recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }) {
+    this.accessReviews.push({
+      userId: review.userId,
+      reviewedBy: review.reviewedBy,
+      reviewedAt: new Date(),
+      rating: review.rating,
+      decision: review.decision,
+      note: review.note,
+    });
+    const g = this.accessGrants.get(review.userId);
+    if (g) {
+      g.lastReviewAt = new Date();
+      g.lastRating = review.rating;
+      g.nextReviewAt = review.nextReviewAt;
+      g.revokedAt = review.revoke ? new Date() : null;
+    }
+  }
+
+  async listAccessGrants() {
+    const emailOf = new Map<string, string>();
+    for (const [email, a] of this.accounts) emailOf.set(a.userId, email);
+    return [...this.accessGrants.values()].map((g) => ({ ...g, email: emailOf.get(g.userId) ?? g.userId }));
+  }
+
+  async getReferralCode(userId: string) {
+    const existing = this.referralCodeOf.get(userId);
+    if (existing) return existing;
+    let code = mintReferralCode();
+    while (this.referralCodes.has(code)) code = mintReferralCode();
+    this.referralCodes.set(code, userId);
+    this.referralCodeOf.set(userId, code);
+    return code;
+  }
+
+  async userIdByReferralCode(code: string) {
+    return this.referralCodes.get(code.toLowerCase()) ?? null;
+  }
+
+  async setReferredBy(userId: string, referrerId: string) {
+    if (userId === referrerId || this.referredBy.has(userId)) return;
+    this.referredBy.set(userId, referrerId);
+  }
+
+  async claimReferralReward(referredUserId: string) {
+    if (this.referralPaid.has(referredUserId)) return null;
+    const referrer = this.referredBy.get(referredUserId);
+    if (!referrer) return null;
+    this.referralPaid.add(referredUserId);
+    return referrer;
+  }
+
+  async grantPlanBoost(userId: string, plan: string, days: number) {
+    const current = this.planBoosts.get(userId);
+    const from = Math.max(Date.now(), current?.until.getTime() ?? 0);
+    const until = new Date(from + days * 86_400_000);
+    this.planBoosts.set(userId, { plan: betterPlan(current?.plan ?? "free", plan), until });
+    return until;
+  }
+
+  async referralSummary(userId: string) {
+    let invited = 0;
+    let rewarded = 0;
+    for (const [referred, referrer] of this.referredBy) {
+      if (referrer !== userId) continue;
+      invited += 1;
+      if (this.referralPaid.has(referred)) rewarded += 1;
+    }
+    const boost = this.planBoosts.get(userId);
+    const live = boost && boost.until > new Date() ? boost : null;
+    return {
+      code: await this.getReferralCode(userId),
+      invited,
+      rewarded,
+      boostPlan: live?.plan ?? null,
+      boostUntil: live?.until ?? null,
+    };
+  }
+
+  async referralStats(topN: number) {
+    const byReferrer = new Map<string, { invited: number; rewarded: number }>();
+    for (const [referred, referrer] of this.referredBy) {
+      const row = byReferrer.get(referrer) ?? { invited: 0, rewarded: 0 };
+      row.invited += 1;
+      if (this.referralPaid.has(referred)) row.rewarded += 1;
+      byReferrer.set(referrer, row);
+    }
+    const emailOf = new Map<string, string>();
+    for (const [email, a] of this.accounts) emailOf.set(a.userId, email);
+    const top = [...byReferrer.entries()]
+      .sort((a, b) => b[1].invited - a[1].invited)
+      .slice(0, topN)
+      .map(([id, row]) => ({ email: emailOf.get(id) ?? id, ...row }));
+    return { totalReferred: this.referredBy.size, rewarded: this.referralPaid.size, top };
   }
 
   async createOrg(ownerUserId: string, name: string, seats: number) {
@@ -498,5 +828,378 @@ export class MemoryStore implements Store {
       }
     }
     return false;
+  }
+
+  // ---- Command Centre ----
+
+  private staff = new Map<string, {
+    userId: string;
+    role: string;
+    title: string | null;
+    status: "active" | "suspended";
+    invitedBy: string | null;
+    createdAt: Date;
+    lastSeenAt: Date | null;
+    hr: StaffHr;
+  }>();
+  private auditRows: AuditRow[] = [];
+
+  /** Reverse lookup: the accounts map is keyed by email, staff is keyed by user. */
+  private accountFor(userId: string) {
+    for (const [email, a] of this.accounts) {
+      if (a.userId === userId) return { email, ...a };
+    }
+    return null;
+  }
+
+  private toStaffMember(rec: {
+    userId: string;
+    role: string;
+    title: string | null;
+    status: "active" | "suspended";
+    createdAt: Date;
+    lastSeenAt: Date | null;
+    hr: StaffHr;
+  }): StaffMember {
+    const account = this.accountFor(rec.userId);
+    return {
+      userId: rec.userId,
+      email: account?.email ?? "",
+      displayName: account?.displayName ?? null,
+      role: rec.role,
+      title: rec.title,
+      status: rec.status,
+      createdAt: rec.createdAt,
+      lastSeenAt: rec.lastSeenAt,
+      fullName: rec.hr.fullName ?? null,
+      employmentType: rec.hr.employmentType ?? null,
+      startDate: rec.hr.startDate ?? null,
+      endDate: rec.hr.endDate ?? null,
+      managerUserId: rec.hr.managerUserId ?? null,
+      location: rec.hr.location ?? null,
+      notes: rec.hr.notes ?? null,
+    };
+  }
+
+  async listStaff() {
+    return [...this.staff.values()]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((r) => this.toStaffMember(r));
+  }
+
+  async getStaff(userId: string) {
+    const rec = this.staff.get(userId);
+    return rec ? this.toStaffMember(rec) : null;
+  }
+
+  async upsertStaff(member: {
+    userId: string;
+    role: string;
+    title?: string;
+    status?: "active" | "suspended";
+    invitedBy?: string;
+  }) {
+    const existing = this.staff.get(member.userId);
+    this.staff.set(member.userId, {
+      userId: member.userId,
+      role: member.role,
+      title: member.title ?? existing?.title ?? null,
+      status: member.status ?? existing?.status ?? "active",
+      invitedBy: member.invitedBy ?? existing?.invitedBy ?? null,
+      createdAt: existing?.createdAt ?? new Date(),
+      lastSeenAt: existing?.lastSeenAt ?? null,
+      hr: existing?.hr ?? {},
+    });
+  }
+
+  async updateStaffHr(userId: string, hr: StaffHr) {
+    const rec = this.staff.get(userId);
+    if (!rec) return false;
+    // Only the keys given are touched; the rest of the record stands.
+    rec.hr = { ...rec.hr, ...hr };
+    return true;
+  }
+
+  async removeStaff(userId: string) {
+    const gone = this.staff.delete(userId);
+    // Nobody should be left reporting to someone who is no longer here.
+    if (gone) {
+      for (const rec of this.staff.values()) {
+        if (rec.hr.managerUserId === userId) rec.hr = { ...rec.hr, managerUserId: null };
+      }
+    }
+    return gone;
+  }
+
+  async touchStaffSeen(userId: string) {
+    const rec = this.staff.get(userId);
+    if (rec) rec.lastSeenAt = new Date();
+  }
+
+  async recordAudit(entry: AuditEntry) {
+    this.auditRows.push({ ...entry, id: crypto.randomUUID(), createdAt: new Date() });
+  }
+
+  async listAudit(limit: number, opts: { action?: string } = {}) {
+    return this.auditRows
+      .filter((r) => !opts.action || r.action === opts.action)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async listPlatformIncidents(limit: number, opts: { severity?: "concern" | "danger" } = {}) {
+    return this.incidents
+      .filter((i) => !opts.severity || i.severity === opts.severity)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((i): PlatformIncident => {
+        const profile = this.profiles.get(i.studentId);
+        const owner = profile ? this.accountFor(profile.ownerUserId) : null;
+        return {
+          id: i.id,
+          studentId: i.studentId,
+          studentName: profile?.displayName ?? "unknown learner",
+          guardianEmail: owner?.email ?? null,
+          direction: i.direction,
+          categories: i.categories,
+          severity: i.severity,
+          excerpt: i.excerpt,
+          createdAt: i.createdAt,
+        };
+      });
+  }
+
+  async countIncidentsSince(since: Date) {
+    const recent = this.incidents.filter((i) => i.createdAt >= since);
+    return {
+      concern: recent.filter((i) => i.severity === "concern").length,
+      danger: recent.filter((i) => i.severity === "danger").length,
+    };
+  }
+
+  private settings = new Map<string, unknown>();
+  private billingEvents: BillingEventRow[] = [];
+  private billingEventRefs = new Set<string>();
+
+  async recordBillingEvent(event: BillingEventRecord) {
+    const key = `${event.provider}::${event.eventRef}`;
+    // Processors retry webhooks; the same event lands exactly once.
+    if (this.billingEventRefs.has(key)) return false;
+    this.billingEventRefs.add(key);
+    this.billingEvents.push({ ...event, id: crypto.randomUUID(), createdAt: new Date() });
+    return true;
+  }
+
+  async listBillingEvents(limit: number, opts: { type?: string } = {}) {
+    return this.billingEvents
+      .filter((e) => !opts.type || e.type === opts.type)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async countBillingTroubleSince(since: Date) {
+    const recent = this.billingEvents.filter((e) => e.createdAt >= since);
+    return {
+      failed: recent.filter((e) => e.type === "payment_failed").length,
+      refunded: recent.filter((e) => e.type === "refunded").length,
+    };
+  }
+
+  async getSetting(key: string) {
+    return this.settings.has(key) ? this.settings.get(key) : null;
+  }
+
+  async setSetting(key: string, value: unknown) {
+    this.settings.set(key, value);
+  }
+
+  private jobClaims = new Set<string>();
+  async claimDailyJob(key: string) {
+    if (this.jobClaims.has(key)) return false;
+    this.jobClaims.add(key);
+    return true;
+  }
+
+  async platformMetrics(days: number): Promise<PlatformMetrics> {
+    const now = new Date();
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+    const since = (n: number) => new Date(now.getTime() - n * 86_400_000);
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const allSessions = [...this.sessions.values()];
+    const activeSince = (from: Date) =>
+      new Set(allSessions.filter((s) => s.startedAt >= from).map((s) => s.meta.studentId)).size;
+
+    let messages = 0;
+    for (const list of this.sessionMessages.values()) messages += list.length;
+
+    const usageOf = (kind: UsageKind) =>
+      this.usage.filter((u) => u.kind === kind).reduce((n, u) => n + u.quantity, 0);
+
+    // Plan mix counts every account, defaulting to free when nothing was set.
+    const planCounts = new Map<string, number>();
+    for (const a of this.accounts.values()) {
+      const plan = this.plans.get(a.userId) ?? "free";
+      planCounts.set(plan, (planCounts.get(plan) ?? 0) + 1);
+    }
+
+    // Series run oldest-first across the whole window, zeros included, so the
+    // charts never invent a shape out of missing days.
+    const window: string[] = [];
+    for (let i = days - 1; i >= 0; i -= 1) window.push(dayKey(since(i)));
+    const series = (dates: Date[]) => {
+      const counts = new Map<string, number>();
+      for (const d of dates) counts.set(dayKey(d), (counts.get(dayKey(d)) ?? 0) + 1);
+      return window.map((day) => ({ day, count: counts.get(day) ?? 0 }));
+    };
+
+    const windowStart = since(days - 1);
+    windowStart.setHours(0, 0, 0, 0);
+
+    return {
+      learners: this.profiles.size,
+      guardians: [...this.accounts.values()].filter((a) => a.role === "parent").length,
+      sessions: allSessions.length,
+      sessionsToday: allSessions.filter((s) => s.startedAt >= startOfToday).length,
+      activeToday: activeSince(startOfToday),
+      activeThisWeek: activeSince(since(7)),
+      activeThisMonth: activeSince(since(30)),
+      messages,
+      voiceTurns: usageOf("voice_turn"),
+      practiceAttempts: usageOf("practice"),
+      safetyIncidents: this.incidents.length,
+      safetyDanger: this.incidents.filter((i) => i.severity === "danger").length,
+      paidSubscriptions: [...this.subscriptions.values()].filter((s) => s.status === "active").length,
+      planMix: [...planCounts.entries()]
+        .map(([plan, count]) => ({ plan, count }))
+        .sort((a, b) => b.count - a.count),
+      sessionsSeries: series(allSessions.filter((s) => s.startedAt >= windowStart).map((s) => s.startedAt)),
+      signupsSeries: series(
+        [...this.accounts.values()].filter((a) => a.createdAt >= windowStart).map((a) => a.createdAt),
+      ),
+    };
+  }
+
+  async growthAnalytics(now: Date = new Date()) {
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    const utcMonday = (d: Date) => {
+      const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const dow = (day.getUTCDay() + 6) % 7; // Monday = 0
+      return new Date(day.getTime() - dow * 24 * 60 * 60 * 1000);
+    };
+
+    // Sessions per owning ACCOUNT. Guests have no account, so they are
+    // invisible here on purpose; the funnel is about accounts.
+    const accountIds = new Set([...this.accounts.values()].map((a) => a.userId));
+    const ownerSessions = new Map<string, Date[]>();
+    for (const s of this.sessions.values()) {
+      const owner =
+        (s.meta as { ownerUserId?: string | null }).ownerUserId ??
+        this.profiles.get(s.meta.studentId)?.ownerUserId;
+      if (!owner || !accountIds.has(owner)) continue;
+      const list = ownerSessions.get(owner) ?? [];
+      list.push(s.startedAt);
+      ownerSessions.set(owner, list);
+    }
+
+    const returned = [...ownerSessions.values()].filter(
+      (dates) => new Set(dates.map((d) => d.toISOString().slice(0, 10))).size >= 2,
+    ).length;
+    const subscribed = new Set(
+      [...this.subscriptions.values()].filter((s) => s.status === "active").map((s) => s.userId),
+    ).size;
+
+    // Weekly signup cohorts over the last 8 weeks, 6 retention columns.
+    const cohortMap = new Map<number, string[]>();
+    const oldest = utcMonday(now).getTime() - 7 * WEEK;
+    for (const a of this.accounts.values()) {
+      const weekStart = utcMonday(a.createdAt).getTime();
+      if (weekStart < oldest) continue;
+      const list = cohortMap.get(weekStart) ?? [];
+      list.push(a.userId);
+      cohortMap.set(weekStart, list);
+    }
+    const cohorts = [...cohortMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([weekStart, members]) => ({
+        weekStart: new Date(weekStart).toISOString().slice(0, 10),
+        signups: members.length,
+        retainedByWeek: Array.from({ length: 6 }, (_, k) => {
+          const from = weekStart + k * WEEK;
+          const to = from + WEEK;
+          // "0%" and "too early to say" must never look the same.
+          if (to > now.getTime()) return null;
+          const retained = members.filter((userId) =>
+            (ownerSessions.get(userId) ?? []).some((d) => d.getTime() >= from && d.getTime() < to),
+          ).length;
+          return Math.round((100 * retained) / members.length);
+        }),
+      }));
+
+    return {
+      funnel: {
+        registered: this.accounts.size,
+        startedSession: ownerSessions.size,
+        returnedAnotherDay: returned,
+        subscribed,
+      },
+      cohorts,
+    };
+  }
+
+  async getAccountById(userId: string) {
+    const a = this.accountFor(userId);
+    if (!a) return null;
+    return {
+      userId,
+      email: a.email,
+      displayName: a.displayName,
+      role: a.role,
+      plan: this.plans.get(userId) ?? "free",
+      createdAt: a.createdAt,
+    };
+  }
+
+  async listSubscriptions(limit: number) {
+    return [...this.subscriptions.values()]
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, limit)
+      .map((s) => ({
+        userId: s.userId,
+        email: this.accountFor(s.userId)?.email ?? "",
+        provider: s.provider,
+        plan: s.plan,
+        status: s.status,
+        subscriptionRef: s.subscriptionRef,
+        updatedAt: s.updatedAt,
+      }));
+  }
+
+  async searchAccounts(query: string, limit: number) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: Array<{
+      userId: string;
+      email: string;
+      displayName: string | null;
+      role: string;
+      plan: string;
+      students: number;
+      createdAt: Date;
+    }> = [];
+    for (const [email, a] of this.accounts) {
+      if (!email.includes(q) && !a.displayName.toLowerCase().includes(q)) continue;
+      out.push({
+        userId: a.userId,
+        email,
+        displayName: a.displayName,
+        role: a.role,
+        plan: this.plans.get(a.userId) ?? "free",
+        students: [...this.profiles.values()].filter((p) => p.ownerUserId === a.userId).length,
+        createdAt: a.createdAt,
+      });
+    }
+    return out.sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime()).slice(0, limit);
   }
 }

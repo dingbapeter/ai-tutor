@@ -14,6 +14,10 @@ FROM node:22-slim
 WORKDIR /app
 COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+# The standalone build leaves out the public folder. Without this line the
+# live site served no manifest, no service worker (so no offline shell and
+# no push reminders), no icons, and no face model.
+COPY --from=build /repo/apps/web/public ./apps/web/public
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 CMD ["node", "apps/web/server.js"]

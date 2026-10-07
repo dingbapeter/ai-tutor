@@ -11,6 +11,7 @@ export class KokoroTtsProvider implements TtsProvider {
     private baseUrl: string,
     name = "kokoro",
     private model = "kokoro",
+    private brainKey?: string,
   ) {
     this.name = name;
   }
@@ -18,7 +19,10 @@ export class KokoroTtsProvider implements TtsProvider {
   async speak(text: string, voiceId: string): Promise<TtsResult> {
     const res = await fetch(`${this.baseUrl}/v1/audio/speech`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(this.brainKey ? { "x-brain-key": this.brainKey } : {}),
+      },
       body: JSON.stringify({ model: this.model, input: text, voice: voiceId, response_format: "mp3" }),
       signal: AbortSignal.timeout(60_000),
     });

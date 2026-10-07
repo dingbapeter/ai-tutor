@@ -11,6 +11,22 @@ before real children use it, Part 4 is the horizon.
 
 ## Part 1: make the deploy real (an evening's work)
 
+### 1.0 Migrations — AUTOMATIC since 2026-09-08
+
+The api applies `packages/db/migrations/` ITSELF at boot (a
+`schema_migrations` ledger tracks what ran; a failed migration fails the
+boot loudly so a healthcheck keeps the previous deploy serving). Nothing to
+run by hand; set `AUTO_MIGRATE=off` only if you ever want the old manual
+way. The files, in order, 0000 through 0014 (fifteen):
+The last five build the Command Centre and the scaling layer:
+`0010_command_centre.sql` (staff and the audit trail),
+`0011_platform_settings.sql` (the switches on the Controls tab),
+`0012_staff_hr.sql` (employment records and reporting lines),
+`0013_billing_events.sql` (the money ledger behind the Money tab),
+`0014_session_resume.sql` (sessions survive restarts and scale across
+instances; with more than one api instance, keep sticky sessions on for the
+smoothest turns, though any instance can now serve any session).
+
 ### 1.1 Postgres on Railway — nothing persists without this
 
 Right now every redeploy wipes accounts, learner profiles, mastery
@@ -20,11 +36,8 @@ you can spend.
 1. Railway project → **New** → **Database** → **PostgreSQL**.
 2. Copy the connection string it gives you.
 3. On the **api** service → Variables → `DATABASE_URL=<that string>`.
-4. Run every migration once, in order:
-   ```bash
-   for f in packages/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
-   ```
-   There are 10 (0000 through 0009). They are idempotent, safe to re-run.
+4. Deploy the api. It applies all 15 migrations itself on boot (see 1.0);
+   the manual `psql` loop remains possible but is no longer needed.
 5. Confirm: `https://<api-domain>/health` should now say `"store":"postgres"`
    instead of `"memory"`.
 
@@ -48,6 +61,16 @@ WHISPER_URL=http://<contabo-ip>:8081
 TTS_URL=http://<contabo-ip>:8082
 PIPER_TTS_URL=http://<contabo-ip>:8083   # unlocks 43 more speaking languages
 MATHCHECK_URL=http://<contabo-ip>:8090
+# The brain-door password. Make one (`openssl rand -hex 24`), put the SAME
+# value here and in deploy/.env on the model box; the gate container in
+# front of the AI services rejects every request without it (401).
+BRAIN_KEY=<same value as deploy/.env on the model box>
+
+# The line in front of the model box (optional; these are the defaults).
+# Match AI_MAX_CONCURRENT to llama.cpp's parallel slots (-np).
+AI_MAX_CONCURRENT=4
+AI_QUEUE_DEPTH=32
+AI_QUEUE_TIMEOUT_MS=30000
 
 # --- Email, your existing mailcow ---
 SMTP_HOST=<mail.yourdomain>
@@ -61,13 +84,36 @@ SMTP_FROM="Dingba" <tutor@dingba.ai>
 AI_MODERATION_PROVIDER=anthropic
 ANTHROPIC_API_KEY=<your key>
 
-# --- Push notifications (generate: npx web-push generate-vapid-keys) ---
-VAPID_PUBLIC_KEY=<generated>
-VAPID_PRIVATE_KEY=<generated>
+# --- Push notifications: OPTIONAL since 2026-09-08 ---
+# On postgres the api generates and persists its own VAPID pair at boot.
+# Set these only to rotate keys or bring your own.
+# VAPID_PUBLIC_KEY=<npx web-push generate-vapid-keys>
+# VAPID_PRIVATE_KEY=<generated>
 VAPID_SUBJECT=mailto:you@dingba.ai
 
+# --- Command Centre (the backend of everything) ---
+# Your email, and any co-founder who should have full control. Comma separated.
+# Nobody can open the console until at least one address is here; every other
+# person (finance, support, staff, investors) is added from inside it.
+COMMAND_OWNER_EMAILS=dingbapeter@gmail.com
+# Monthly price per paid plan, for the finance view. Blank means the console
+# shows subscriber counts and says the prices are unset, rather than a made-up
+# revenue number in front of an investor.
+PRICE_PLUS_MONTHLY=<e.g. 9>
+PRICE_PREMIUM_MONTHLY=<e.g. 19>
+PRICE_CURRENCY=USD
+
 # --- Ops ---
-ADMIN_KEY=<long random string, for /admin endpoints>
+# ADMIN_KEY is OPTIONAL since 2026-09-08: on postgres the api generates one
+# at boot, persists it, and shows it to the OWNER in Command Centre -> Ops
+# ("Your master key"). Set it only to choose/rotate your own.
+# ADMIN_KEY=<long random string, for /admin endpoints>
+# Study reminders and the weekly guardian digest are AUTOMATIC since
+# 2026-09-08: the api is its own alarm clock (reminders daily at
+# NUDGE_HOUR_UTC, default 7; digest Sundays at DIGEST_HOUR_UTC, default 18),
+# with an atomic daily claim so multiple instances never double-send.
+# The /admin/nudge-plans and /admin/weekly-digest endpoints remain for
+# manual runs with the master key. AUTO_JOBS=off disables the clock.
 ERROR_WEBHOOK_URL=<optional: Slack/Discord webhook for 5xx alerts>
 ```
 
@@ -135,42 +181,111 @@ untested backup is not a backup.
 
 ### 2.1 Billing, when you want money
 
+**The chosen path (2026-10-07): Paystack only, taking naira and dollars.**
+One Paystack account, no second processor. Paystack also offers mobile
+money and bank transfer on its own page. Two things to know before
+creating plans: a Nigerian Paystack business is paid in naira and, once
+Paystack has enabled it for the account, in US dollars; pounds, euros,
+cedis and the others need Paystack businesses registered in those
+countries, so they are not one account's to switch on. A family whose
+currency is not on offer sees and pays in dollars.
+
+1. In the Paystack dashboard, ask support to enable USD collections on
+   the account if it is not already on (test mode first).
+2. Plans → Create plan, four times, interval monthly: Plus in NGN,
+   Premium in NGN, Plus in USD, Premium in USD. The amounts you type here
+   are the prices families see; nothing in the code sets them. Copy each
+   plan code (PLN_...).
+3. Settings → API Keys & Webhooks: copy the secret key, and set the
+   webhook URL to `https://api.dingba.ai/billing/webhook/paystack`.
+4. On the Railway api service:
+
 ```bash
-BILLING_PROVIDER=stripe          # or paystack for Nigeria
+BILLING_PROVIDER=paystack
+PAYSTACK_SECRET_KEY=<sk_test_... first, sk_live_... when it works>
+PAYSTACK_PLAN_PLUS=<PLN_... Plus in naira>
+PAYSTACK_PLAN_PREMIUM=<PLN_... Premium in naira>
+PAYSTACK_PLAN_PLUS_USD=<PLN_... Plus in dollars>
+PAYSTACK_PLAN_PREMIUM_USD=<PLN_... Premium in dollars>
+```
+
+5. Deploy, open the family page on a signed-in account: the two plans show
+   their naira prices with a switch to dollars. Pay once with a Paystack
+   test card in each currency and confirm the plan flips on the page,
+   then swap in the live key and pay once for real.
+
+The rest of this section is the two-processor setup, kept for when a
+second processor is ever wanted.
+
+Stripe and Paystack can both be live. Paystack takes naira, cedis,
+shillings and rand (and offers mobile money on its own page); Stripe takes
+everything else. A family sees prices in the currency their device
+suggests, can change it, and pays through whichever processor serves that
+currency. Set both blocks and both are live; set `BILLING_PROVIDER=stripe`
+or `=paystack` to keep only one.
+
+```bash
+# Stripe: one price per plan. Give each price its other currencies in the
+# dashboard ("currency options"); they are read from Stripe, never typed here.
 STRIPE_SECRET_KEY=<sk_live_...>
 STRIPE_WEBHOOK_SECRET=<whsec_...>
 STRIPE_PRICE_PLUS=<price_...>
 STRIPE_PRICE_PREMIUM=<price_...>
-# or:
+
+# Paystack: one plan per currency. The main pair is naira; more currencies
+# come as extra pairs named by their code. Amounts and currencies are read
+# from Paystack.
 PAYSTACK_SECRET_KEY=<sk_live_...>
-PAYSTACK_PLAN_PLUS=<plan code>
-PAYSTACK_PLAN_PREMIUM=<plan code>
+PAYSTACK_PLAN_PLUS=<PLN_... naira>
+PAYSTACK_PLAN_PREMIUM=<PLN_... naira>
+PAYSTACK_PLAN_PLUS_GHS=<PLN_... cedis>        # optional
+PAYSTACK_PLAN_PREMIUM_GHS=<PLN_... cedis>     # optional
 ```
-Create the products/prices in the dashboard first, point the webhook at
-`https://api.dingba.ai/billing/webhook`, then **run one real checkout with a
-real card** and confirm the plan flips on the account page. Paystack is the
-right default for Nigerian cards.
+
+**No price is typed into the code.** The account page shows what the
+processors report, so the number a parent sees is the number they are
+charged, and a change in a dashboard is a change on the page within the
+hour. A processor whose prices cannot be read is simply not on offer until
+it can be; the other carries on.
+
+Webhooks: point Stripe at `https://api.dingba.ai/billing/webhook/stripe`
+and Paystack at `https://api.dingba.ai/billing/webhook/paystack` (the
+plain `/billing/webhook` also works for both; it tells them apart by the
+signature header). Then **run one real checkout with a real card on each
+processor** and confirm the plan flips on the account page.
 
 ### 2.2 Real-device testing (register item A)
 
 Nothing substitutes for this. On an actual iPhone and an actual budget
 Android:
 - hold-to-talk voice: does it record, does it play back
+- conversation mode (the speech-bubble button): talk without pressing
+  anything, get a spoken reply, then interrupt it by talking over it.
+  The voice-detection thresholds were tuned against a synthetic mic;
+  a noisy classroom on a cheap phone is the real test
 - the care call button: does it open the dialer
 - camera capture in Show Dingba
 - install to home screen, then use it offline
 - layouts at 360px width
 
-### 2.3 Observability (register item D)
+### 2.3 Observability (register item D) — ops half BUILT 2026-08-29
 
-PostHog and GlitchTip, both self-hosted on Contabo, both MIT. Until they
-exist, `ERROR_WEBHOOK_URL` is your only alarm. Retention is the metric that
-decides everything about this business, and you cannot see it yet.
+Ops observability is in the product now: the Ops tab in the Command Centre
+(request rates, latency, failures, memory, event loop) and a Prometheus feed
+at `/admin/metrics` any Grafana can scrape with your admin key. Retention is now
+in the product too (2026-09-02): the Growth tab shows the activation
+funnel and weekly cohort retention, and investors can read it. PostHog
+self-hosted on Contabo (MIT) remains the option if you later want
+event-level analytics (which button, which screen) on top.
 
-### 2.4 Load testing (register item B)
+### 2.4 Load testing (register item B) — driver BUILT 2026-08-29; see docs/PERF.md
 
-Before any launch push. Expect to add a request queue in front of llama.cpp;
-one 7B model serving many concurrent sessions will be the first bottleneck.
+The platform numbers are measured (flat to 150 concurrent users on one
+process). Your half: run the driver against the DEPLOYED stack before any
+launch push — `pnpm load -- --base https://api.dingba.ai --vus 30` — because
+that run measures the GPU box too, and one 7B serving many concurrent
+sessions will be the first bottleneck. Expect to add a request queue in
+front of llama.cpp when it is.
 
 ---
 
@@ -184,13 +299,29 @@ must review before launch, specifically:
 - the AI-disclosure requirements now live in several markets
 - the care-call feature: you are storing a third party's phone number
 
-### 3.2 Red-teaming the safety layer (register item J)
+### 3.2 Red-teaming the safety layer (register item J) — machine half BUILT 2026-08-29
+
+The deterministic floor now resists leetspeak, stretched and spaced-out
+letters, zero-width characters and full-width forms, with an adversarial
+test suite pinning it. What remains is the human half: a person trying to
+break the REAL classifier and the tutor prompt in a live session, which no
+suite replaces.
 
 Sit down with the app and genuinely try to make the tutor say something it
 shouldn't. Then have someone who is not you do it. This is never "done", and
 it is the thing that ends companies in this category.
 
-### 3.3 Pedagogy eval harness (register item I)
+### 3.3 Pedagogy eval harness (register item I) — BUILT 2026-08-29
+
+Run it against the live stack the day the 7B is up; this is the checklist:
+
+```bash
+AI_CHAT_PROVIDER=llamacpp LLAMACPP_URL=http://<contabo-ip>:8080 pnpm evals
+```
+
+Every judge is a deterministic string check you can argue with. Model judges
+(socratic restraint, language discipline, assistant-isms, greeting by name,
+length) become binding automatically on a real provider.
 
 Before and after every model swap: a fixed set of student messages, and a
 human judging whether the tutor taught well. Without it you will swap a model
@@ -214,15 +345,22 @@ and silently ship worse teaching.
 
 ## What is already done, for your peace of mind
 
-Pushed, tested, CI-green: 72 API + 9 gateway + 7 mathcheck tests.
+Pushed, tested, CI-green: 203 TypeScript + 7 Python tests, twenty-plus
+consecutive green CI runs, and a full stub sweep behind it.
 
-Sessions with a tutor who greets you first and speaks. Cross-session memory.
-The Dingba Brain (goals, strengths, struggles, interests). Adaptive spaced
-repetition with a mastery ladder. Diagnostic level checks. Verified maths.
-Show Dingba (photos). Routine upload (timetables). Attunement. The care call.
-91 languages, 52 speaking. Safety gate, incident log, guardian alerts.
-Accounts, family profiles, parent dashboard, org accounts, API keys, exam
-mode, live classes, metering, entitlements, billing wiring, PWA, push
-notifications, password reset, email verification, GDPR deletion.
+Sessions with a tutor who greets you first and speaks, and that survive
+restarts and scale across instances. Cross-session memory and the Dingba
+Brain. Adaptive spaced repetition, diagnostic level checks, verified maths,
+lessons the personas deliver from the verified bank. Show Dingba (photos).
+Routine upload. Study plans, plan-aware push reminders, the guardian weekly
+digest. Attunement and the care call. 91 languages, 52 speaking. Safety gate
+hardened against evasion, incident log, guardian alerts. The Command Centre:
+roles with investors on the smallest surface, staff and HR with an org
+chart, safety desk, money ledger, platform controls, audit trail, CSV
+exports, the Ops tab. Accounts, family profiles, parent dashboard, org
+accounts, API keys, exam mode, live classes, metering, entitlements,
+billing wiring, PWA, push notifications, password reset, email
+verification, GDPR deletion. A load driver and a pedagogy eval harness
+waiting for your deployed model.
 
 The gap between this list and a live product is the list above, not more code.

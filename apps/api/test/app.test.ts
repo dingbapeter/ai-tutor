@@ -8,6 +8,7 @@ import {
   MockTtsProvider,
   MockVisionProvider,
   RulesModerationProvider,
+  TutorBusyError,
 } from "@tutor/ai-gateway";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -75,6 +76,49 @@ describe("Dingba Brain merge", () => {
     expect(p.interests).toHaveLength(8); // capped, oldest dropped
     expect(p.interests).not.toContain("music");
     expect(p.goals).toEqual([]);
+  });
+});
+
+describe("scored surfaces stay honest on rubric-only packs", () => {
+  it("refuses a timed mock where nothing can be machine-graded, and says so", async () => {
+    // Before this guard a learner could sit a timed exam on a coaching pack
+    // and score zero no matter what they wrote, with the false failures
+    // written into their mastery.
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Vee", personaId: "nia", packId: "visa-prep" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().examinable).toBe(false); // the client shows no scored doors at all
+
+    const premium = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Vee", personaId: "nia", packId: "visa-prep" },
+    });
+    // Exam mode needs a premium plan; the pack guard must answer first for
+    // guests too, so use the plan-free diagnostic to prove the shared filter.
+    const diag = await app.inject({ method: "POST", url: `/sessions/${premium.json().sessionId}/diagnostic/start` });
+    expect(diag.statusCode).toBe(400);
+    expect(diag.json().error).toContain("in conversation");
+  });
+
+  it("marks a math session as examinable", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Em", personaId: "amara", packId: "math-ms" },
+    });
+    expect(res.json().examinable).toBe(true);
+  });
+});
+
+describe("skill naming", () => {
+  it("turns an unknown skill id into words instead of leaking it raw", async () => {
+    const { skillTitle } = await import("../src/tutor/prompt.js");
+    expect(skillTitle("math-ms.integers.add-sub")).toBe("Integers add sub");
+    expect(skillTitle("math-ms.linear-eq.one-step")).toBe("One-step equations"); // real pack title wins
   });
 });
 
@@ -1422,5 +1466,464 @@ describe("session lifecycle", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("audio/");
     expect(res.rawPayload.subarray(0, 4).toString()).toBe("RIFF");
+  });
+});
+
+describe("curriculum depth (sprint 31)", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../../../curriculum");
+  const packIds = ["math-ms", "exam-prep", "language", "visa-prep", "pro-finance", "career-coach"];
+  const packs = packIds.map((id) => ({
+    id,
+    pack: JSON.parse(readFileSync(join(root, id, "pack.json"), "utf8")) as {
+      skills: Array<{ id: string; prerequisites: string[] }>;
+      problems: Array<{
+        skillId?: string;
+        prompt: string;
+        answer?: string;
+        check: { type: string };
+        misconceptions?: Array<{ answer: string; diagnosis: string }>;
+      }>;
+    },
+  }));
+
+  it("every problem belongs to a real skill and every prerequisite exists", () => {
+    for (const { id, pack } of packs) {
+      const skillIds = new Set(pack.skills.map((s) => s.id));
+      for (const p of pack.problems) {
+        expect(p.skillId, `${id}: problem without skillId: ${p.prompt}`).toBeTruthy();
+        expect(skillIds.has(String(p.skillId)), `${id}: orphan skillId ${p.skillId}`).toBe(true);
+      }
+      for (const s of pack.skills) {
+        for (const pre of s.prerequisites) {
+          expect(skillIds.has(pre), `${id}: ${s.id} requires unknown ${pre}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("machine-verifiable packs cover every skill with problems, and deeply", () => {
+    for (const id of ["math-ms", "exam-prep", "pro-finance"]) {
+      const { pack } = packs.find((p) => p.id === id)!;
+      const bySkill = new Map<string, number>();
+      for (const p of pack.problems) bySkill.set(String(p.skillId), (bySkill.get(String(p.skillId)) ?? 0) + 1);
+      for (const s of pack.skills) {
+        expect(bySkill.get(s.id) ?? 0, `${id}: skill ${s.id} has no problems`).toBeGreaterThan(0);
+      }
+    }
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    expect(math.skills.length).toBeGreaterThanOrEqual(25);
+    expect(math.problems.length).toBeGreaterThanOrEqual(200);
+  });
+
+  it("every verifiable problem stores an exact answer so grading survives the checker being down", () => {
+    for (const { id, pack } of packs) {
+      for (const p of pack.problems) {
+        if (["solve", "compare", "equivalent"].includes(p.check.type)) {
+          expect(p.answer, `${id}: ${p.prompt} has no stored answer`).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("no learner-facing curriculum text carries an em dash", () => {
+    for (const { id, pack } of packs) {
+      for (const p of pack.problems) {
+        expect(p.prompt.includes("—"), `${id}: em dash in prompt: ${p.prompt}`).toBe(false);
+        for (const m of p.misconceptions ?? []) {
+          expect(m.diagnosis.includes("—"), `${id}: em dash in diagnosis: ${m.diagnosis}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("a mock exam on the deep math pack spans the curriculum, not eight variants of one skill", async () => {
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", ADMIN_KEY: "sesame" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "spread@example.com", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const up = await isolated.inject({
+      method: "POST",
+      url: "/admin/plan",
+      headers: { "x-admin-key": "sesame" },
+      payload: { email: "spread@example.com", plan: "premium" },
+    });
+    expect(up.statusCode).toBe(200);
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Femi" } });
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId: kid.json().id, personaId: "kofi", packId: "math-ms" },
+    });
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${s.json().sessionId}/exam/start` });
+    expect(exam.statusCode).toBe(200);
+    const problems = exam.json().problems as Array<{ index: number }>;
+    expect(problems).toHaveLength(8);
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    const skills = new Set(problems.map((p) => math.problems[p.index].skillId));
+    expect(skills.size).toBe(8); // one per skill until the ladder is covered
+    await isolated.close();
+  });
+
+  it("a level check on the deep pack sweeps twelve different skills", async () => {
+    const { sessionId } = await createSession("Bola");
+    const diag = await app.inject({ method: "POST", url: `/sessions/${sessionId}/diagnostic/start` });
+    expect(diag.statusCode).toBe(200);
+    const problems = diag.json().problems as Array<{ index: number; skillId: string }>;
+    expect(problems).toHaveLength(12);
+    expect(new Set(problems.map((p) => p.skillId)).size).toBe(12);
+  });
+
+  it("simplify/expand problems grade through the stored-answer fallback when the checker is down", async () => {
+    const math = packs.find((p) => p.id === "math-ms")!.pack;
+    const idx = math.problems.findIndex((p) => p.check.type === "equivalent");
+    expect(idx).toBeGreaterThan(-1);
+    const { sessionId } = await createSession("Efe");
+    // No mathcheck service in unit tests: verifyAnswer returns null and the
+    // exact stored answer (whitespace-insensitive) decides.
+    const typed = String(math.problems[idx].answer).replace(/\s/g, "");
+    const right = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/practice`,
+      payload: { problemIndex: idx, answer: typed },
+    });
+    expect(right.statusCode).toBe(200);
+    expect(right.json().correct).toBe(true);
+  });
+});
+
+describe("the line at the AI brain (sprint 32)", () => {
+  class BusyChatProvider {
+    readonly name = "busy";
+    // eslint-disable-next-line require-yield
+    async *chat(): AsyncIterable<string> {
+      throw new TutorBusyError(7);
+    }
+  }
+
+  async function busyApp(extraEnv: Record<string, string> = {}) {
+    const g = gateway();
+    const busy = new BusyChatProvider();
+    return buildApp({
+      gateway: { ...g, chat: busy as never, planner: busy as never, premiumChat: busy as never },
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", GUEST_IP_CAP: "100000", AUTH_RATE_LIMIT: "100000", ...extraEnv },
+    });
+  }
+
+  it("a busy brain surfaces mid-stream as an honest SSE event with a retry hint", async () => {
+    const isolated = await busyApp();
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Busy", personaId: "amara", packId: "math-ms" },
+    });
+    const res = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${s.json().sessionId}/message`,
+      payload: { text: "hello there" },
+    });
+    expect(res.statusCode).toBe(200); // headers were already streaming
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    const events = res.payload.split("\n\n").filter(Boolean).map((l) => JSON.parse(l.replace(/^data: /, "")));
+    const busyEvt = events.find((e) => e.busy);
+    expect(busyEvt).toBeTruthy();
+    expect(busyEvt.retryAfterSec).toBe(7);
+    expect(busyEvt.error).toContain("Give it a few seconds");
+    await isolated.close();
+  });
+
+  it("a busy brain on a JSON route answers 503 with a retry-after header, not a 500", async () => {
+    const isolated = await busyApp();
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Busy", personaId: "amara", packId: "math-ms" },
+    });
+    const res = await isolated.inject({
+      method: "POST",
+      url: `/sessions/${s.json().sessionId}/practice`,
+      payload: { problemIndex: 0, answer: RIGHT_ANSWER },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.headers["retry-after"]).toBe("7");
+    expect(res.json().retryAfterSec).toBe(7);
+    await isolated.close();
+  });
+
+  it("the ops view shows the queue when one is configured, and says so when not", async () => {
+    const g = gateway();
+    const stats = {
+      running: 2, queued: 3, maxConcurrent: 4, maxQueue: 32, served: 100,
+      rejected: 1, timedOut: 0, peakQueued: 9, avgWaitMs: 120, longestWaitMs: 900,
+    };
+    const isolated = await buildApp({
+      gateway: { ...g, queue: { stats: () => stats } },
+      store: new MemoryStore(),
+      env: {
+        NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000",
+        COMMAND_OWNER_EMAILS: "boss@dingba.ai", ADMIN_KEY: "sesame",
+      },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "boss@dingba.ai", password: "password12", role: "parent" },
+    });
+    const ops = await isolated.inject({
+      method: "GET",
+      url: "/command/ops",
+      headers: { authorization: `Bearer ${reg.json().token}` },
+    });
+    expect(ops.statusCode).toBe(200);
+    expect(ops.json().aiQueue).toEqual(stats);
+
+    // Prometheus carries the same numbers for dashboards.
+    const prom = await isolated.inject({ method: "GET", url: "/admin/metrics", headers: { "x-admin-key": "sesame" } });
+    expect(prom.payload).toContain("dingba_ai_queue_running 2");
+    expect(prom.payload).toContain("dingba_ai_queue_rejected_total 1");
+    await isolated.close();
+
+    // No queue configured (mock providers): the field is an honest null.
+    const bare = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000", COMMAND_OWNER_EMAILS: "boss2@dingba.ai" },
+    });
+    const reg2 = await bare.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "boss2@dingba.ai", password: "password12", role: "parent" },
+    });
+    const ops2 = await bare.inject({
+      method: "GET",
+      url: "/command/ops",
+      headers: { authorization: `Bearer ${reg2.json().token}` },
+    });
+    expect(ops2.json().aiQueue).toBeNull();
+    await bare.close();
+  });
+});
+
+describe("rubric mock exams (sprint 33)", () => {
+  /** A deterministic judge: passes any answer containing 'confident'. */
+  class ScriptedJudgeProvider {
+    readonly name = "scripted-judge";
+    async *chat(messages: Array<{ role: string; content: string }>): AsyncIterable<string> {
+      const last = messages[messages.length - 1]?.content ?? "";
+      if (last.includes("grading one exam answer")) {
+        const m = last.match(/"""\n([\s\S]*?)\n"""/);
+        const answer = m?.[1] ?? "";
+        const pass = answer.includes("confident");
+        yield JSON.stringify({ pass, met: pass ? 4 : 1, of: 4, note: pass ? "Clear and complete." : "Say what you want and why." });
+        return;
+      }
+      yield "Alright, let's look at how you did.";
+    }
+  }
+
+  class GarbageJudgeProvider {
+    readonly name = "garbage-judge";
+    async *chat(): AsyncIterable<string> {
+      yield "hmm, it seems fine to me";
+    }
+  }
+
+  async function appWithJudge(judge: { name: string }) {
+    return buildApp({
+      gateway: { ...gateway(), planner: judge as never, premiumChat: judge as never },
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000", ADMIN_KEY: "sesame" },
+    });
+  }
+
+  async function premiumSession(isolated: FastifyInstance, packId: string, email: string) {
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password: "password12", role: "parent" },
+    });
+    await isolated.inject({
+      method: "POST",
+      url: "/admin/plan",
+      headers: { "x-admin-key": "sesame" },
+      payload: { email, plan: "premium" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    const kid = await isolated.inject({ method: "POST", url: "/students", headers: auth, payload: { displayName: "Vee" } });
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId: kid.json().id, personaId: "obi", packId },
+    });
+    return s.json() as { sessionId: string; examinable: boolean };
+  }
+
+  it("with the mock provider, rubric packs honestly refuse timed mocks", async () => {
+    const { sessionId, examinable } = await (async () => {
+      const s = await app.inject({
+        method: "POST",
+        url: "/sessions",
+        payload: { studentName: "NoJudge", personaId: "obi", packId: "visa-prep" },
+      });
+      return s.json() as { sessionId: string; examinable: boolean };
+    })();
+    expect(examinable).toBe(false);
+    const exam = await app.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    expect([400, 402]).toContain(exam.statusCode); // free plan gets the paywall first; premium would get 400
+  });
+
+  it("with a real judge behind the gateway, a visa mock is scored against the rubric", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const { sessionId, examinable } = await premiumSession(isolated, "visa-prep", "visa@example.com");
+    expect(examinable).toBe(true);
+
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    expect(exam.statusCode).toBe(200);
+    const problems = exam.json().problems as Array<{ index: number; written?: boolean; timeLimitSec: number }>;
+    expect(problems.length).toBeGreaterThanOrEqual(4);
+    expect(problems.every((p) => p.written)).toBe(true);
+    // Unauthored limits default to a written 240s; authored ones (like the
+    // 15-second composure drill) are respected as written.
+    expect(problems.every((p) => p.timeLimitSec > 0)).toBe(true);
+    expect(problems.some((p) => p.timeLimitSec === 240)).toBe(true);
+
+    // One passing answer, one failing, the rest blank.
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/exam/answer`,
+      payload: { problemIndex: problems[0].index, answer: "I am confident about my study plans and my ties back home." },
+    });
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/exam/answer`,
+      payload: { problemIndex: problems[1].index, answer: "err maybe" },
+    });
+    const finish = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/finish` });
+    const report = finish.json();
+    expect(report.unscored).toBe(0);
+    expect(report.score).toBe(1);
+    expect(report.of).toBe(problems.length); // blanks count, as in any timed exam
+    const first = report.results.find((r: { index: number }) => r.index === problems[0].index);
+    expect(first.correct).toBe(true);
+    expect(first.judge).toEqual({ met: 4, of: 4, note: "Clear and complete." });
+    const second = report.results.find((r: { index: number }) => r.index === problems[1].index);
+    expect(second.correct).toBe(false);
+    expect(second.judge.note).toContain("Say what you want");
+    await isolated.close();
+  });
+
+  it("a judge reply that does not parse leaves the answer unscored, never wrong", async () => {
+    const isolated = await appWithJudge(new GarbageJudgeProvider());
+    const { sessionId } = await premiumSession(isolated, "visa-prep", "garbled@example.com");
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    const problems = exam.json().problems as Array<{ index: number }>;
+    for (const p of problems) {
+      await isolated.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/exam/answer`,
+        payload: { problemIndex: p.index, answer: "a real attempt at an answer" },
+      });
+    }
+    const report = (await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/finish` })).json();
+    expect(report.unscored).toBe(problems.length);
+    expect(report.score).toBe(0);
+    expect(report.of).toBe(0); // nothing scorable, and it says so
+    expect(report.results.every((r: { correct: null }) => r.correct === null)).toBe(true);
+    await isolated.close();
+  });
+
+  it("a mixed pack's mock carries both machine-checked and rubric problems", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const { sessionId } = await premiumSession(isolated, "pro-finance", "mixed@example.com");
+    const exam = await isolated.inject({ method: "POST", url: `/sessions/${sessionId}/exam/start` });
+    const problems = exam.json().problems as Array<{ index: number; written?: boolean }>;
+    expect(problems.some((p) => p.written)).toBe(true);
+    expect(problems.some((p) => !p.written)).toBe(true);
+    await isolated.close();
+  });
+
+  it("the two doors split honestly: rubric packs get a mock but no machine level check", async () => {
+    const isolated = await appWithJudge(new ScriptedJudgeProvider());
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Doors", personaId: "obi", packId: "visa-prep" },
+    });
+    expect(s.json().examinable).toBe(true);
+    expect(s.json().assessable).toBe(false);
+    const m = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: { studentName: "Doors", personaId: "amara", packId: "math-ms" },
+    });
+    expect(m.json().examinable).toBe(true);
+    expect(m.json().assessable).toBe(true);
+    await isolated.close();
+  });
+
+  it("the language pack now covers all three competencies with scenarios", () => {
+    const pack = loadPack("language");
+    const bySkill = new Map<string, number>();
+    for (const p of pack.problems) bySkill.set(String(p.skillId), (bySkill.get(String(p.skillId)) ?? 0) + 1);
+    for (const s of pack.skills) expect(bySkill.get(s.id) ?? 0, `${s.id} has no scenarios`).toBeGreaterThan(0);
+  });
+});
+
+describe("school portal backing (sprint 35)", () => {
+  it("a roster learner's practice shows up in the teacher dashboard with mastery and sessions", async () => {
+    const isolated = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "10000", AUTH_RATE_LIMIT: "100000" },
+    });
+    const reg = await isolated.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "teacher@school.example", password: "password12", role: "parent" },
+    });
+    const auth = { authorization: `Bearer ${reg.json().token}` };
+    await isolated.inject({ method: "POST", url: "/orgs", headers: auth, payload: { name: "Hillside School", seats: 5 } });
+    const roster = await isolated.inject({
+      method: "POST",
+      url: "/orgs/roster",
+      headers: auth,
+      payload: { names: ["Chidi A."] },
+    });
+    const studentId = roster.json().added[0].id as string;
+
+    // The teacher opens the tutor for that learner and they practice.
+    const s = await isolated.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: auth,
+      payload: { studentId, personaId: "amara", packId: "math-ms" },
+    });
+    const sid = s.json().sessionId as string;
+    await isolated.inject({
+      method: "POST",
+      url: `/sessions/${sid}/practice`,
+      payload: { problemIndex: 0, answer: RIGHT_ANSWER },
+    });
+    await isolated.inject({ method: "POST", url: `/sessions/${sid}/end` });
+
+    const dash = await isolated.inject({ method: "GET", url: "/orgs/dashboard", headers: auth });
+    expect(dash.statusCode).toBe(200);
+    const student = dash.json().students.find((x: { id: string }) => x.id === studentId);
+    expect(student).toBeTruthy();
+    const worked = student.mastery.filter((m: { attempts: number }) => m.attempts > 0);
+    expect(worked.length).toBe(1);
+    expect(worked[0].skillId).toBe(FIRST_SKILL);
+    expect(worked[0].level).toBeGreaterThan(0);
+    expect(student.sessions.length).toBeGreaterThanOrEqual(1);
+    await isolated.close();
   });
 });

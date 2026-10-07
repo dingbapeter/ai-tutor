@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import type { AiGateway, ChatMessage } from "@tutor/ai-gateway";
+import { TutorBusyError, type AiGateway, type ChatMessage } from "@tutor/ai-gateway";
 import {
   buildSystemPrompt,
+  type CurriculumPack,
+  type CurriculumProblem,
   loadPack,
   loadPersonas,
   loadLanguages,
@@ -13,11 +15,22 @@ import {
   UnknownPackError,
   voiceFor,
 } from "./tutor/prompt.js";
+import { canJudgeRubrics, judgeRubricAnswer, type RubricVerdict } from "./tutor/judge.js";
+import { dueJobs, provisionSecrets } from "./ops/provision.js";
 import { masteryStage, type LearnerProfile, type Store } from "./store/types.js";
+import { buildStudyPlan, planReminder } from "./tutor/plan.js";
+import { buildLessonBrief, UnknownSkillError, type LessonBrief } from "./tutor/lesson.js";
+import { cleanLook } from "./tutor/look.js";
+import { FACE_HINTS, faceHintNote, faceHintsAllowed, isFaceHint } from "./tutor/face.js";
+import { familiarityStatus, hear, parseVoiceFeatures, readProfile, voiceFamiliarityAllowed } from "./tutor/voice.js";
+import { grantGivesAccess } from "./command/access.js";
+import { Metrics } from "./ops/metrics.js";
 import { verifyAnswer, type Check } from "./mathcheck.js";
-import { sendParentRecap, sendSafetyAlert, sendVerifyEmail } from "./email.js";
+import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, type DigestLearner } from "./email.js";
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 import { registerBilling } from "./billing.js";
+import { registerCommandCentre } from "./command/routes.js";
+import { ControlsReader } from "./command/settings.js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -60,6 +73,10 @@ interface LiveSession {
   createdAt: number;
   /** Copied from the API key at session start so quota holds mid-session. */
   apiKeyQuota?: number;
+  /** The learner may send one-word face hints this session (see tutor/face.ts). */
+  faceHints?: boolean;
+  /** The tutor may get to know how this learner sounds (see tutor/voice.ts). */
+  voiceFamiliar?: boolean;
 }
 
 export interface PlanLimits {
@@ -134,14 +151,58 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
   const PLANS = plans ?? loadPlans();
+  // Zero-terminal deploys: on a real database, missing secrets (admin key,
+  // push keys) provision themselves once and persist. Env vars always win.
+  if (store.kind === "postgres" && env.SELF_PROVISION !== "off") {
+    await provisionSecrets(store, env);
+  }
+  // Operational switches, read on the request path (see command/settings.ts).
+  const controls = new ControlsReader(store);
+  // Observability: every request timed, every failure remembered (ops/metrics.ts).
+  const metrics = new Metrics();
+  metrics.startLagSampling();
+  app.addHook("onResponse", async (req, reply) => {
+    // The route pattern, never the raw URL, keeps series cardinality bounded.
+    metrics.record(req.routeOptions.url ?? "unmatched", req.method, reply.statusCode, reply.elapsedTime);
+  });
+  app.addHook("onClose", async () => metrics.stop());
   const limitsFor = (plan: string): PlanLimits => PLANS[plan] ?? PLANS.free;
   // "Daily" allowances use a rolling 24h window: fair in every timezone,
   // instead of resetting at the server's midnight.
   const startOfToday = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+  // The effective plan a signed-in learner runs on. Being on staff grants
+  // NOTHING by itself — free elevated use must be assigned per person and
+  // stays justified against a monthly review (see command/access.ts):
+  //  - owners (COMMAND_OWNER_EMAILS) are the super-admins, always unlimited;
+  //  - anyone else gets a comp level ONLY while they hold an active grant
+  //    (not expired, not revoked, review not overdue);
+  //  - otherwise their real billing plan applies.
+  // So a tester's access ends on its own, and a lapsed review drops them
+  // back to normal automatically — no standing free-for-all.
+  const ownerEmails = new Set(
+    (env.COMMAND_OWNER_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  async function effectivePlan(user: { userId: string; email: string }): Promise<string> {
+    if (ownerEmails.has(user.email.toLowerCase())) return "unlimited";
+    const grant = await store.getAccessGrant(user.userId);
+    if (grant && grantGivesAccess(grant, new Date()) && PLANS[grant.level]) return grant.level;
+    return store.getUserPlan(user.userId);
+  }
+
   // Optional error reporting: any webhook-compatible sink (GlitchTip, Slack,
   // Discord). Fire-and-forget; absence of the env var disables it.
   app.addHook("onError", async (req, _reply, error) => {
+    metrics.recordError({
+      route: req.routeOptions.url ?? "unmatched",
+      method: req.method,
+      statusCode: error.statusCode ?? 500,
+      // The message, never the body: an error record must not carry a child's words.
+      message: String(error.message ?? error).slice(0, 300),
+    });
     if (!env.ERROR_WEBHOOK_URL) return;
     fetch(env.ERROR_WEBHOOK_URL, {
       method: "POST",
@@ -151,6 +212,18 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         content: `API error: ${req.method} ${req.url} — ${error.message}`,
       }),
     }).catch(() => {});
+  });
+
+  // The model box refusing work is load, not a crash: answer 503 with an
+  // honest retry hint instead of a 500. (SSE routes handle it in-stream.)
+  app.setErrorHandler((error, _req, reply) => {
+    if (error instanceof TutorBusyError) {
+      return reply
+        .code(503)
+        .header("retry-after", String(error.retryAfterSec))
+        .send({ error: error.message, retryAfterSec: error.retryAfterSec });
+    }
+    return reply.send(error);
   });
 
   // Guest abuse guard: rotating names for fresh free allowances is capped
@@ -268,6 +341,70 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     }
   }
 
+  /**
+   * Whether a machine can grade this problem: a symbolic check the verifier
+   * understands, or an exact answer on file. Rubric problems (visa answers,
+   * coaching reflections) are the tutor's to judge in conversation, so no
+   * timed or scored surface may include them.
+   */
+  const machineVerifiable = (p: { check?: unknown; answer?: unknown }) =>
+    ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) ||
+    p.answer !== undefined;
+
+  const isRubric = (p: { check?: unknown }) => (p.check as { type?: string })?.type === "rubric";
+
+  // Rubric problems (visa answers, coaching reflections, language
+  // production) can sit in a timed mock ONLY when a real model is behind
+  // the gateway to grade them against their criteria. The mock provider
+  // cannot judge, so with it these doors stay closed rather than fake.
+  const rubricExamsOpen = canJudgeRubrics(gateway.planner);
+  const examEligible = (p: CurriculumProblem) => machineVerifiable(p) || (rubricExamsOpen && isRubric(p));
+
+  /**
+   * Round-robin sampler for scored surfaces: one machine-verifiable problem
+   * per skill (curriculum order), then further laps until the cap. Keeps a
+   * deep pack's mocks and level checks spread across the whole ladder.
+   */
+  function sampleAcrossSkills(
+    pack: CurriculumPack,
+    cap: number,
+    maxPerSkill = Infinity,
+    eligible: (p: CurriculumProblem) => boolean = machineVerifiable,
+  ): number[] {
+    const bySkill = new Map<string, number[]>();
+    for (const [i, p] of pack.problems.entries()) {
+      if (!p.skillId || !eligible(p)) continue;
+      const list = bySkill.get(String(p.skillId)) ?? [];
+      list.push(i);
+      bySkill.set(String(p.skillId), list);
+    }
+    const ladder = pack.skills.filter((s) => bySkill.has(s.id));
+    if (ladder.length >= cap) {
+      // More skills than places: evenly spaced rungs across the whole
+      // ladder, so the mock touches early, middle, and late curriculum
+      // instead of only the first rungs.
+      const out: number[] = [];
+      for (let k = 0; k < cap; k++) {
+        const skill = ladder[Math.floor((k * ladder.length) / cap)];
+        out.push(bySkill.get(skill.id)![0]);
+      }
+      return out;
+    }
+    const out: number[] = [];
+    for (let lap = 0; out.length < cap && lap < maxPerSkill; lap++) {
+      let tookAny = false;
+      for (const skill of ladder) {
+        const list = bySkill.get(skill.id)!;
+        if (list.length <= lap) continue;
+        out.push(list[lap]);
+        tookAny = true;
+        if (out.length >= cap) break;
+      }
+      if (!tookAny) break;
+    }
+    return out;
+  }
+
   /** TTS cache: identical text+voice never hits the engine twice. */
   const ttsCache = new Map<string, { audio: Uint8Array; mimeType: string }>();
   async function cachedSpeak(text: string, voiceId: string) {
@@ -292,7 +429,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     done(null, body),
   );
 
-  await app.register(cors, { origin: env.WEB_ORIGIN ?? true });
+  await app.register(cors, {
+    origin: env.WEB_ORIGIN ?? true,
+    // Without this the browser hides content-disposition from fetch(), and
+    // every Command Centre export saves as a generic, undated filename.
+    exposedHeaders: ["content-disposition"],
+  });
   await app.register(rateLimit, {
     max: Number(env.RATE_LIMIT_MAX ?? 120),
     timeWindow: "1 minute",
@@ -308,14 +450,19 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       password: { type: "string", minLength: 8, maxLength: 128 },
       displayName: { type: "string", minLength: 1, maxLength: 80 },
       role: { type: "string", enum: ["parent", "student"] },
+      // A friend's referral code. Optional, and never a reason to fail signup.
+      ref: { type: "string", minLength: 4, maxLength: 32, pattern: "^[A-Za-z0-9]+$" },
     },
   };
 
-  app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student" } }>(
+  app.post<{ Body: { email: string; password: string; displayName?: string; role?: "parent" | "student"; ref?: string } }>(
     "/auth/register",
     { schema: { body: { ...credentialsSchema, additionalProperties: false } }, config: { rateLimit: { max: Number(env.AUTH_RATE_LIMIT ?? 10), timeWindow: "1 minute" } } },
     async (req, reply) => {
-      const { email, password, displayName, role } = req.body;
+      // Honour the Command Centre's signup pause before anything else.
+      const live = await controls.get();
+      if (live.signupsPaused) return reply.code(503).send({ error: live.signupsPausedReason });
+      const { email, password, displayName, role, ref } = req.body;
       const account = await store.createAccount(
         email,
         await hashPassword(password),
@@ -323,6 +470,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         displayName?.trim() || email.split("@")[0],
       );
       if (!account) return reply.code(409).send({ error: "that email is already registered" });
+      if (ref) {
+        // Remember who invited them; the thank-you waits for email
+        // verification so invented inboxes never earn anything.
+        const referrer = await store.userIdByReferralCode(ref);
+        if (referrer && referrer !== account.userId) await store.setReferredBy(account.userId, referrer);
+      }
       const token = mintToken();
       await store.saveToken(token.hash, account.userId);
       // Email verification: fire-and-forget so signup never blocks on SMTP.
@@ -353,6 +506,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       );
       if (!userId) return reply.code(400).send({ error: "that verification link is invalid or expired, request a new one" });
       await store.markEmailVerified(userId);
+      // Referral payout, once per referred account: a real, verified friend
+      // earns BOTH sides some paid-plan days. The claim is atomic, so
+      // re-verifying can never pay twice.
+      const referrer = await store.claimReferralReward(userId);
+      if (referrer) {
+        const days = Number(env.REFERRAL_REWARD_DAYS ?? 7);
+        if (days > 0) {
+          await store.grantPlanBoost(userId, "plus", days);
+          await store.grantPlanBoost(referrer, "plus", days);
+        }
+      }
       return { verified: true };
     },
   );
@@ -407,7 +571,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     async (req, reply) => {
       const user = await userFromRequest(req, store);
       if (!user) return reply.code(401).send({ error: "sign in required" });
-      const plan = await store.getUserPlan(user.userId);
+      const plan = await effectivePlan(user);
       const existing = await store.listStudentProfiles(user.userId);
       if (existing.length >= limitsFor(plan).familySeats) {
         return reply.code(402).send({
@@ -419,6 +583,170 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       return { id: student.id, displayName: req.body.displayName.trim() };
     },
   );
+
+  /**
+   * Name your tutor. The persona keeps its voice and teaching soul; the
+   * name belongs to the student. An empty name goes back to the default.
+   */
+  app.put<{ Params: { id: string }; Body: { name: string } }>(
+    "/students/:id/tutor-name",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: { name: { type: "string", maxLength: 40 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      const raw = req.body.name.trim().replace(/\s+/g, " ");
+      if (!raw) {
+        await store.setTutorName(req.params.id, null);
+        return { tutorName: null };
+      }
+      if (!/^[\p{L}\p{N} .'-]{2,30}$/u.test(raw)) {
+        return reply.code(400).send({ error: "a tutor name is 2 to 30 letters, numbers, spaces or . ' -" });
+      }
+      // The same safety desk that reads messages reads the name: a slur or
+      // contact bait can't become the word a child hears all session.
+      const verdict = await gateway.moderation.moderate(raw, "student");
+      if (verdict.flagged) {
+        return reply.code(400).send({ error: "that name can't be used here, pick another" });
+      }
+      await store.setTutorName(req.params.id, raw);
+      return { tutorName: raw };
+    },
+  );
+
+  /**
+   * The tutor can look like anyone: the learner sets skin tone, hair style
+   * and hair colour. The persona keeps its voice, name and clothing colour;
+   * only the face is the learner's. Any field cleared goes back to default.
+   */
+  app.put<{ Params: { id: string }; Body: { skin?: string; hair?: string; hairColor?: string } }>(
+    "/students/:id/tutor-look",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            skin: { type: "string", maxLength: 20 },
+            hair: { type: "string", maxLength: 20 },
+            hairColor: { type: "string", maxLength: 20 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      const cleaned = cleanLook(req.body);
+      if (!cleaned.ok) return reply.code(400).send({ error: cleaned.error });
+      await store.setTutorLook(req.params.id, cleaned.look);
+      return { look: cleaned.look };
+    },
+  );
+
+  /**
+   * Face hints for one learner: switched on or off only by the account
+   * holder (the parent, or an adult learner themselves). Never available to
+   * a learner on a school's roster: see tutor/face.ts for why.
+   */
+  app.put<{ Params: { id: string }; Body: { enabled: boolean } }>(
+    "/students/:id/face-hints",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["enabled"],
+          additionalProperties: false,
+          properties: { enabled: { type: "boolean" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      if (req.body.enabled && (await store.orgOfStudent(req.params.id))) {
+        return reply.code(409).send({ error: "face hints are not available for learners on a school roster" });
+      }
+      await store.setFaceHints(req.params.id, req.body.enabled);
+      // Switching off holds from the very next turn of a lesson under way.
+      if (!req.body.enabled) for (const s of live.values()) if (s.studentId === req.params.id) s.faceHints = false;
+      return { faceHints: req.body.enabled };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/face-hints", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return { faceHints: await store.getFaceHints(req.params.id), schoolRoster: Boolean(await store.orgOfStudent(req.params.id)) };
+  });
+
+  /**
+   * Voice familiarity for one learner: the tutor gets to know how they
+   * usually sound. Switched on or off only by the account holder; switching
+   * it off forgets everything it learned. Never for a school roster.
+   */
+  app.put<{ Params: { id: string }; Body: { enabled: boolean } }>(
+    "/students/:id/voice-familiarity",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["enabled"],
+          additionalProperties: false,
+          properties: { enabled: { type: "boolean" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      if (!(await store.ownsStudent(user.userId, req.params.id))) {
+        return reply.code(403).send({ error: "that student is not in your family" });
+      }
+      if (req.body.enabled && (await store.orgOfStudent(req.params.id))) {
+        return reply.code(409).send({ error: "voice familiarity is not available for learners on a school roster" });
+      }
+      await store.setVoiceFamiliarity(req.params.id, req.body.enabled);
+      // A lesson already under way follows the switch from its next turn.
+      for (const s of live.values()) {
+        if (s.studentId === req.params.id) s.voiceFamiliar = req.body.enabled && Boolean(s.voiceFamiliar);
+      }
+      return { voiceFamiliarity: req.body.enabled };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/students/:id/voice-familiarity", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return {
+      voiceFamiliarity: await store.getVoiceFamiliarity(req.params.id),
+      status: familiarityStatus(readProfile(await store.getVoiceProfile(req.params.id))),
+      schoolRoster: Boolean(await store.orgOfStudent(req.params.id)),
+    };
+  });
 
   /** Parent dashboard: per student — recent sessions with recaps + mastery. */
   app.get("/dashboard", async (req, reply) => {
@@ -442,6 +770,10 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           profile: await store.getProfile(s.id),
           routine: await store.getRoutine(s.id),
           careContact: await store.getCareContact(s.id),
+          faceHints: await store.getFaceHints(s.id),
+          voiceFamiliarity: await store.getVoiceFamiliarity(s.id),
+          voiceStatus: familiarityStatus(readProfile(await store.getVoiceProfile(s.id))),
+          onSchoolRoster: Boolean(await store.orgOfStudent(s.id)),
         })),
       ),
     };
@@ -620,6 +952,35 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     };
   });
 
+  /**
+   * The week ahead, built from what the platform already knows: due skills,
+   * weak skills, the uploaded timetable, and any exam dates on it.
+   */
+  async function planFor(studentId: string) {
+    const [due, mastery, routine, streakDays] = await Promise.all([
+      store.getDueSkills(studentId, 20),
+      store.getMasterySnapshot(studentId),
+      store.getRoutine(studentId),
+      store.getStreakDays(studentId),
+    ]);
+    return buildStudyPlan({
+      dueSkills: due.map((d) => ({ skillId: d.skillId, title: skillTitle(d.skillId), level: d.level })),
+      mastery: mastery.map((m) => ({ skillId: m.skillId, title: skillTitle(m.skillId), level: m.level, attempts: m.attempts })),
+      routine,
+      streakDays,
+      now: new Date(),
+    });
+  }
+
+  app.get<{ Params: { id: string } }>("/students/:id/plan", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    if (!(await store.ownsStudent(user.userId, req.params.id))) {
+      return reply.code(403).send({ error: "that student is not in your family" });
+    }
+    return planFor(req.params.id);
+  });
+
   /** The Dingba Brain, readable by whoever owns the student. */
   app.get<{ Params: { id: string } }>("/students/:id/profile", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -641,6 +1002,90 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   // Live sessions are in-memory conversation state; sweep abandoned ones so a
   // long-running server doesn't accumulate them forever.
+  /**
+   * Finds a live session, rebuilding it from the store when this process has
+   * never seen it: a restart, a TTL eviction, or another instance behind the
+   * same database. The conversation continues where it left off; only
+   * in-flight exam/diagnostic state and this session's practice tallies are
+   * process-local and start fresh, which degrades a recap, never a learner's
+   * conversation.
+   */
+  async function sessionFor(sessionId: string): Promise<LiveSession | undefined> {
+    const hot = live.get(sessionId);
+    if (hot) return hot;
+    const meta = await store.getSessionMeta(sessionId);
+    if (!meta || meta.endedAt) return undefined;
+    const persona = loadPersonas().find((p) => p.id === meta.personaId) ?? loadPersonas()[0];
+    let pack;
+    try {
+      pack = loadPack(meta.packId);
+    } catch {
+      return undefined; // a pack retired since the session started
+    }
+    const studentName = (await store.getStudentName(meta.studentId)) ?? "Student";
+    const [memoryLines, learnerProfile, routine, due, messages, tutorName] = await Promise.all([
+      store.getMemories(meta.studentId),
+      store.getProfile(meta.studentId),
+      store.getRoutine(meta.studentId),
+      store.getDueSkills(meta.studentId, 10),
+      store.listSessionMessages(sessionId),
+      store.getTutorName(meta.studentId),
+    ]);
+    const warmupSkills = due
+      .map((d) => pack.skills.find((sk) => sk.id === d.skillId)?.title)
+      .filter((t): t is string => Boolean(t))
+      .slice(0, 3);
+    // A B2B session must come back with its quota cap, or a restart would
+    // quietly turn a metered key into an unmetered one.
+    let apiKeyQuota: number | undefined;
+    if (meta.apiKeyId && meta.ownerUserId) {
+      apiKeyQuota = (await store.listApiKeys(meta.ownerUserId)).find((k) => k.id === meta.apiKeyId)?.monthlyQuota;
+    }
+    const session: LiveSession = {
+      id: sessionId,
+      studentId: meta.studentId,
+      studentName,
+      parentEmail: meta.parentEmail,
+      personaId: persona.id,
+      packId: meta.packId,
+      language: meta.language,
+      history: [
+        {
+          role: "system",
+          content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language: meta.language, tutorName }),
+        },
+        ...messages,
+      ],
+      busy: false,
+      practiceTotal: 0,
+      practiceCorrect: 0,
+      skillOutcomes: new Map(),
+      ownerUserId: meta.ownerUserId,
+      apiKeyId: meta.apiKeyId,
+      plan: meta.plan,
+      participants: new Map(),
+      createdAt: Date.now(),
+      apiKeyQuota,
+      faceHints: faceHintsAllowed({
+        enabledByAccountHolder: await store.getFaceHints(meta.studentId),
+        signedIn: Boolean(meta.ownerUserId) && !meta.apiKeyId,
+        onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
+        viaApiKey: Boolean(meta.apiKeyId),
+      }),
+      voiceFamiliar: voiceFamiliarityAllowed({
+        enabledByAccountHolder: await store.getVoiceFamiliarity(meta.studentId),
+        signedIn: Boolean(meta.ownerUserId) && !meta.apiKeyId,
+        onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
+        viaApiKey: Boolean(meta.apiKeyId),
+      }),
+    };
+    // Two concurrent requests can race the rebuild; the first one in wins.
+    const raced = live.get(sessionId);
+    if (raced) return raced;
+    live.set(sessionId, session);
+    return session;
+  }
+
   const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
   const sweeper = setInterval(() => {
     const cutoff = Date.now() - SESSION_TTL_MS;
@@ -670,13 +1115,14 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   });
 
   app.get("/personas", async () =>
-    loadPersonas().map(({ id, name, style, voiceId, color, accent }) => ({
+    loadPersonas().map(({ id, name, style, voiceId, color, accent, model }) => ({
       id,
       name,
       style,
       voiceId,
       color,
       accent,
+      ...(model ? { model } : {}),
     })),
   );
 
@@ -721,6 +1167,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       packId: string;
       parentEmail?: string;
       language?: string;
+      lessonSkillId?: string;
     };
   }>(
     "/sessions",
@@ -739,6 +1186,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             packId: { type: "string", maxLength: 40 },
             parentEmail: { type: "string", format: "email", maxLength: 254 },
             language: { type: "string", maxLength: 12 },
+            /** Start as a structured lesson on this skill from the pack. */
+            lessonSkillId: { type: "string", maxLength: 80 },
           },
         },
       },
@@ -759,6 +1208,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         throw err;
       }
 
+      // A lesson request has to name a skill this pack teaches.
+      let lesson: LessonBrief | null = null;
+      if (req.body.lessonSkillId) {
+        try {
+          lesson = buildLessonBrief(pack, req.body.lessonSkillId);
+        } catch (err) {
+          if (err instanceof UnknownSkillError) return reply.code(400).send({ error: err.message });
+          throw err;
+        }
+      }
+
       let studentIdResolved: string;
       let studentName: string;
       let parentEmail: string | undefined;
@@ -766,6 +1226,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       let apiKeyId: string | undefined;
       let apiKeyQuota: number | undefined;
       let plan = "free";
+      let signedInLearner = false;
 
       // B2B path: Tutor-as-a-Service via X-Api-Key (guest-style body, metered per key).
       const rawKey = req.headers["x-api-key"];
@@ -798,7 +1259,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // Recaps go to the parent account's inbox; adult learners get their own.
         parentEmail = user.email.endsWith("@students.local") ? undefined : user.email;
         ownerUserId = user.userId;
-        plan = await store.getUserPlan(user.userId);
+        plan = await effectivePlan(user);
+        signedInLearner = true;
       } else if (req.body.studentName) {
         if (!apiKeyId) {
           const day = new Date().toISOString().slice(0, 10);
@@ -821,13 +1283,49 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const memoryLines = await store.getMemories(studentIdResolved);
       const learnerProfile = await store.getProfile(studentIdResolved);
       const routine = await store.getRoutine(studentIdResolved);
+      // The student's own name for this tutor, if they gave one.
+      const tutorName = await store.getTutorName(studentIdResolved);
+      const tutorDisplayName = tutorName ?? persona.name;
+      // The chosen appearance, so the tutor can look like anyone.
+      const tutorLook = await store.getTutorLook(studentIdResolved);
+      // Face hints only where the account holder allowed them, and never on a
+      // school roster, through an API key, or for a guest.
+      const faceHints = faceHintsAllowed({
+        enabledByAccountHolder: await store.getFaceHints(studentIdResolved),
+        signedIn: signedInLearner,
+        onSchoolRoster: Boolean(await store.orgOfStudent(studentIdResolved)),
+        viaApiKey: Boolean(apiKeyId),
+      });
+      // Voice familiarity on the same terms.
+      const voiceFamiliar = voiceFamiliarityAllowed({
+        enabledByAccountHolder: await store.getVoiceFamiliarity(studentIdResolved),
+        signedIn: signedInLearner,
+        onSchoolRoster: Boolean(await store.orgOfStudent(studentIdResolved)),
+        viaApiKey: Boolean(apiKeyId),
+      });
       // Spaced review: due skills from THIS pack surface as session warm-ups.
       const due = await store.getDueSkills(studentIdResolved, 10);
       const warmupSkills = due
         .map((d) => pack.skills.find((s) => s.id === d.skillId)?.title)
         .filter((t): t is string => Boolean(t))
         .slice(0, 3);
-      const sessionId = await store.createSession(studentIdResolved, personaId, packId);
+      const sessionId = await store.createSession({
+        studentId: studentIdResolved,
+        personaId,
+        packId,
+        language,
+        plan,
+        ownerUserId,
+        parentEmail,
+        apiKeyId,
+      });
+
+      // The friendship so far, counted AFTER this session exists: sessions
+      // had (the bond stage) and days since it began (how grown-up the
+      // tutor looks). A brand new pair reads 1 session, 0 days.
+      const bondSessions = await store.countStudentSessions(studentIdResolved);
+      const firstAt = await store.firstSessionAt(studentIdResolved);
+      const bondDays = firstAt ? Math.max(0, Math.floor((Date.now() - firstAt.getTime()) / 86_400_000)) : 0;
 
       live.set(sessionId, {
         id: sessionId,
@@ -838,7 +1336,12 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         packId,
         language,
         history: [
-          { role: "system", content: buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills, routine, language }) },
+          {
+            role: "system",
+            content:
+              buildSystemPrompt({ persona, pack, studentName, memoryLines, profile: learnerProfile, warmupSkills: lesson ? [] : warmupSkills, routine, language, tutorName }) +
+              (lesson?.briefText ?? ""),
+          },
         ],
         busy: false,
         practiceTotal: 0,
@@ -850,13 +1353,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         participants: new Map(),
         createdAt: Date.now(),
         apiKeyQuota,
+        faceHints,
+        voiceFamiliar,
       });
       // A live tutor speaks first. Generate the opening line in-character;
       // if the model stalls or fails, a warm deterministic line covers it.
       const session = live.get(sessionId)!;
-      const greetInstruction = memoryLines.length
-        ? `[${studentName} has just walked into the session. Greet them warmly by name in one or two short sentences, in your own voice, touching on one thing you remember about them, then ask what they'd like to start with. No lists.]`
-        : `[${studentName} has just walked into their first session with you. Greet them warmly by name in one or two short sentences, introduce yourself in your own voice, and ask one easy question to get started. No lists.]`;
+      const greetInstruction = lesson
+        ? `[${studentName} has just walked in for the lesson on ${lesson.title}. Greet them warmly by name in one or two short sentences and open the lesson at its first step, in your own voice. No lists.]`
+        : memoryLines.length
+          ? `[${studentName} has just walked into the session. Greet them warmly by name in one or two short sentences, in your own voice, touching on one thing you remember about them, then ask what they'd like to start with. No lists.]`
+          : `[${studentName} has just walked into their first session with you. Greet them warmly by name in one or two short sentences, introduce yourself in your own voice, and ask one easy question to get started. No lists.]`;
       let greeting = "";
       try {
         const signal = AbortSignal.timeout(8000);
@@ -870,9 +1377,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         greeting = "";
       }
       if (!greeting.trim()) {
-        greeting = memoryLines.length
-          ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
-          : `Hi ${studentName}, I'm ${persona.name}. Glad you're here. What would you like to start with today?`;
+        greeting = lesson
+          ? `Hi ${studentName}, good to see you. Today we're getting comfortable with ${lesson.title.toLowerCase()}. Let's ease in.`
+          : memoryLines.length
+            ? `Welcome back, ${studentName}! Ready to pick up where we left off?`
+            : `Hi ${studentName}, I'm ${tutorDisplayName}. Glad you're here. What would you like to start with today?`;
       }
       greeting = greeting.trim();
       session.history.push({ role: "assistant", content: greeting });
@@ -881,18 +1390,38 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
       return {
         sessionId,
-        persona: { id: persona.id, name: persona.name },
+        persona: { id: persona.id, name: tutorDisplayName },
+        // The friendship so far: sessions had (the bond stage) and days
+        // together (how grown-up the tutor looks). Both only ever grow.
+        bond: { sessions: bondSessions, days: bondDays },
+        look: tutorLook,
+        // Whether this learner may offer face hints this session.
+        faceHints,
+        // Whether the device should measure how they sound when they talk.
+        voiceFamiliarity: voiceFamiliar,
         pack: pack.title,
         language,
         speaksAloud: Boolean(findLanguage(language)?.voices),
         remembered: memoryLines.length,
         greeting,
+        // Whether this pack can run scored surfaces (level check, mock exam).
+        // Rubric-only packs are tutor-judged in conversation, so the client
+        // should show no scored doors at all rather than doors that refuse.
+        // Two different doors: a timed mock can include judged rubric
+        // problems, but the level check is machine-graded only, so each
+        // door shows only where it can actually open.
+        examinable: pack.problems.some((p) => examEligible(p)),
+        assessable: pack.problems.some((p) => machineVerifiable(p)),
+        // Answers stay server-side; the client sees the shape, never the keys.
+        lesson: lesson
+          ? { skillId: lesson.skillId, title: lesson.title, objective: lesson.objective, practiceCount: lesson.practice.length }
+          : null,
       };
     },
   );
 
   /** Student turn in, tutor reply streamed out as SSE. */
-  app.post<{ Params: { id: string }; Body: { text: string; format?: string; participantId?: string } }>(
+  app.post<{ Params: { id: string }; Body: { text: string; format?: string; participantId?: string; faceHint?: string } }>(
     "/sessions/:id/message",
     {
       schema: {
@@ -904,12 +1433,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
             text: { type: "string", minLength: 1, maxLength: MAX_TEXT },
             format: { type: "string", enum: Object.keys(FORMATS) },
             participantId: { type: "string", format: "uuid" },
+            faceHint: { type: "string", enum: [...FACE_HINTS] },
           },
         },
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
 
@@ -990,9 +1520,18 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         if (!reply.raw.writableEnded) abort.abort();
       });
 
+      // A one-word face hint, when this learner is allowed to give one and it
+      // is their own turn (never a class guest's). Private and ephemeral: it
+      // shapes this one reply and is never saved.
+      const hint = req.body.faceHint;
+      const turnHistory =
+        session.faceHints && !req.body.participantId && isFaceHint(hint)
+          ? [...session.history, { role: "system" as const, content: faceHintNote(hint) }]
+          : session.history;
+
       let full = "";
       try {
-        for await (const delta of chatFor(session).chat(session.history, { signal: abort.signal })) {
+        for await (const delta of chatFor(session).chat(turnHistory, { signal: abort.signal })) {
           full += delta;
           reply.raw.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
@@ -1005,7 +1544,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         // Keep the user's turn and any partial reply so the conversation
         // survives a provider hiccup instead of silently losing context.
         if (full) session.history.push({ role: "assistant", content: full });
-        reply.raw.write(`data: ${JSON.stringify({ error: "generation failed" })}\n\n`);
+        // Headers are already streaming, so "at capacity" travels as an SSE
+        // event the client can show honestly, with a real retry hint.
+        const payload =
+          err instanceof TutorBusyError
+            ? { error: err.message, busy: true, retryAfterSec: err.retryAfterSec }
+            : { error: "generation failed" };
+        reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
       } finally {
         session.busy = false;
       }
@@ -1034,7 +1579,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const pack = loadPack(session.packId);
@@ -1102,7 +1647,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     "/sessions/:id/voice",
     { bodyLimit: 4 << 20 },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const audioIn = req.body as Buffer;
@@ -1139,8 +1684,46 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           session.history.push({ role: "user", content: transcript });
           await store.saveMessage(session.id, "user", transcript);
 
+          // How they SOUND, not just what they said. The client reads the
+          // student's own voice while they speak and passes a tone; a low,
+          // flat voice earns the tutor a private nudge to notice the person
+          // (rule 8), even when the words themselves seem fine. The note is
+          // ephemeral (not saved to the transcript) and never shown.
+          const tone = req.headers["x-voice-tone"];
+          const faceHeader = req.headers["x-face-hint"];
+          // Voice familiarity: compared with how THIS learner usually sounds.
+          // Once the tutor knows them, that replaces the one-size quiet-voice
+          // nudge, so a naturally soft-spoken child is not flagged every turn.
+          // Left out while friends sit in, whose voices are not theirs.
+          let heard: ReturnType<typeof hear> | null = null;
+          if (session.voiceFamiliar && session.participants.size === 0) {
+            heard = hear(
+              readProfile(await store.getVoiceProfile(session.studentId)),
+              parseVoiceFeatures(req.headers["x-voice-features"]),
+              transcript,
+              session.id,
+            );
+            await store.saveVoiceProfile(session.studentId, heard.profile);
+          }
+          const toneHistory = [
+            ...session.history,
+            ...(heard?.note ? [{ role: "system" as const, content: heard.note }] : []),
+            ...(tone === "low" && !heard?.known
+              ? [
+                  {
+                    role: "system" as const,
+                    content:
+                      "[Private note, not from the student: their voice just now sounded quiet and flat. Gently check how they're doing as a person before carrying on, in your own voice. Do not mention their tone of voice or this note.]",
+                  },
+                ]
+              : []),
+            ...(session.faceHints && isFaceHint(faceHeader)
+              ? [{ role: "system" as const, content: faceHintNote(faceHeader) }]
+              : []),
+          ];
+
           replyText = "";
-          for await (const delta of chatFor(session).chat(session.history, {
+          for await (const delta of chatFor(session).chat(toneHistory, {
             signal: AbortSignal.timeout(120_000),
           }))
             replyText += delta;
@@ -1176,7 +1759,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     "/sessions/:id/see",
     { bodyLimit: 6 << 20 },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session) return reply.code(404).send({ error: "no such session" });
       if (session.busy) return reply.code(409).send({ error: "tutor is already responding" });
       const imageIn = req.body as Buffer;
@@ -1269,7 +1852,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * learner model; parent gets the recap by email (mailcow) when we have one.
    */
   app.post<{ Params: { id: string } }>("/sessions/:id/end", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     live.delete(session.id); // claim it — a double /end must 404, not double-email
     const persona = loadPersonas().find((p) => p.id === session.personaId)!;
@@ -1401,7 +1984,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
 
   /** Host mints an invite code (paid plans only; capped seats per plan). */
   app.post<{ Params: { id: string } }>("/sessions/:id/invite", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     const seats = limitsFor(session.plan).classInvites;
     if (seats === 0) {
@@ -1479,24 +2062,15 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
    * adaptive engine starts from reality instead of assumptions.
    */
   app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/start", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     if (session.diagnostic) return reply.code(409).send({ error: "a level check is already in progress" });
     const pack = loadPack(session.packId);
 
-    // Up to 2 machine-verifiable problems per skill, in curriculum order.
-    const verifiable = (p: (typeof pack.problems)[number]) =>
-      ["solve", "compare", "equivalent"].includes(String((p.check as { type?: string })?.type)) || p.answer !== undefined;
-    const problemIndexes: number[] = [];
-    for (const skill of pack.skills) {
-      const picked = pack.problems
-        .map((p, i) => ({ p, i }))
-        .filter(({ p }) => p.skillId === skill.id && verifiable(p))
-        .slice(0, 2)
-        .map(({ i }) => i);
-      problemIndexes.push(...picked);
-      if (problemIndexes.length >= 12) break;
-    }
+    // Breadth first: one machine-verifiable problem per skill in curriculum
+    // order, then a second lap, capped at 12. A deep pack's level check
+    // should sweep the whole ladder, not drill its first rungs.
+    const problemIndexes = sampleAcrossSkills(pack, 12, 2);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no checkable problems yet, your tutor will place you in conversation instead" });
     }
@@ -1526,7 +2100,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
       if (!session.diagnostic.problemIndexes.includes(req.body.problemIndex)) {
         return reply.code(400).send({ error: "not part of this level check" });
@@ -1544,7 +2118,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   app.post<{ Params: { id: string } }>("/sessions/:id/diagnostic/finish", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session?.diagnostic) return reply.code(404).send({ error: "no level check in progress" });
     const pack = loadPack(session.packId);
     const diag = session.diagnostic;
@@ -1616,28 +2190,34 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/exam/start", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session) return reply.code(404).send({ error: "no such session" });
     if (!limitsFor(session.plan).examMode) {
       return reply.code(402).send({ error: "Exam mode is a premium feature. Upgrade to unlock timed mocks with a full post-mortem.", upgrade: true });
     }
     if (session.exam) return reply.code(409).send({ error: "an exam is already in progress" });
     const pack = loadPack(session.packId);
-    const problemIndexes = pack.problems
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => p.skillId)
-      .slice(0, 8)
-      .map(({ i }) => i);
-    if (problemIndexes.length === 0) return reply.code(400).send({ error: "this pack has no exam problems" });
+    // A scored exam may only contain problems that CAN be graded: machine
+    // checks always; rubric problems only when a real model is behind the
+    // gateway to judge them (see rubricExamsOpen). Sampling is one problem
+    // per skill, then further laps, so a mock spans the curriculum instead of
+    // asking eight variants of the first skill.
+    const problemIndexes = sampleAcrossSkills(pack, 8, Infinity, examEligible);
+    if (problemIndexes.length === 0) {
+      return reply.code(400).send({ error: "this subject has no timed mock yet, practice with your tutor instead" });
+    }
+    // Written rubric answers deserve breathing room; numeric ones stay brisk.
+    const timeLimit = (i: number) => pack.problems[i].timeLimitSec ?? (isRubric(pack.problems[i]) ? 240 : 90);
     session.exam = { problemIndexes, answers: new Map(), startedAt: Date.now() };
     await meter(session, "exam");
     return {
       problems: problemIndexes.map((i) => ({
         index: i,
         prompt: pack.problems[i].prompt,
-        timeLimitSec: pack.problems[i].timeLimitSec ?? 90,
+        timeLimitSec: timeLimit(i),
+        written: isRubric(pack.problems[i]) || undefined,
       })),
-      totalTimeSec: problemIndexes.reduce((n, i) => n + (pack.problems[i].timeLimitSec ?? 90), 0),
+      totalTimeSec: problemIndexes.reduce((n, i) => n + timeLimit(i), 0),
     };
   });
 
@@ -1651,13 +2231,15 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
           additionalProperties: false,
           properties: {
             problemIndex: { type: "integer", minimum: 0 },
-            answer: { type: "string", minLength: 1, maxLength: 500 },
+            // Written rubric answers (a visa answer, a reflection) need more
+            // room than a number does.
+            answer: { type: "string", minLength: 1, maxLength: 2000 },
           },
         },
       },
     },
     async (req, reply) => {
-      const session = live.get(req.params.id);
+      const session = await sessionFor(req.params.id);
       if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
       if (!session.exam.problemIndexes.includes(req.body.problemIndex)) {
         return reply.code(400).send({ error: "not part of this exam" });
@@ -1675,27 +2257,57 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   app.post<{ Params: { id: string } }>("/sessions/:id/exam/finish", async (req, reply) => {
-    const session = live.get(req.params.id);
+    const session = await sessionFor(req.params.id);
     if (!session?.exam) return reply.code(404).send({ error: "no exam in progress" });
     const pack = loadPack(session.packId);
     const exam = session.exam;
     session.exam = undefined;
 
+    // Rubric answers are judged now, against each problem's own criteria,
+    // by the model behind the gateway. A verdict that fails to parse stays
+    // null, which the scoring below already treats as unscored, never wrong.
+    const judged = new Map<number, RubricVerdict | null>();
+    for (const i of exam.problemIndexes) {
+      const p = pack.problems[i];
+      const a = exam.answers.get(i);
+      if (!isRubric(p) || a === undefined) continue;
+      const criteria = (p.check as { criteria?: string[] }).criteria ?? [];
+      judged.set(
+        i,
+        await judgeRubricAnswer(gateway.planner, p.prompt, criteria, a.answer, {
+          signal: AbortSignal.timeout(60_000),
+        }),
+      );
+    }
+
     const results = exam.problemIndexes.map((i) => {
       const p = pack.problems[i];
       const a = exam.answers.get(i);
-      return { index: i, prompt: p.prompt, skillId: p.skillId, answer: a?.answer ?? null, correct: a?.correct ?? false };
+      const verdict = judged.get(i);
+      // Blank in a timed exam is wrong; answered-but-unverifiable (the
+      // checker down mid-exam, or a judge reply that didn't parse) is
+      // unscored, and must never read as wrong.
+      const correct = a === undefined ? false : verdict !== undefined ? (verdict ? verdict.pass : null) : a.correct;
+      return {
+        index: i,
+        prompt: p.prompt,
+        skillId: p.skillId,
+        answer: a?.answer ?? null,
+        correct,
+        judge: verdict ? { met: verdict.met, of: verdict.of, note: verdict.note } : undefined,
+      };
     });
     for (const r of results) {
-      if (r.skillId && r.answer !== null) {
-        await store.recordAttempt(session.studentId, String(r.skillId), Boolean(r.correct));
+      if (r.skillId && r.answer !== null && r.correct !== null) {
+        await store.recordAttempt(session.studentId, String(r.skillId), r.correct);
         const o = session.skillOutcomes.get(String(r.skillId)) ?? { correct: 0, total: 0 };
         o.total += 1;
         if (r.correct) o.correct += 1;
         session.skillOutcomes.set(String(r.skillId), o);
       }
     }
-    const correctCount = results.filter((r) => r.correct).length;
+    const unscored = results.filter((r) => r.correct === null).length;
+    const correctCount = results.filter((r) => r.correct === true).length;
     const durationSec = Math.round((Date.now() - exam.startedAt) / 1000);
 
     let postMortem = "";
@@ -1705,8 +2317,17 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         {
           role: "user",
           content:
-            `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length} in ${durationSec}s. Results: ` +
-            results.map((r) => `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct ? "✓" : "✗"}]`).join(" ") +
+            `MOCK EXAM FINISHED. Score: ${correctCount}/${results.length - unscored} in ${durationSec}s.` +
+            (unscored ? ` ${unscored} answer(s) could not be machine-checked; judge those yourself, kindly.` : "") +
+            ` Results: ` +
+            results
+              .map(
+                (r) =>
+                  `[${r.prompt} -> ${r.answer ?? "(blank)"} ${r.correct === null ? "?" : r.correct ? "✓" : "✗"}` +
+                  (r.judge ? ` judged ${r.judge.met}/${r.judge.of}: ${r.judge.note}` : "") +
+                  `]`,
+              )
+              .join(" ") +
             ` As the tutor, write a short post-mortem: celebrate what went right, name the pattern behind the misses, and give the single highest-impact thing to practice before the real exam.`,
         },
       ],
@@ -1716,7 +2337,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     session.history.push({ role: "assistant", content: postMortem });
     await store.saveMessage(session.id, "assistant", postMortem);
 
-    return { score: correctCount, of: results.length, durationSec, results, postMortem };
+    return { score: correctCount, of: results.length - unscored, unscored, durationSec, results, postMortem };
   });
 
   // ---- Orgs (schools): seats, roster, teacher dashboard ----
@@ -1793,7 +2414,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       students: await Promise.all(
         students.map(async (s) => ({
           ...s,
-          mastery: await store.getMasterySnapshot(s.id),
+          // Teachers read skill titles, never raw ids.
+          mastery: (await store.getMasterySnapshot(s.id)).map((m) => ({ ...m, title: skillTitle(m.skillId) })),
           sessions: await store.listSessionSummaries(s.id, 3),
           safety: await store.listIncidents(s.id, 5),
         })),
@@ -1909,6 +2531,54 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * The family's own copy of everything we hold: the right to a copy and to
+   * take it elsewhere (GDPR articles 15 and 20, and their equivalents). It
+   * covers exactly what DELETE /me erases, so "download, then delete" leaves
+   * a family with everything and us with nothing. Secrets stay out: no
+   * password hash, no token or key hashes, no push keys.
+   */
+  app.get(
+    "/me/export",
+    {
+      config: {
+        rateLimit: {
+          max: Number(env.EXPORT_RATE_LIMIT ?? 5),
+          timeWindow: "1 hour",
+          // Counted per signed-in account, not per address: whole schools and
+          // mobile networks share one address, and one family's downloads
+          // must never use up another's.
+          keyGenerator: (req: { headers: { authorization?: string }; ip: string }) =>
+            req.headers.authorization
+              ? `export:${createHash("sha256").update(req.headers.authorization).digest("hex")}`
+              : `export-ip:${req.ip}`,
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = await userFromRequest(req, store);
+      if (!user) return reply.code(401).send({ error: "sign in required" });
+      const data = await store.exportAccount(user.userId);
+      if (!data) return reply.code(404).send({ error: "no such account" });
+      const day = new Date().toISOString().slice(0, 10);
+      reply.header("content-disposition", `attachment; filename="dingba-data-${day}.json"`);
+      reply.header("cache-control", "no-store");
+      return {
+        format: "dingba-export/1",
+        exportedAt: new Date().toISOString(),
+        about: [
+          "Everything Dingba holds about this account and its learners, as stored.",
+          "Lessons include every message, with the times they were sent.",
+          "Voice familiarity, when switched on, is a few running averages per learner (voiceProfile). No recordings are kept.",
+          "Face hints keep nothing about a face; only whether they are allowed (faceHints).",
+          "Left out on purpose: your password (we only ever kept a scrambled form of it) and the secret keys that keep you signed in.",
+          "Deleting the account on the account page erases all of this, except paymentRecords: payment records are kept as accounting law requires.",
+        ],
+        ...data,
+      };
+    },
+  );
+
   /** GDPR/COPPA erasure: the account and every trace of its students. */
   app.delete<{ Body: { confirm: string } }>(
     "/me",
@@ -1995,7 +2665,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const subs = await store.listPushSubscriptions(account.userId);
       const webpush = (await import("web-push")).default;
       webpush.setVapidDetails(
-        env.VAPID_SUBJECT ?? "mailto:tutor@example.com",
+        env.VAPID_SUBJECT ?? "mailto:tutor@dingba.ai",
         env.VAPID_PUBLIC_KEY,
         env.VAPID_PRIVATE_KEY,
       );
@@ -2053,6 +2723,189 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     },
   );
 
+  /**
+   * The daily reminder run, meant for a cron hitting it once a morning. Each
+   * subscribed family gets one notification per learner who actually has
+   * something to do today, carrying the specific item, never a generic
+   * "come study". Learners with a free day are left in peace.
+   */
+  async function runNudgePlans() {
+    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return null;
+    const webpush = (await import("web-push")).default;
+    webpush.setVapidDetails(
+      env.VAPID_SUBJECT ?? "mailto:tutor@dingba.ai",
+      env.VAPID_PUBLIC_KEY,
+      env.VAPID_PRIVATE_KEY,
+    );
+
+    const byUser = new Map<string, Array<{ endpoint: string; p256dh: string; auth: string }>>();
+    for (const sub of await store.listAllPushSubscriptions()) {
+      byUser.set(sub.userId, [...(byUser.get(sub.userId) ?? []), sub]);
+    }
+
+    let sent = 0;
+    let quiet = 0;
+    let stale = 0;
+    for (const [userId, devices] of byUser) {
+      for (const student of await store.listStudentProfiles(userId)) {
+        const note = planReminder(await planFor(student.id), student.displayName);
+        if (!note) {
+          quiet += 1; // a reminder with nothing to say teaches people to ignore reminders
+          continue;
+        }
+        for (const device of devices) {
+          try {
+            await webpush.sendNotification(
+              { endpoint: device.endpoint, keys: { p256dh: device.p256dh, auth: device.auth } },
+              JSON.stringify(note),
+            );
+            sent += 1;
+          } catch {
+            await store.deletePushSubscription(device.endpoint); // stale device
+            stale += 1;
+          }
+        }
+      }
+    }
+    return { users: byUser.size, sent, quiet, stale };
+  }
+
+  app.post("/admin/nudge-plans", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+    const result = await runNudgePlans();
+    if (!result) return reply.code(501).send({ error: "push not configured" });
+    return result;
+  });
+
+  /**
+   * The weekly digest run, for a cron hitting it once a week. Each guardian
+   * with a verified email and at least one learner gets one plain email:
+   * sessions, streak, what is due, safety flags, and the week ahead. An
+   * account with a completely quiet week is left in peace.
+   */
+  async function runWeeklyDigest() {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    let composed = 0;
+    let delivered = 0;
+    let quiet = 0;
+    let unverified = 0;
+
+    for (const account of await store.listAccounts()) {
+      const students = await store.listStudentProfiles(account.userId);
+      if (students.length === 0) continue;
+      if (!(await store.isEmailVerified(account.userId))) {
+        unverified += 1; // recaps and alerts already require this; so does the digest
+        continue;
+      }
+
+      const learners: DigestLearner[] = [];
+      for (const s of students) {
+        const [sessions, streakDays, due, incidents, plan] = await Promise.all([
+          store.listSessionSummaries(s.id, 30),
+          store.getStreakDays(s.id),
+          store.getDueSkills(s.id, 4),
+          store.listIncidents(s.id, 20),
+          planFor(s.id),
+        ]);
+        learners.push({
+          name: s.displayName,
+          sessionsThisWeek: sessions.filter((x) => x.startedAt >= weekAgo).length,
+          streakDays,
+          dueSkills: due.map((d) => skillTitle(d.skillId)),
+          safetyFlags: incidents.filter((i) => i.createdAt >= weekAgo).length,
+          planHeadline: plan.headline,
+        });
+      }
+
+      const anythingToSay = learners.some(
+        (l) => l.sessionsThisWeek > 0 || l.dueSkills.length > 0 || l.safetyFlags > 0,
+      );
+      if (!anythingToSay) {
+        quiet += 1;
+        continue;
+      }
+
+      composed += 1;
+      try {
+        if ((await sendWeeklyDigest({ to: account.email, learners })) === "sent") delivered += 1;
+      } catch (err) {
+        app.log.error({ err, to: account.email }, "weekly digest failed");
+      }
+    }
+    return { composed, delivered, quiet, unverified };
+  }
+
+  app.post("/admin/weekly-digest", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY) return reply.code(403).send({ error: "forbidden" });
+    return runWeeklyDigest();
+  });
+
+  /**
+   * The app is its own alarm clock: study reminders every morning, the
+   * guardian digest on Sunday evening, no external cron required. Every
+   * instance ticks once a minute; the store's atomic daily claim decides
+   * which single instance actually runs a due job, so scaling out never
+   * double-sends anything. External crons hitting the /admin routes remain
+   * possible and share the same code path.
+   */
+  if (env.NODE_ENV !== "test" && env.AUTO_JOBS !== "off") {
+    const nudgeHour = Number(env.NUDGE_HOUR_UTC ?? 7);
+    const digestHour = Number(env.DIGEST_HOUR_UTC ?? 18);
+    const tick = async () => {
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
+      for (const job of dueJobs(now, nudgeHour, digestHour)) {
+        if (!(await store.claimDailyJob(`${job}:${day}`))) continue;
+        try {
+          const result = job === "nudge" ? await runNudgePlans() : await runWeeklyDigest();
+          app.log.info({ job, result }, "scheduled job ran");
+        } catch (err) {
+          app.log.error({ err, job }, "scheduled job failed");
+        }
+      }
+    };
+    const clock = setInterval(() => void tick(), 60_000);
+    clock.unref();
+    app.addHook("onClose", async () => clearInterval(clock));
+  }
+
+  /**
+   * Prometheus scrape target. Point any Grafana agent at it with the admin
+   * key as a bearer token and the platform's pulse shows up in dashboards
+   * with nothing else installed.
+   */
+  app.get("/admin/metrics", async (req, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(501).send({ error: "ADMIN_KEY not configured" });
+    const bearer = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
+    if (req.headers["x-admin-key"] !== env.ADMIN_KEY && bearer !== env.ADMIN_KEY) {
+      return reply.code(403).send({ error: "forbidden" });
+    }
+    let text = metrics.prometheus();
+    const q = gateway.queue?.stats();
+    if (q) {
+      text += [
+        "",
+        "# HELP dingba_ai_queue_running Generations running on the model box right now",
+        "# TYPE dingba_ai_queue_running gauge",
+        `dingba_ai_queue_running ${q.running}`,
+        "# TYPE dingba_ai_queue_waiting gauge",
+        `dingba_ai_queue_waiting ${q.queued}`,
+        "# TYPE dingba_ai_queue_served_total counter",
+        `dingba_ai_queue_served_total ${q.served}`,
+        "# TYPE dingba_ai_queue_rejected_total counter",
+        `dingba_ai_queue_rejected_total ${q.rejected}`,
+        "# TYPE dingba_ai_queue_timed_out_total counter",
+        `dingba_ai_queue_timed_out_total ${q.timedOut}`,
+        "# TYPE dingba_ai_queue_wait_ms_avg gauge",
+        `dingba_ai_queue_wait_ms_avg ${q.avgWaitMs}`,
+        "",
+      ].join("\n");
+    }
+    return reply.header("content-type", "text/plain; version=0.0.4; charset=utf-8").send(text);
+  });
+
   /** Usage summary for the signed-in account (today + this month). */
   app.get("/me/usage", async (req, reply) => {
     const user = await userFromRequest(req, store);
@@ -2060,7 +2913,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
-    const plan = await store.getUserPlan(user.userId);
+    const plan = await effectivePlan(user);
     const limits = limitsFor(plan);
     return {
       plan,
@@ -2073,8 +2926,42 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     };
   });
 
+  /**
+   * The referral loop, from the inviter's side: my code, my shareable link,
+   * how many friends came, and how long my thank-you Plus runs.
+   */
+  app.get("/account/referral", async (req, reply) => {
+    const user = await userFromRequest(req, store);
+    if (!user) return reply.code(401).send({ error: "sign in required" });
+    const summary = await store.referralSummary(user.userId);
+    const origin = env.WEB_ORIGIN ?? "http://localhost:3000";
+    return {
+      ...summary,
+      link: `${origin}/?ref=${summary.code}`,
+      rewardDays: Number(env.REFERRAL_REWARD_DAYS ?? 7),
+    };
+  });
+
+  /**
+   * The one line the whole platform reads: whether signups are open and
+   * whether there is a notice to show. Public on purpose, so the sign-up
+   * screen can say why it is closed before someone fills the form in.
+   */
+  app.get("/platform", async () => {
+    const live = await controls.get();
+    return {
+      signupsPaused: live.signupsPaused,
+      signupsPausedReason: live.signupsPaused ? live.signupsPausedReason : "",
+      notice: live.notice,
+      noticeLevel: live.noticeLevel,
+    };
+  });
+
   // ---- Billing (Sprint 6b) ----
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
+
+  // ---- Command Centre (Sprint 15) ----
+  await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls, metrics, gateway.queue ?? null);
 
   return app;
 }
