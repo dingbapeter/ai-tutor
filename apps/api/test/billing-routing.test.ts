@@ -62,6 +62,8 @@ async function standIn(): Promise<Stub> {
       PLN_premium_ngn: { amount: 750000, currency: "NGN" },
       PLN_plus_ghs: { amount: 6000, currency: "GHS" },
       PLN_premium_ghs: { amount: 15000, currency: "GHS" },
+      PLN_plus_usd: { amount: 500, currency: "USD" },
+      PLN_premium_usd: { amount: 1200, currency: "USD" },
     };
     return { status: true, data: table[code] };
   });
@@ -192,6 +194,8 @@ describe("prices read from the processors", () => {
     ]);
     await paystack.createCheckout({ email: "a@b.c", plan: "premium", currency: "GHS", successUrl: "s", cancelUrl: "c" });
     expect(stub.calls.at(-1)?.body).toContain("PLN_premium_ghs");
+    // The plan's own amount and currency ride along, as Paystack's initialize call wants.
+    expect(JSON.parse(stub.calls.at(-1)!.body)).toMatchObject({ plan: "PLN_premium_ghs", amount: 15000, currency: "GHS", email: "a@b.c" });
     await paystack.createCheckout({ email: "a@b.c", plan: "plus", currency: "NGN", successUrl: "s", cancelUrl: "c" });
     expect(stub.calls.at(-1)?.body).toContain("PLN_plus_ngn");
   });
@@ -202,6 +206,55 @@ describe("prices read from the processors", () => {
     expect(billingFromEnv({ BILLING_PROVIDER: "mock", MOCK_BILLING_SECRET: "x" }).map((p) => p.name)).toEqual(["mock"]);
     expect(billingFromEnv({})).toEqual([]);
     expect(() => billingFromEnv({ STRIPE_SECRET_KEY: "k" })).toThrow(/Stripe needs/);
+  });
+});
+
+describe("Paystack alone, taking naira and dollars", () => {
+  let stub: Stub;
+  let app: FastifyInstance;
+  beforeAll(async () => {
+    stub = await standIn();
+    app = await buildApp({
+      gateway: gateway(),
+      store: new MemoryStore(),
+      env: {
+        NODE_ENV: "test",
+        RATE_LIMIT_MAX: "10000",
+        GUEST_IP_CAP: "100000",
+        AUTH_RATE_LIMIT: "100000",
+        BILLING_PROVIDER: "paystack",
+        PAYSTACK_SECRET_KEY: PAYSTACK_KEY,
+        PAYSTACK_PLAN_PLUS: "PLN_plus_ngn",
+        PAYSTACK_PLAN_PREMIUM: "PLN_premium_ngn",
+        PAYSTACK_PLAN_PLUS_USD: "PLN_plus_usd",
+        PAYSTACK_PLAN_PREMIUM_USD: "PLN_premium_usd",
+        PAYSTACK_API_BASE: stub.url,
+        // Stripe keys present but unused: BILLING_PROVIDER keeps only Paystack.
+        STRIPE_SECRET_KEY: STRIPE_KEY,
+        WEB_ORIGIN: "https://dingba.test",
+      },
+    });
+  });
+  afterAll(async () => {
+    await app.close();
+    await stub.close();
+  });
+
+  it("offers naira and dollars through Paystack only", async () => {
+    const status = (await app.inject({ method: "GET", url: "/billing/status" })).json();
+    expect(status).toMatchObject({ configured: true, providers: ["paystack"], currencies: ["USD", "NGN"] });
+    expect((await app.inject({ method: "GET", url: "/billing/quote?tz=Africa/Lagos" })).json()).toMatchObject({ currency: "NGN", provider: "paystack", monthly: { plus: { amount: 2500 } } });
+    // Pounds are not on offer, so a London family pays in dollars, still through Paystack.
+    expect((await app.inject({ method: "GET", url: "/billing/quote?tz=Europe/London" })).json()).toMatchObject({ currency: "USD", provider: "paystack", monthly: { plus: { amount: 5 }, premium: { amount: 12 } } });
+  });
+
+  it("sends a dollar checkout to the dollar plan, with the amount Paystack listed", async () => {
+    const reg = await app.inject({ method: "POST", url: "/auth/register", payload: { email: "usd@example.com", password: "hunter22222", displayName: "Parent" } });
+    const res = (await app.inject({ method: "POST", url: "/billing/checkout", headers: { authorization: `Bearer ${reg.json().token}` }, payload: { plan: "premium", currency: "USD" } })).json();
+    expect(res).toMatchObject({ provider: "paystack", currency: "USD" });
+    const sent = JSON.parse(decodeURIComponent(res.url.split("/").pop()));
+    expect(sent).toMatchObject({ plan: "PLN_premium_usd", amount: 1200, currency: "USD", email: "usd@example.com" });
+    expect(sent.callback_url).toBe("https://dingba.test/account?upgraded=1");
   });
 });
 

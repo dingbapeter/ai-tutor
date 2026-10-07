@@ -179,7 +179,43 @@ untested backup is not a backup.
 
 ## Part 2: make it good (the week after)
 
-### 2.1 Billing, when you want money (both processors at once, 2026-10-02)
+### 2.1 Billing, when you want money
+
+**The chosen path (2026-10-07): Paystack only, taking naira and dollars.**
+One Paystack account, no second processor. Paystack also offers mobile
+money and bank transfer on its own page. Two things to know before
+creating plans: a Nigerian Paystack business is paid in naira and, once
+Paystack has enabled it for the account, in US dollars; pounds, euros,
+cedis and the others need Paystack businesses registered in those
+countries, so they are not one account's to switch on. A family whose
+currency is not on offer sees and pays in dollars.
+
+1. In the Paystack dashboard, ask support to enable USD collections on
+   the account if it is not already on (test mode first).
+2. Plans → Create plan, four times, interval monthly: Plus in NGN,
+   Premium in NGN, Plus in USD, Premium in USD. The amounts you type here
+   are the prices families see; nothing in the code sets them. Copy each
+   plan code (PLN_...).
+3. Settings → API Keys & Webhooks: copy the secret key, and set the
+   webhook URL to `https://api.dingba.ai/billing/webhook/paystack`.
+4. On the Railway api service:
+
+```bash
+BILLING_PROVIDER=paystack
+PAYSTACK_SECRET_KEY=<sk_test_... first, sk_live_... when it works>
+PAYSTACK_PLAN_PLUS=<PLN_... Plus in naira>
+PAYSTACK_PLAN_PREMIUM=<PLN_... Premium in naira>
+PAYSTACK_PLAN_PLUS_USD=<PLN_... Plus in dollars>
+PAYSTACK_PLAN_PREMIUM_USD=<PLN_... Premium in dollars>
+```
+
+5. Deploy, open the family page on a signed-in account: the two plans show
+   their naira prices with a switch to dollars. Pay once with a Paystack
+   test card in each currency and confirm the plan flips on the page,
+   then swap in the live key and pay once for real.
+
+The rest of this section is the two-processor setup, kept for when a
+second processor is ever wanted.
 
 Stripe and Paystack can both be live. Paystack takes naira, cedis,
 shillings and rand (and offers mobile money on its own page); Stripe takes

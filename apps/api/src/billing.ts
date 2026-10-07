@@ -277,8 +277,9 @@ export class PaystackProvider implements BillingProvider {
     },
   ) {}
 
-  /** Plan code → the currency the processor says it charges in, once listed. */
+  /** Plan code → the currency and amount the processor holds for it, once listed. */
   private currencyOf = new Map<string, string>();
+  private amountOf = new Map<string, number>();
 
   private allCodes(): Array<{ plan: PaidPlan; code: string }> {
     const out: Array<{ plan: PaidPlan; code: string }> = [
@@ -300,6 +301,7 @@ export class PaystackProvider implements BillingProvider {
       const json = (await res.json()) as { data: { amount: number; currency: string } };
       const currency = (json.data.currency ?? "NGN").toUpperCase();
       this.currencyOf.set(code, currency);
+      this.amountOf.set(code, json.data.amount);
       out.push({ plan, currency, amountMinor: json.data.amount });
     }
     return out;
@@ -318,13 +320,25 @@ export class PaystackProvider implements BillingProvider {
 
   async createCheckout(opts: { email: string; plan: PaidPlan; currency: string; successUrl: string; cancelUrl: string }) {
     const planCode = this.codeFor(opts.plan, opts.currency);
+    // Paystack wants an amount on every initialize call even when a plan
+    // sets the real one, and the plan's own currency alongside it, so the
+    // dollar plan is charged in dollars. Both come from the plan as listed.
+    const amount = this.amountOf.get(planCode);
+    const currency = this.currencyOf.get(planCode);
     const res = await fetch(`${this.cfg.apiBase ?? "https://api.paystack.co"}/transaction/initialize`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.cfg.secretKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ email: opts.email, plan: planCode, callback_url: opts.successUrl }),
+      body: JSON.stringify({
+        email: opts.email,
+        plan: planCode,
+        callback_url: opts.successUrl,
+        ...(amount !== undefined ? { amount } : {}),
+        ...(currency ? { currency } : {}),
+        metadata: { plan: opts.plan, cancel_action: opts.cancelUrl },
+      }),
     });
     if (!res.ok) throw new Error(`paystack initialize failed: ${res.status} ${await res.text()}`);
     const json = (await res.json()) as { data: { authorization_url: string } };
