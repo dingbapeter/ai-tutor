@@ -1,138 +1,94 @@
-# Making a human-like tutor, step by step
+# Making the human-like tutors, step by step
 
-For a new computer and a first-time artist. Nothing here needs a
-programmer. Follow it top to bottom.
+For a brand-new computer and a first-time artist. One action per step.
+Nothing to type.
 
-## What you are making
+## Before you start
 
-One file per tutor, called `amara.glb` (or `kofi.glb`, and so on). It is
-a 3D head and shoulders with 52 small controls on the face that the
-website moves to make the tutor talk, smile, blink and look at the
-learner. The website checks the file for you and shows the tutor alive
-before anyone else sees it.
+Your computer needs a proper graphics card, 32 GB of memory and 150 GB
+of free space. If it is a normal office laptop, do steps 1 to 10 on a
+gaming or design computer and the rest on any machine.
 
-## The computer
+## Part A: set up the computer (two hours, mostly waiting for downloads)
 
-MetaHuman needs a real graphics card. Before installing anything, check:
+1. Go to **epicgames.com**, download the **Epic Games Launcher**, and open an
+   account with your email.
+2. Open the launcher. Click **Unreal Engine** on the left, then **Library**,
+   then the **+** next to "Engine versions", then **Install**. Pick the
+   newest version it offers. This is about 50 GB; leave it downloading.
+3. In the launcher, click **Fab**. Search **MetaHuman**. Click **Add to
+   library**, then **Install to Engine**. (If Fab does not show it, skip this;
+   newer engines already include it.)
+4. Go to **blender.org**, click **Download**, install Blender with the default
+   choices.
+5. Go to **github.com/dingbapeter/ai-tutor**, click the green **Code**
+   button, then **Download ZIP**. Unzip it somewhere easy, like your
+   Desktop. You will use one folder inside it: `tools` → `avatar`.
 
-- Windows 10 or 11, 64-bit (a Mac works for Blender and the Studio but
-  not for MetaHuman in Unreal).
-- A graphics card from the last few years: NVIDIA RTX 2070 or better, or
-  the AMD equivalent.
-- 32 GB of memory. 16 GB will struggle.
-- 150 GB of free disk space. Unreal Engine alone is about 50 GB.
+## Part B: make the face (Unreal Engine)
 
-## Install, in this order (about two hours, mostly downloading)
+6. Open Unreal Engine from the launcher. Choose **Games** → **Blank** →
+   name it `DingbaTutors` → **Create**.
+7. If MetaHuman is not already on: **Edit** → **Plugins** → search
+   "MetaHuman" → tick it → restart when asked.
+8. Click the **MetaHuman** button in the top toolbar (or **Window** →
+   **MetaHuman**). This opens MetaHuman Creator.
+9. Build the face to match one of the 13 tutor portraits from the handoff
+   pack. Front view first, then the side. Choose skin, eyes, hair and
+   teeth here. Save it as the tutor's name, for example `Amara`.
 
-1. **Epic Games Launcher**, free, from epicgames.com. Make an Epic account
-   if you do not have one.
-2. In the launcher, **Unreal Engine** tab → Library → the plus sign →
-   install the newest 5.x version. Default options are fine.
-3. Still in the launcher, go to **Fab** (Epic's store) and add the free
-   **MetaHuman** plugin to your library, then install it to the engine
-   version you just installed. Newer engines carry MetaHuman Creator
-   inside the engine, so if you cannot find it in Fab, it is already
-   there: open Unreal, Edit → Plugins, search "MetaHuman", tick it.
-4. **Blender**, free, from blender.org. Version 4.0 or newer. Default
-   install.
-5. Nothing else. The check and the preview run in your web browser.
+## Part C: get the file out of Unreal
 
-## Make the character (Unreal Engine)
+10. The website needs the face's 52 expression controls, which MetaHuman
+    does not export on its own. In the launcher, go to **Fab**, search
+    **MetaHuman to glTF** (by Holotype), **Add to library**, **Install to
+    Engine**, restart Unreal. Then right-click your MetaHuman in the
+    Content Browser and choose the **Export glTF** option it added. Save
+    the file as `amara.glb` on your Desktop.
 
-1. Open Unreal Engine, make a new project (Games → Blank), call it
-   `DingbaTutors`.
-2. Open MetaHuman Creator from the top toolbar (the MetaHuman icon) or
-   from Window → MetaHuman.
-3. Build the face to match the portrait of the tutor you are making. The
-   13 portraits are in the handoff pack. Work from the front view first,
-   then the side. Skin, eyes, hair, teeth: all in Creator.
-4. Save the MetaHuman into the project.
+    If that plugin is not available, the fallback is a free tool called
+    **BlendShapeExporterV2** on GitHub; its page has its own instructions,
+    and it ends with you exporting the face as `amara.fbx`.
 
-## Get the file out of Unreal
+## Part D: tidy the file (one drag)
 
-The website needs the face's 52 controls as "morph targets" (also called
-blend shapes). MetaHuman does not export them by default, so one extra
-step is needed. Two free ways, pick one:
+11. Open the unzipped folder from step 5 and go into `tools` → `avatar`.
+12. Drag your `amara.glb` (or `amara.fbx`) onto the file called
+    **Tidy character** (`.bat` on Windows, `.command` on Mac). A black
+    window runs for a minute and says "Done". A new file appears next to
+    yours: `amara-tidy.glb`. That is the one you use from now on.
 
-- **Holotype's MetaHuman to glTF plugin** on Fab: installs into the
-  engine, adds an "Export" button on the MetaHuman, writes a `.glb` with
-  the 52 controls already named the right way. This is the easiest.
-- **BlendShapeExporterV2** (free on GitHub): bakes the 52 controls into
-  the MetaHuman's face, after which you export the face as `.fbx` with
-  File → Export (or right-click the face mesh → Asset Actions → Export).
+    If the window says Blender was not found, do step 4 again.
 
-Either way you now have a file: a `.glb`, or a `.fbx`. Menu names move
-between versions; if a label here is not exactly what you see, the
-nearest one is the right one, and the Studio in the next step will tell
-you if anything important is missing.
+## Part E: check it and watch it come alive (in your browser)
 
-## Tidy the file (Blender, one command)
+13. Open **dingba.ai/studio** in Chrome, Edge or Safari.
+14. Drag `amara-tidy.glb` onto the page. Nothing is uploaded; the check
+    happens on your computer.
+15. Read the list on the right. Green ticks are fine. Red lines say in
+    plain words what to fix. Tick **Work in progress** if you just want to
+    look at an unfinished character.
+16. Press **Say it** and watch the mouth move on the words. Click each
+    mood. Press **Walk through every slider** and watch all 52 controls
+    move one at a time; one that pulls the wrong part of the face is
+    caught here, so go back to step 9 for that control.
+17. When the heading says **Ready**, press **Copy report**.
 
-A raw export carries things the website does not want: several copies
-of the head at lower detail, the whole body, huge textures, and names
-the website does not recognise. One command fixes all of it.
+## Part F: send it
 
-1. Put the exported file and a copy of this repository's `tools/avatar`
-   folder on the computer. The folder is small; download the repository
-   as a zip from GitHub (green "Code" button → Download ZIP) and unzip it.
-2. Open a command window in the unzipped folder (in Windows Explorer,
-   type `cmd` in the address bar and press Enter).
-3. Type this, with your own file name:
-
-```
-blender -b -P tools/avatar/prepare-character.py -- --in amara.fbx --out amara.glb
-```
-
-If Windows says it cannot find `blender`, use the full path, usually
-`"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe"` in place
-of `blender`.
-
-It prints what it did: levels of detail dropped, centimetres turned into
-metres, the body cut to a bust, bones and controls renamed, textures
-shrunk. If the export was already a tidy `.glb` from the Holotype plugin,
-you can skip this step and go straight to the Studio.
-
-## Check it and see it alive (the Studio)
-
-1. Open **dingba.ai/studio** in Chrome, Edge or Safari.
-2. Drag `amara.glb` onto the page. Nothing is uploaded; the check runs in
-   the browser.
-3. Read the list. Green ticks are fine. Red lines say exactly what to fix,
-   in plain words ("sliders that move nothing: mouthPucker" means that
-   control is named but does nothing in Unreal: rebuild it). The
-   "work in progress" switch lets you look at a half-finished character.
-4. Press **Say it** to hear a stand-in voice and watch the mouth move on
-   the words. Try each mood. Press **Walk through every slider** and watch
-   each of the 52 controls move on its own; one that pulls the wrong part
-   of the face is caught here.
-5. When the heading says **Ready**, press **Copy report** and send the
-   report and the file to whoever puts it live.
-
-## Put it live
-
-Send the finished `amara.glb` here, in this chat, and I will install it.
-Or, on a computer with the repository and Node 22 or newer:
-
-```
-node tools/avatar/install-character.ts amara amara.glb
-```
-
-It checks the file again, copies it into the website, names it on Amara,
-and says what to commit. Deploy the web and API services, and every
-lesson with Amara shows her from then on. The other twelve tutors follow
-the same path, one file each.
+18. Send `amara-tidy.glb` and the copied report here, in this chat. I put
+    it live, and Amara appears in every lesson. Repeat from step 9 for
+    each of the other twelve tutors.
 
 ## If something goes wrong
 
-- Unreal will not open or crashes: the graphics card or memory is below
-  the list at the top. Blender and the Studio still work on that machine;
-  only the MetaHuman step needs the bigger computer.
-- The Studio says "not a glTF binary": the export was saved as `.gltf`
-  with separate files, or as `.fbx`. Run the Blender command, which
-  writes a `.glb`.
-- "essential sliders missing": the export did not include the 52
-  controls. Go back to the "Get the file out" step and use one of the two
-  tools there.
-- The character is drawn but looks grey: textures were not embedded. The
-  Blender command packs them in.
-- Anything else: paste the Studio report into this chat.
+- Unreal will not open or keeps crashing: the computer is below the
+  "Before you start" line. Only Parts B and C need the big computer.
+- The Studio says "not a glTF binary": you dragged the wrong file.
+  Use the `-tidy.glb` one from step 12.
+- "essential sliders missing": the export left out the 52 controls. Go
+  back to step 10 and use one of the two tools there.
+- The character shows but is grey: do step 12; the tidy step packs the
+  textures in.
+- Anything else: send the Studio report here and I will tell you what
+  it means.
