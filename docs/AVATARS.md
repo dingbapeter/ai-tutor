@@ -1,5 +1,9 @@
 # The 3D tutors
 
+A beginner's walkthrough for the artists, from a bare computer to a
+finished tutor, is docs/CHARACTERS-STEP-BY-STEP.md. This file is the
+engineering reference behind it.
+
 How a rigged character becomes a living Dingba tutor, what the artist must
 deliver, how it is checked, and what happens where it cannot run.
 
