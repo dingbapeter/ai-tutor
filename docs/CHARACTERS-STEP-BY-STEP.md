@@ -5,6 +5,11 @@ Nothing to type.
 
 ## Before you start
 
+If you do not have a computer that meets the line below, do not buy one
+or rent one for this: pay an artist per character instead. The job post
+to paste is docs/ARTIST-BRIEF.md, and acceptance is Parts E and F of this
+guide, which run on any laptop.
+
 Your computer needs a proper graphics card, 32 GB of memory and 150 GB
 of free space. If it is a normal office laptop, do steps 1 to 10 on a
 gaming or design computer and the rest on any machine.
