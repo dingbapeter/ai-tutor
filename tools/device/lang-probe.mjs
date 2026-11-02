@@ -12,7 +12,8 @@
  *   - choosing العربية lays the whole page out right to left, with nothing
  *     spilling sideways, on the home page and the lesson start screen;
  *   - starting a lesson taught in Spanish, with no family choice, follows
- *     the teaching language when drafts are on;
+ *     the teaching language when drafts are on, and so does one taught in
+ *     Yorùbá, tone marks intact, with the four Nigerian drafts on offer;
  *   - back to English, English is English.
  *
  *   node tools/device/lang-probe.mjs [--url http://127.0.0.1:3100]
@@ -97,6 +98,14 @@ for (const name of WANTED) {
     body = await text(page);
     check("with no family choice, a lesson taught in Spanish follows into Spanish", body.includes("Empezar sesión"), body.slice(0, 80));
     check("and the teaching language stays Spanish", (await page.getByLabel("Idioma de enseñanza").inputValue()) === "es");
+
+    // A lesson taught in Yorùbá follows too, tone marks intact, nothing spilling.
+    await page.getByLabel("Idioma de enseñanza").selectOption("yo");
+    await page.waitForTimeout(900);
+    body = await text(page);
+    check("a lesson taught in Yorùbá follows into Yorùbá, tone marks and all", body.includes("Bẹ̀rẹ̀ ìpàdé") && body.includes("Yan olùkọ́ rẹ"), body.slice(0, 80));
+    check("and the lesson start screen fits the screen in Yorùbá", await fits(page));
+    check("the switch offers the Nigerian drafts", ["Naijá (draft)", "Yorùbá (draft)", "Igbo (draft)", "Hausa (draft)"].every((o) => options.includes(o)), options.join(", "));
 
     await page.locator(".lang-switch").selectOption("en");
     await page.waitForTimeout(600);

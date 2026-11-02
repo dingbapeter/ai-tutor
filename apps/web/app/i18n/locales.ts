@@ -8,7 +8,7 @@
  * for reviewers, never chosen for a child automatically.
  */
 
-export type LocaleCode = "en" | "fr" | "es" | "pt" | "ar" | "sw" | "hi";
+export type LocaleCode = "en" | "fr" | "es" | "pt" | "ar" | "sw" | "hi" | "pcm" | "yo" | "ig" | "ha";
 
 export interface Locale {
   /** The language's own name for itself. */
@@ -26,4 +26,8 @@ export const LOCALES: Record<LocaleCode, Locale> = {
   ar: { native: "العربية", dir: "rtl", reviewed: false, load: () => import("./dict/ar").then((m) => m.default) },
   sw: { native: "Kiswahili", dir: "ltr", reviewed: false, load: () => import("./dict/sw").then((m) => m.default) },
   hi: { native: "हिन्दी", dir: "ltr", reviewed: false, load: () => import("./dict/hi").then((m) => m.default) },
+  pcm: { native: "Naijá", dir: "ltr", reviewed: false, load: () => import("./dict/pcm").then((m) => m.default) },
+  yo: { native: "Yorùbá", dir: "ltr", reviewed: false, load: () => import("./dict/yo").then((m) => m.default) },
+  ig: { native: "Igbo", dir: "ltr", reviewed: false, load: () => import("./dict/ig").then((m) => m.default) },
+  ha: { native: "Hausa", dir: "ltr", reviewed: false, load: () => import("./dict/ha").then((m) => m.default) },
 };

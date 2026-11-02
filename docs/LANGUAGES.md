@@ -7,15 +7,15 @@ this is the area of AI where the best-known models are exactly that.
 
 ## The headline
 
-Dingba currently declares **91 languages**. Split three ways:
+Dingba currently declares **92 languages**. Split three ways:
 
 | Capability | Coverage | Engine |
 |---|---|---|
-| Understands typed input | all 91 | multilingual chat model |
+| Understands typed input | all 92 | multilingual chat model |
 | Understands speech | ~99 languages | Whisper (Apache-2.0) |
-| Teaches in text | all 91 | multilingual chat model |
+| Teaches in text | all 92 | multilingual chat model |
 | **Speaks aloud** | **52 today** | Kokoro-82M (Apache-2.0) + Piper (MIT) |
-| Speaks aloud | 39 pending | needs a voice trained or commissioned |
+| Speaks aloud | 40 pending | needs a voice trained or commissioned |
 
 `config/languages.json` is the source of truth. Adding a language is one entry.
 
@@ -94,9 +94,16 @@ Also worth pursuing, in parallel and cheaply:
 
 ## African languages we teach today, voice pending
 
-Yorùbá, Igbo, Hausa, Amharic, Zulu, Xhosa, Afrikaans, Kinyarwanda, Luganda,
+Nigerian Pidgin, Yorùbá, Igbo, Hausa, Amharic, Zulu, Xhosa, Afrikaans, Kinyarwanda, Luganda,
 Shona, Chichewa, Somali, Wolof, Tigrinya, Oromo, Fulfulde, Twi, Ewe, Bambara.
 Swahili already **speaks** through Piper.
+
+Nigerian Pidgin has one honesty note of its own: the speech recogniser has
+no Pidgin setting, so a child who speaks Pidgin is transcribed as English.
+In practice that works, because written Pidgin shares most of its words
+with English and the chat model reads it fluently, but the transcript will
+spell "wetin" as it hears it. A Pidgin voice is on the same training path
+as the other three: NaijaVoices and Common Voice both carry Pidgin speech.
 
 Each teaches, reads, and listens now. The picker says so per language rather
 than pretending. That honesty is the product decision: a learner in Ibadan
@@ -120,6 +127,8 @@ Teaching in a language and showing the app in it are two different
 things. The tutor's languages are the table above. The app's own words
 (buttons, labels, the status line, the home page, sign-in, the camera
 consent) are in `apps/web/app/i18n/`, one dictionary per language, with
-six drafts shipped and none shown to a child until a speaker has reviewed
+ten drafts shipped (French, Spanish, Portuguese, Arabic, Swahili, Hindi,
+Nigerian Pidgin, Yorùbá, Igbo, Hausa) and none shown to a child until a
+speaker has reviewed
 it. How that works, and how to review one: docs/BROWSERS.md, "The app's
 own words in other languages".

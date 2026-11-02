@@ -178,7 +178,7 @@ the same as for face hints, and the same lawyer check applies.
 
 ## The app's own words in other languages
 
-The tutor has taught in 91 languages for a while; the words around the
+The tutor has taught in 92 languages for a while; the words around the
 tutor (buttons, labels, the status line, the home page, the sign-in
 screen, the camera consent) were English only. They now come from one
 dictionary per language in `apps/web/app/i18n/dict/`, keyed by the
@@ -190,9 +190,9 @@ fills in, or carries an em dash.
 Which language a family sees: their own choice from the switch in the app
 bar (remembered on the device), else the language the tutor is teaching
 in, else the browser's, and only ever a language a person who speaks it
-has reviewed (`reviewed: true` in `app/i18n/locales.ts`). Six drafts ship
-(French, Spanish, Portuguese, Arabic, Swahili, Hindi), written without a
-native reviewer and therefore never chosen for a child automatically: a
+has reviewed (`reviewed: true` in `app/i18n/locales.ts`). Ten drafts ship
+(French, Spanish, Portuguese, Arabic, Swahili, Hindi, Nigerian Pidgin,
+Yorùbá, Igbo, Hausa), written without a native reviewer and therefore never chosen for a child automatically: a
 reviewer opens any page with `?uiDrafts=1`, picks the language from the
 switch, reads every screen in place, fixes the dictionary, and flips the
 flag. Arabic lays the whole page out right to left. The family dashboard,

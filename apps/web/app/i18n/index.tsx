@@ -3,7 +3,7 @@
 /**
  * The app's own words in the learner's language.
  *
- * The tutor already teaches in 91 languages; this is for everything around
+ * The tutor already teaches in 92 languages; this is for everything around
  * the tutor: buttons, labels, the status line, the home page. Keys are the
  * English sentences themselves, so the source stays readable and a missing
  * translation falls back to English rather than to a blank.

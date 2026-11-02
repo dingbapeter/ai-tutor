@@ -353,7 +353,7 @@ restarts and scale across instances. Cross-session memory and the Dingba
 Brain. Adaptive spaced repetition, diagnostic level checks, verified maths,
 lessons the personas deliver from the verified bank. Show Dingba (photos).
 Routine upload. Study plans, plan-aware push reminders, the guardian weekly
-digest. Attunement and the care call. 91 languages, 52 speaking. Safety gate
+digest. Attunement and the care call. 92 languages, 52 speaking. Safety gate
 hardened against evasion, incident log, guardian alerts. The Command Centre:
 roles with investors on the smallest surface, staff and HR with an org
 chart, safety desk, money ledger, platform controls, audit trail, CSV
