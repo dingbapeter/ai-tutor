@@ -8,16 +8,23 @@
 export type Check =
   | { type: "solve"; equation: string; variable: string }
   | { type: "compare"; left: string; right: string; expected: string }
+  | { type: "equivalent"; expression: string; noParentheses?: boolean }
   | { type: "rubric"; criteria: string[] };
 
 const BASE = process.env.MATHCHECK_URL ?? "http://localhost:8090";
+
+// Same shared secret the gateway uses: the gate on the model box checks it.
+function headers(): Record<string, string> {
+  const key = process.env.BRAIN_KEY;
+  return { "content-type": "application/json", ...(key ? { "x-brain-key": key } : {}) };
+}
 
 export async function verifyAnswer(check: Check, studentAnswer: string): Promise<boolean | null> {
   try {
     if (check.type === "solve") {
       const res = await fetch(`${BASE}/check/solve`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: headers(),
         body: JSON.stringify({
           equation: check.equation,
           variable: check.variable,
@@ -31,6 +38,21 @@ export async function verifyAnswer(check: Check, studentAnswer: string): Promise
       // The student answers with a value; correct means naming the larger/smaller side.
       const bigger = check.expected === "<" ? check.right : check.left;
       return studentAnswer.replace(/\s/g, "") === bigger;
+    }
+    if (check.type === "equivalent") {
+      // Simplify/expand tasks: symbolic equivalence, with an optional
+      // no-brackets rule so typing the question back never scores.
+      const res = await fetch(`${BASE}/check/equivalent`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          expression: check.expression,
+          student_expression: studentAnswer,
+          no_parentheses: check.noParentheses ?? false,
+        }),
+      });
+      if (!res.ok) return null;
+      return ((await res.json()) as { correct: boolean }).correct;
     }
     return null; // rubric checks are graded conversationally by the tutor
   } catch {

@@ -58,8 +58,13 @@ H2. **App-shell rebuild** — founder verdict on first live deploy (2026-08-24):
    restyled; light/dark/mobile/desktop screenshot-verified locally.
    Remaining: bottom tab nav (worth it once Progress/Library sections
    exist), real-device pass at deploy (register item A).
-I. **Pedagogy eval harness** — needed before/after every deploy-model swap;
-   design in HANDOFF next-work list.
+I. ~~**Pedagogy eval harness**~~ BUILT 2026-08-29 (`pnpm evals`, see
+   README): deterministic judges, plumbing ones binding on any provider,
+   model ones binding on the real stack or `--strict`. Extended 2026-10-01
+   with the private notes (face, voice), a faked note inside a learner's
+   message, and every tutor's greeting. What remains is to run it against
+   the deployed model before each model change; it cannot run here because
+   the real model is not switched on yet.
 J. **Ongoing red-teaming** of safety — periodic, human-led, never "done".
 K. **Siyavula/Illustrative Mathematics ingestion** — the content-scale
    pipeline (licensing rules in docs/RESEARCH.md).

@@ -21,6 +21,15 @@ export const users = pgTable("users", {
   plan: text("plan").notNull().default("free"),
   orgId: uuid("org_id"),
   emailVerified: boolean("email_verified").notNull().default(false),
+  /** Referral loop: my shareable code, who invited me, and whether that
+   * invite has already paid out (one reward per referred account). */
+  referralCode: text("referral_code").unique(),
+  referredBy: uuid("referred_by"),
+  referralRewarded: boolean("referral_rewarded").notNull().default(false),
+  /** Time-boxed thank-you plan. Effective plan = better of plan and this
+   * while un-expired; billing's plan column is never touched by referrals. */
+  planBoost: text("plan_boost"),
+  planBoostUntil: timestamp("plan_boost_until"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -90,6 +99,76 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * The money ledger: every webhook the payment processors send us, verified
+ * and then recorded before it is acted on. Activations and cancellations
+ * also flip plans; failures and refunds are recorded so finance can see
+ * trouble coming instead of discovering it in the processor dashboard.
+ */
+export const billingEvents = pgTable("billing_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  /** The processor's own id for the event, for exact-once handling. */
+  eventRef: text("event_ref").notNull(),
+  type: text("type", {
+    enum: ["activated", "canceled", "payment_failed", "refunded"],
+  }).notNull(),
+  email: text("email"),
+  customerRef: text("customer_ref"),
+  subscriptionRef: text("subscription_ref"),
+  plan: text("plan"),
+  /** Minor units (kobo, cents) as reported by the processor; null if absent. */
+  amountMinor: integer("amount_minor"),
+  currency: text("currency"),
+  /** Whether the event matched an account we know. */
+  matched: boolean("matched").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Command Centre staff. A staff member is a user with elevated access; the
+ * role decides which capabilities they hold (see apps/api/src/command/rbac.ts).
+ * Investors live here too, on a role that can only ever see aggregates.
+ */
+export const staffMembers = pgTable("staff_members", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  role: text("role", {
+    enum: ["owner", "admin", "finance", "support", "staff", "investor"],
+  }).notNull(),
+  title: text("title"),
+  status: text("status", { enum: ["active", "suspended"] }).notNull().default("active"),
+  invitedBy: uuid("invited_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at"),
+  /** ---- Employment record. Separate from console access above. ---- */
+  fullName: text("full_name"),
+  employmentType: text("employment_type", {
+    enum: ["employee", "contractor", "advisor", "investor"],
+  }),
+  startDate: text("start_date"), // ISO date, no clock: a start date is a day
+  endDate: text("end_date"),
+  managerUserId: uuid("manager_user_id"),
+  location: text("location"),
+  notes: text("notes"),
+});
+
+/**
+ * Every privileged action, permanently. Who did what, to whom, from where.
+ * Append-only by contract: the Command Centre can read it and nothing can
+ * delete from it, because an audit log you can edit is not an audit log.
+ */
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: uuid("actor_user_id").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  actorRole: text("actor_role").notNull(),
+  action: text("action").notNull(),
+  target: text("target"),
+  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+  ip: text("ip"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 /** Metering: every billable action, attributable to a user/student/API key. */
 export const usageEvents = pgTable("usage_events", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -120,9 +199,51 @@ export const students = pgTable("students", {
   locale: text("locale").notNull().default("en"),
   /** Chosen tutor persona (see config/personas.json). Persistent — same tutor every session. */
   personaId: text("persona_id").notNull().default("amara"),
+  /** The student's own name for their tutor. Null = the persona's default. */
+  tutorName: text("tutor_name"),
+  /** The student's chosen tutor appearance, so it can look like anyone.
+   * Null on any = the persona's default look. */
+  lookSkin: text("look_skin"),
+  lookHair: text("look_hair"),
+  lookHairColor: text("look_hair_color"),
+  /** The account holder has let this learner turn on face hints (camera read on-device only). */
+  faceHints: boolean("face_hints").notNull().default(false),
+  /** The account holder has let the tutor get to know how this learner usually sounds. */
+  voiceFamiliarity: boolean("voice_familiarity").notNull().default(false),
+  /** Running averages of how they usually sound (see apps/api/src/tutor/voice.ts). No audio. */
+  voiceProfile: jsonb("voice_profile"),
   /** Set when the student belongs to a school/org roster. */
   orgId: uuid("org_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Comp access grants: explicit, time-boxed free elevated use tied to a
+ * monthly review (see command/access.ts). One row per user who holds one.
+ */
+export const accessGrants = pgTable("access_grants", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  level: text("level").notNull(),
+  reason: text("reason"),
+  grantedBy: uuid("granted_by"),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  reviewIntervalDays: integer("review_interval_days").notNull().default(30),
+  nextReviewAt: timestamp("next_review_at"),
+  lastReviewAt: timestamp("last_review_at"),
+  lastRating: text("last_rating"),
+  revokedAt: timestamp("revoked_at"),
+});
+
+/** The performance-review trail behind the grants. */
+export const accessReviews = pgTable("access_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at").notNull().defaultNow(),
+  rating: text("rating").notNull(),
+  decision: text("decision").notNull(),
+  note: text("note"),
 });
 
 /**
@@ -157,6 +278,15 @@ export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id").notNull().references(() => students.id),
   packId: text("pack_id").notNull(),
+  /** ---- Resume metadata: everything needed to pick a session back up on a
+   *  fresh process, so a restart or a second API instance can continue the
+   *  conversation instead of losing it. ---- */
+  personaId: text("persona_id").notNull().default("amara"),
+  language: text("language").notNull().default("en"),
+  plan: text("plan").notNull().default("free"),
+  ownerUserId: uuid("owner_user_id"),
+  parentEmail: text("parent_email"),
+  apiKeyId: uuid("api_key_id"),
   startedAt: timestamp("started_at").notNull().defaultNow(),
   endedAt: timestamp("ended_at"),
   /** Auto-generated after the session: recap, mistakes, plan for next time. */
@@ -240,4 +370,16 @@ export const memories = pgTable("memories", {
   content: text("content").notNull(),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
+ * Operational switches the Command Centre can flip without a deploy. One row
+ * per setting, read on the request path, so a change takes effect on the next
+ * request rather than the next release.
+ */
+export const platformSettings = pgTable("platform_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

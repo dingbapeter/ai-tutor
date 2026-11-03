@@ -486,8 +486,15 @@ body[data-session="1"] .appbar { display: none; }
 }
 .msg .tools button:hover { opacity: 1; }
 
-.composer { display: flex; gap: 8px; margin-top: 10px; }
-.composer .inp { flex: 1; border-radius: 999px; padding-left: 18px; }
+.composer { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.composer .inp { flex: 1; border-radius: 999px; padding-left: 18px; min-width: 0; }
+
+/* On a phone the tools (talk, conversation, photo, board) and the Send
+   button leave the typing box nothing to live in, so the box takes a row of
+   its own above them. Nobody should have to type into a slit. */
+@media (max-width: 560px) {
+  .composer .inp { flex: 1 1 100%; order: -1; }
+}
 
 .formats { display: flex; gap: 6px; margin: 10px 0 0; flex-wrap: wrap; }
 
@@ -538,7 +545,452 @@ body[data-session="1"] .appbar { display: none; }
 /* The tutor is present: a slow breath while idle. */
 .avatar-live { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
+/* A small pondering wobble while the tutor thinks. */
+.avatar-mouth-hmm { animation: hmm 1.6s ease-in-out infinite; transform-origin: 50px 66px; }
+@keyframes hmm { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2.5px); } }
+/* Leaning in while the student is talking. */
+.avatar-hearing { animation: lean-in 1.2s ease-in-out infinite; }
+@keyframes lean-in { 0%, 100% { transform: scale(1.02); } 50% { transform: scale(1.06); } }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* The week ahead: seven columns on wide screens, a scrollable strip on phones. */
+.plan-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(96px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.plan-day {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  min-width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-day.exam { outline: 2px solid var(--brand); }
+.plan-day-head { display: flex; align-items: baseline; gap: 5px; font-size: 12.5px; }
+.plan-day-head span { color: var(--text-dim); }
+.plan-load { margin-left: auto; font-size: 10.5px; color: var(--warn-text); background: var(--warn-soft); border-radius: 999px; padding: 1px 6px; }
+.plan-exam { font-size: 11.5px; font-weight: 800; color: var(--brand-deep); }
+.plan-item {
+  font-size: 12px;
+  line-height: 1.35;
+  background: var(--surface);
+  border-radius: 7px;
+  padding: 5px 7px;
+  border-left: 3px solid var(--line);
+}
+.plan-item.review { border-left-color: var(--brand); }
+.plan-item.practice { border-left-color: var(--ok); }
+.plan-item.exam-prep { border-left-color: var(--danger); }
+.plan-item.rest { color: var(--text-dim); }
+.plan-item.link { display: block; color: inherit; text-decoration: none; cursor: pointer; }
+.plan-item.link:hover { border-left-color: var(--brand-strong); background: var(--brand-soft); }
+
+/* A line from the Command Centre, above everything the learner is doing. */
+.platform-notice {
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.platform-notice.warn { background: var(--warn-soft); color: var(--warn-text); }
+body[data-session] .platform-notice { display: none; }
+
+/* ---------- command centre ----------
+   The operator's console. Denser than the learner app, calmer in colour, and
+   built from the same tokens so it never drifts from the brand. */
+
+.cc {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-top, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.cc-mark {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cc-mark span { color: var(--brand); }
+.cc-mark small {
+  display: block;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cc-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+}
+.cc-tabs::-webkit-scrollbar { display: none; }
+.cc-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 8px 13px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-tabs button:hover { background: var(--surface-2); color: var(--text); }
+.cc-tabs button.on { background: var(--brand-soft); color: var(--brand-deep); }
+
+.cc-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.cc-who .who-email { font-size: 13.5px; color: var(--text-dim); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+.cc-role {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.cc-role.investor { background: var(--ok-soft); color: var(--ok); }
+.cc-role.suspended { background: var(--danger-soft); color: var(--danger); }
+
+.cc-body { max-width: 1080px; width: 100%; margin: 0 auto; padding: 22px 20px calc(40px + var(--sab)); }
+
+.cc-h { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0 0 4px; }
+.cc-h h2 { font-size: 22px; font-weight: 800; margin: 0; }
+.cc-h .cc-sub { color: var(--text-dim); font-size: 14px; margin: 0; }
+.cc-lede { color: var(--text-dim); font-size: 14.5px; margin: 0 0 18px; }
+
+.cc-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.cc-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px 16px;
+  box-shadow: var(--shadow);
+}
+.cc-stat .k {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+.cc-stat .v { font-size: 27px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.cc-stat .n { font-size: 12.5px; color: var(--text-dim); margin: 4px 0 0; }
+.cc-stat.alert .v { color: var(--danger); }
+
+.cc-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin: 0 0 16px;
+}
+.cc-panel > h3 { font-size: 15.5px; font-weight: 800; margin: 0 0 2px; }
+.cc-panel > h3 + p { color: var(--text-dim); font-size: 13.5px; margin: 0 0 14px; }
+
+.cc-chart { width: 100%; height: 132px; display: block; overflow: visible; }
+.cc-chart .area { fill: var(--brand); opacity: 0.13; }
+.cc-chart .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.cc-chart .dot { fill: var(--brand); }
+.cc-chart-foot { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 12px; margin-top: 6px; }
+
+.cc-bars { display: flex; flex-direction: column; gap: 10px; }
+.cc-bar-row { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: 10px; font-size: 14px; }
+.cc-bar-track { display: block; height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.cc-bar-fill { display: block; min-width: 3px; height: 100%; border-radius: 999px; background: var(--brand); }
+.cc-bar-row .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.cc-table-wrap { overflow-x: auto; }
+.cc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cc-table th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 12px 9px 0;
+  white-space: nowrap;
+}
+.cc-table td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.cc-table tr.click { cursor: pointer; }
+.cc-table tr.click:hover td { background: var(--surface-2); }
+.cc-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text-dim); }
+.cc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.cc-search { display: flex; gap: 10px; margin: 0 0 16px; }
+.cc-search .inp { margin: 0; }
+
+.cc-form { display: grid; grid-template-columns: 1fr 150px 1fr auto; gap: 10px; align-items: end; }
+@media (max-width: 720px) { .cc-form { grid-template-columns: 1fr; } }
+.cc-form .inp, .cc-form select { margin: 0; }
+
+select.inp {
+  appearance: none;
+  padding-right: 38px;
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 11px 7px;
+  /* Caret drawn inline so it needs no network request and no icon font. */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' fill='none' stroke='%236b6b80' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.cc-empty { color: var(--text-dim); font-size: 14px; padding: 16px 0; text-align: center; }
+
+.cc-gate { max-width: 380px; margin: 12vh auto 0; padding: 0 20px; }
+.cc-gate h1 { font-size: 26px; font-weight: 800; margin: 0 0 6px; }
+.cc-gate p { color: var(--text-dim); font-size: 14.5px; margin: 0 0 20px; }
+
+.cc-tag {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.cc-tag.ok { background: var(--ok-soft); color: var(--ok); }
+.cc-tag.bad { background: var(--danger-soft); color: var(--danger); }
+.cc-tag.warn { background: var(--warn-soft); color: var(--warn-text); }
+
+.cc-note {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  margin: 0 0 16px;
+}
+
+.cc-rowacts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+textarea.inp { resize: vertical; min-height: 76px; font-family: inherit; }
+
+/* The reporting tree: one indent per level, with a rule down the side so a
+   deep branch is still readable. */
+.cc-tree { list-style: none; margin: 0; padding: 0; }
+.cc-tree .cc-tree { margin-left: 10px; padding-left: 16px; border-left: 2px solid var(--line); }
+.cc-tree li { padding: 5px 0; }
+.cc-tree-person { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14.5px; }
+
+/* On a phone the tab strip drops to its own row, so the bar never pushes the
+   page sideways. A board member checking the numbers on the way to a meeting
+   gets the same console, not a squeezed one. */
+@media (max-width: 760px) {
+  .cc-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .cc-mark { order: 1; }
+  .cc-who { order: 2; margin-left: auto; min-width: 0; }
+  .cc-tabs { order: 3; flex-basis: 100%; min-width: 0; }
+  .cc-who .who-email { max-width: 128px; font-size: 12.5px; }
+  .cc-body { padding: 18px 14px calc(36px + var(--sab)); }
+  .cc-stats { grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 10px; }
+  .cc-stat .v { font-size: 24px; }
+  .cc-h { flex-wrap: wrap; }
+}
+
+/* Right-to-left lessons (Arabic, Farsi, Hebrew, Kurdish, Urdu, Pashto).
+   The words flow right to left; maths does not. Isolating the formula
+   keeps "3 + 4 = 7" the right way round inside a right-to-left sentence,
+   and keeps the tutor's own tool buttons where the child left them. */
+.chat[dir="rtl"] .msg { text-align: right; }
+.chat[dir="rtl"] .msg .tools { direction: ltr; }
+.katex { direction: ltr; unicode-bidi: isolate; }
+
+/* The whiteboard: somewhere to work it out by hand.
+   touch-action: none is not decoration. Without it a drawing gesture
+   scrolls the page away on a phone and the child draws nothing. */
+.board {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.board-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* Small enough that write, rub out, undo, clear and close all fit one row
+   on a 390px phone, which is the width most children will hold. */
+.board-tools .chip { padding: 6px 10px; font-size: 13px; }
+.board-canvas {
+  width: 100%;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  touch-action: none;
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.board-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+/* Messages held back by a dead connection. Calm, not alarming: the child
+   has not lost anything, and the line says so in plain words. */
+.waiting {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+/* Face hints: the learner always sees what the camera sees, and how to
+   turn it off. Nothing here is decoration; it is the consent made visible. */
+.face-sense { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; }
+.face-mirror {
+  width: 64px; height: 48px; object-fit: cover; border-radius: 10px;
+  transform: scaleX(-1); /* a mirror, the way a front camera should look */
+  border: 2px solid var(--ok);
+}
+.face-note { font-size: 13px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.face-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.face-ask {
+  flex: 1 1 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.face-ask p { margin: 6px 0; color: var(--text-dim); }
+.face-ask-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* The family's data rights: take a copy, or erase it all. */
+.data-rights {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+/* The tutor Studio: an artist's own check and preview. */
+.studio h1 { margin-bottom: 4px; }
+.studio-lead { color: var(--text-dim); margin: 0 0 16px; }
+.studio-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 16px;
+  border: 2px dashed var(--surface-2);
+  border-radius: 14px;
+  margin-bottom: 16px;
+  transition: border-color 120ms, background 120ms;
+}
+.studio-drop-over { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, transparent); }
+.studio-or { color: var(--text-dim); font-size: 14px; }
+.studio-link { display: flex; gap: 8px; flex: 1 1 260px; }
+.studio-link .inp { flex: 1; min-width: 0; }
+.studio-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .studio-grid { grid-template-columns: minmax(0, 1fr); } }
+.studio-canvas { display: flex; justify-content: center; min-height: 320px; }
+.studio-fallback { color: var(--danger); font-size: 14px; align-self: center; }
+.studio-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.studio-sample { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-dim); }
+.studio-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.studio-row small { color: var(--text-dim); flex: 1 1 180px; }
+.studio-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); min-width: 44px; }
+.chip-on { outline: 2px solid var(--brand); }
+.studio-slider { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.studio-engine { font-size: 13px; color: var(--text-dim); margin: 0; }
+.studio-report-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.studio-report h2 { font-size: 17px; margin: 0; }
+.studio-verdict { width: 14px; height: 14px; border-radius: 50%; background: var(--surface-2); flex: none; }
+.studio-pass { background: #2eaa6b; }
+.studio-fail { background: var(--danger, #d33); }
+.studio-file { color: var(--text-dim); font-size: 13px; margin: 4px 0 8px; word-break: break-all; }
+.studio-lenient { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-dim); margin-bottom: 10px; }
+.studio-lines { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.studio-line { display: grid; grid-template-columns: 16px 36px minmax(0, 1fr); gap: 8px; font-size: 14px; line-height: 1.4; align-items: baseline; }
+.studio-line .studio-level { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.studio-ok > span:first-child { color: #2eaa6b; }
+.studio-warn > span:first-child { color: #d49a00; }
+.studio-fail > span:first-child { color: var(--danger, #d33); }
+.studio-fail .studio-level { color: var(--danger, #d33); font-weight: 600; }
+.studio-note > span:first-child { color: var(--text-dim); }
+.studio-help ul { padding-left: 18px; line-height: 1.6; }
+.studio-help code { font-size: 13px; }
+
+/* The language switch in the app bar. */
+.lang-switch {
+  margin-left: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  /* A fixed width: a select otherwise sizes itself to its longest option,
+     and "Français (brouillon)" would push the bar off a phone screen. */
+  width: 96px;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+[dir="rtl"] .lang-switch { margin-left: 0; margin-right: 6px; }
+/* overflow hidden: WebKit counts a select's hidden option text as page
+   width otherwise, and the bar would scroll sideways by a few pixels. */
+.appbar nav { min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; overflow: hidden; }
+@media (max-width: 420px) {
+  .appbar nav a { padding: 7px 10px; font-size: 14px; }
+  .lang-switch { width: 80px; font-size: 12px; }
+}
+
+/* The plan offer on the family page: prices in the family's own currency. */
+.plan-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plan-currency { font-size: 13px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 4px; }
+.plan-currency select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.plan-note { flex-basis: 100%; color: var(--text-dim); }

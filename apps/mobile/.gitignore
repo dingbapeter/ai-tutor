@@ -1,0 +1,8 @@
+
+# Signing keys and store credentials never enter the repo (RUNBOOK: no AI holds them).
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+keystore.properties
+node_modules/

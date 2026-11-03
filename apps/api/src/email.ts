@@ -152,3 +152,88 @@ export async function sendParentRecap(msg: RecapEmail): Promise<"sent" | "skippe
   });
   return "sent";
 }
+
+/** One learner's week, composed for the digest. */
+export interface DigestLearner {
+  name: string;
+  sessionsThisWeek: number;
+  streakDays: number;
+  dueSkills: string[];
+  safetyFlags: number;
+  planHeadline: string;
+}
+
+export interface WeeklyDigest {
+  to: string;
+  learners: DigestLearner[];
+}
+
+/**
+ * The digest body, as a pure function so its wording is pinned in tests. One
+ * short block per learner, plain text, in the house voice: warm, specific,
+ * no filler and no AI tells.
+ */
+export function composeWeeklyDigest(digest: WeeklyDigest): { subject: string; text: string } {
+  const names = digest.learners.map((l) => l.name);
+  const subject =
+    names.length === 1 ? `${names[0]}'s week with Dingba` : `This week with Dingba: ${names.join(" and ")}`;
+
+  const blocks = digest.learners.map((l) => {
+    const lines: string[] = [`${l.name}`];
+    lines.push(
+      l.sessionsThisWeek > 0
+        ? `Sessions this week: ${l.sessionsThisWeek}. ${l.streakDays > 1 ? `The streak is at ${l.streakDays} days.` : ""}`.trim()
+        : "No sessions this week. A ten minute session keeps things warm.",
+    );
+    if (l.dueSkills.length > 0) {
+      lines.push(`Due for review: ${l.dueSkills.slice(0, 4).join(", ")}.`);
+    }
+    if (l.safetyFlags > 0) {
+      lines.push(
+        `Heads up: ${l.safetyFlags} message${l.safetyFlags === 1 ? " was" : "s were"} flagged this week. The details are on your dashboard.`,
+      );
+    }
+    lines.push(`The week ahead: ${l.planHeadline}`);
+    return lines.join("\n");
+  });
+
+  const base = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const text = [
+    `Hello,`,
+    ``,
+    `Here is how the week went.`,
+    ``,
+    blocks.join("\n\n"),
+    ``,
+    `The full picture is on your dashboard: ${base}/account`,
+    ``,
+    `Dingba`,
+  ].join("\n");
+
+  return { subject, text };
+}
+
+/** Sends the composed digest (logged no-op without SMTP_HOST). */
+export async function sendWeeklyDigest(digest: WeeklyDigest): Promise<"sent" | "skipped"> {
+  const host = process.env.SMTP_HOST;
+  if (!host) {
+    console.log(`[email] SMTP not configured — would send weekly digest to ${digest.to}`);
+    return "skipped";
+  }
+  const { subject, text } = composeWeeklyDigest(digest);
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"Dingba" <tutor@${host.replace(/^mail\./, "")}>`,
+    to: digest.to,
+    subject,
+    text,
+  });
+  return "sent";
+}

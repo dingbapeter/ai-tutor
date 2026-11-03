@@ -1,0 +1,369 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { approach, expressionFor, type Mood } from "./face-logic";
+import { HAIR_COLORS, SKIN_TONES } from "./face-appearance";
+
+/**
+ * The living persona: a character face rendered as pure SVG, animated at
+ * frame rate. No videos, no downloads, runs on any phone.
+ *
+ * What makes it feel alive:
+ * - the mouth is driven by the ACTUAL loudness of the tutor's voice
+ *   (an analyser on the playing audio), not a canned loop
+ * - eyes make small human saccades, look up while thinking, widen and
+ *   settle on you while you're talking, glance down while you type
+ * - blinks arrive on a human schedule (randomised, occasional double)
+ * - expressions (brows, mouth curve, blush) follow the tutor's own words
+ * - the bond the student has built shows on the character: a pin, then a
+ *   halo, then the old-friend glow — it grows with the child, and only grows
+ *
+ * And one thing it never does: pretend to be a live human. It's a beloved
+ * character that is openly an AI tutor.
+ */
+
+interface Rig {
+  skin: string;
+  skinShade: string;
+  /** soft highlight on the lit side of the face */
+  skinLight: string;
+  hair: string;
+  /** hairstyle key — which hair paths to draw */
+  style: string;
+  /** clothing colour on the shoulders, so each tutor reads as a person */
+  clothes: string;
+  clothesShade: string;
+  beard?: boolean;
+}
+
+const RIGS: Record<string, Rig> = {
+  amara: { skin: "#b06f3e", skinShade: "#8a4b2d", skinLight: "#c98a56", hair: "#241611", style: "puff", clothes: "#e8875a", clothesShade: "#c96b41" },
+  kofi: { skin: "#824e28", skinShade: "#5f3517", skinLight: "#9c6538", hair: "#141010", style: "flattop", clothes: "#4a7d5f", clothesShade: "#356048", beard: true },
+  juno: { skin: "#cf9560", skinShade: "#a06b3c", skinLight: "#e0ac78", hair: "#4a3e99", style: "buns", clothes: "#7b6bd6", clothesShade: "#5a4bb0" },
+  nia: { skin: "#9c6033", skinShade: "#734120", skinLight: "#b47a45", hair: "#1d1a2e", style: "bob", clothes: "#3f6fb5", clothesShade: "#2c5490" },
+  obi: { skin: "#754321", skinShade: "#532c12", skinLight: "#8f5a30", hair: "#131313", style: "fade", clothes: "#c98a3c", clothesShade: "#a86f27" },
+};
+
+function rigFor(personaId: string | undefined, accent?: string): Rig {
+  const known = personaId ? RIGS[personaId] : undefined;
+  return (
+    known ?? {
+      skin: "#b06f3e",
+      skinShade: "#8a4b2d",
+      skinLight: "#c98a56",
+      hair: accent ?? "#241611",
+      style: "puff",
+      clothes: accent ?? "#e8875a",
+      clothesShade: "#c96b41",
+    }
+  );
+}
+
+function Hair({ rig }: { rig: Rig }) {
+  const h = rig.hair;
+  switch (rig.style) {
+    case "flattop":
+      return <path d="M 22 34 L 22 22 Q 50 12 78 22 L 78 34 Q 50 24 22 34 Z" fill={h} />;
+    case "buns":
+      return (
+        <>
+          <circle cx="22" cy="22" r="11" fill={h} />
+          <circle cx="78" cy="22" r="11" fill={h} />
+          <path d="M 20 38 Q 50 14 80 38 Q 50 28 20 38 Z" fill={h} />
+        </>
+      );
+    case "bob":
+      return (
+        <>
+          <path d="M 18 62 Q 12 24 50 16 Q 88 24 82 62 L 74 60 Q 78 30 50 26 Q 22 30 26 60 Z" fill={h} />
+          <path d="M 20 40 Q 50 16 80 40 Q 50 30 20 40 Z" fill={h} />
+        </>
+      );
+    case "fade":
+      return <path d="M 24 36 Q 26 20 50 18 Q 74 20 76 36 Q 50 26 24 36 Z" fill={h} />;
+    case "buzz":
+      return <path d="M 22 40 Q 24 22 50 20 Q 76 22 78 40 Q 50 30 22 40 Z" fill={h} opacity="0.85" />;
+    case "straight":
+      return (
+        <>
+          <path d="M 16 70 Q 10 26 50 15 Q 90 26 84 70 L 76 68 Q 80 30 50 25 Q 20 30 24 68 Z" fill={h} />
+          <path d="M 22 38 Q 50 16 78 38 Q 50 30 22 38 Z" fill={h} />
+        </>
+      );
+    case "waves":
+      return (
+        <>
+          <path d="M 18 58 Q 14 26 50 16 Q 86 26 82 58 Q 74 46 66 54 Q 58 44 50 52 Q 42 44 34 54 Q 26 46 18 58 Z" fill={h} />
+        </>
+      );
+    case "curls":
+      return (
+        <>
+          {[24, 36, 50, 64, 76].map((x, i) => (
+            <circle key={i} cx={x} cy={i % 2 ? 20 : 24} r="9" fill={h} />
+          ))}
+          <path d="M 20 40 Q 50 20 80 40 Q 50 30 20 40 Z" fill={h} />
+        </>
+      );
+    case "coily":
+      return (
+        <>
+          {[22, 32, 42, 50, 58, 68, 78].map((x, i) => (
+            <circle key={i} cx={x} cy={22 + (i % 2 ? 3 : -2)} r="7.5" fill={h} />
+          ))}
+          <path d="M 18 42 Q 50 20 82 42 Q 50 30 18 42 Z" fill={h} />
+        </>
+      );
+    case "locs":
+      return (
+        <>
+          <path d="M 20 40 Q 50 16 80 40 Q 50 28 20 40 Z" fill={h} />
+          {[20, 27, 34, 66, 73, 80].map((x, i) => (
+            <rect key={i} x={x - 2.5} y={34} width="5" height={26 + (i % 2) * 8} rx="2.5" fill={h} />
+          ))}
+        </>
+      );
+    case "hijab":
+      return (
+        <>
+          <path d="M 10 62 Q 6 20 50 12 Q 94 20 90 62 Q 84 78 74 82 L 74 60 Q 78 30 50 24 Q 22 30 26 60 L 26 82 Q 16 78 10 62 Z" fill={h} />
+          <path d="M 26 60 Q 22 84 40 90 L 40 66 Z" fill={h} opacity="0.8" />
+        </>
+      );
+    case "turban":
+      return (
+        <>
+          <path d="M 18 40 Q 20 16 50 14 Q 80 16 82 40 Q 50 24 18 40 Z" fill={h} />
+          <path d="M 18 40 Q 50 30 82 40 Q 78 30 72 26 Q 50 34 28 26 Q 22 30 18 40 Z" fill={h} opacity="0.75" />
+        </>
+      );
+    case "afro":
+    case "puff":
+    default:
+      // a proud rounded afro
+      return (
+        <>
+          <circle cx="35" cy="22" r="13" fill={h} />
+          <circle cx="65" cy="22" r="13" fill={h} />
+          <circle cx="50" cy="17" r="14" fill={h} />
+          <path d="M 20 40 Q 50 18 80 40 Q 50 30 20 40 Z" fill={h} />
+        </>
+      );
+  }
+}
+
+export default function Face({
+  personaId,
+  accent,
+  color,
+  speaking,
+  thinking = false,
+  listening = false,
+  attentive = false,
+  mood = "neutral",
+  bond = 0,
+  maturity = 0,
+  skinTone,
+  hairStyle,
+  hairColor,
+  getLevel,
+  size = 84,
+  live = true,
+}: {
+  personaId?: string;
+  accent?: string;
+  color?: string;
+  speaking: boolean;
+  thinking?: boolean;
+  listening?: boolean;
+  /** The student is typing: glance toward their words. */
+  attentive?: boolean;
+  mood?: Mood;
+  /** Bond stage 0..3 — the friendship the character visibly wears. */
+  bond?: number;
+  /** 0..1 how grown-up the tutor looks — grows with the friendship's age. */
+  maturity?: number;
+  /** The learner's chosen look, so the tutor can be anyone. Null = default. */
+  skinTone?: string | null;
+  hairStyle?: string | null;
+  hairColor?: string | null;
+  /** Live loudness of the tutor's voice, 0..1. Falls back to a natural wave. */
+  getLevel?: () => number;
+  size?: number;
+  /** false = a still portrait (picker tiles), no animation loop. */
+  live?: boolean;
+}) {
+  const base = rigFor(personaId, accent);
+  // The learner's chosen appearance overrides the persona's default look,
+  // one field at a time; the persona keeps its clothing colour and soul.
+  const tone = skinTone && SKIN_TONES[skinTone] ? SKIN_TONES[skinTone] : null;
+  const rig: Rig = {
+    ...base,
+    ...(tone ? { skin: tone.skin, skinShade: tone.shade, skinLight: tone.light } : {}),
+    ...(hairStyle ? { style: hairStyle } : {}),
+    ...(hairColor && HAIR_COLORS[hairColor] ? { hair: HAIR_COLORS[hairColor] } : {}),
+  };
+  const iris = color ?? "#5b4632";
+  // Aging: a young face is rounder with bigger eyes set lower and a smaller
+  // nose; growing up lengthens the face, lifts and shrinks the eyes a touch,
+  // and defines the nose. Subtle on purpose — a companion maturing, not a
+  // different character.
+  const m = Math.max(0, Math.min(1, maturity));
+  const headRy = 40 + m * 4;
+  const eyeScale = 1 - m * 0.14;
+  const eyeY = 47 - m * 1.5;
+  const noseLen = 60 + m * 3;
+
+  const [f, setF] = useState({ open: 0, curve: 0.3, brow: 0, gazeX: 0, gazeY: 0, lid: 0 });
+  const anim = useRef({ open: 0, curve: 0.3, brow: 0, gazeX: 0, gazeY: 0, lid: 0 });
+  const sacc = useRef({ x: 0, y: 0, next: 0 });
+  const blink = useRef({ next: 800 + Math.random() * 2000, until: 0 });
+  const stateRef = useRef({ speaking, thinking, listening, attentive, mood });
+  stateRef.current = { speaking, thinking, listening, attentive, mood };
+  const levelRef = useRef<typeof getLevel>(getLevel);
+  levelRef.current = getLevel;
+
+  useEffect(() => {
+    if (!live) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(now - last, 50);
+      last = now;
+      const s = stateRef.current;
+      const a = anim.current;
+      const expr = expressionFor(s.mood);
+
+      // Mouth: real voice loudness when available, a natural wave otherwise.
+      let openTarget = 0;
+      if (s.speaking) {
+        const level = levelRef.current?.();
+        openTarget =
+          level !== undefined && level > 0.01
+            ? Math.min(1, level * 1.6)
+            : 0.35 + 0.3 * Math.abs(Math.sin(now / 90)) * Math.abs(Math.sin(now / 260));
+      } else if (s.thinking) {
+        openTarget = 0.08;
+      }
+      a.open = approach(a.open, openTarget, dt, s.speaking ? 45 : 140);
+
+      // Expression follows the tutor's words, softly.
+      a.curve = approach(a.curve, expr.curve, dt, 350);
+      a.brow = approach(a.brow, s.listening ? Math.max(expr.brow, 0.55) : expr.brow, dt, 350);
+
+      // Gaze: saccades while idle, up while thinking, on you while listening,
+      // toward the composer while you type.
+      if (now > sacc.current.next) {
+        sacc.current = { x: (Math.random() - 0.5) * 3.4, y: (Math.random() - 0.5) * 2, next: now + 1200 + Math.random() * 2400 };
+      }
+      const gaze = s.listening
+        ? { x: 0, y: 0.4 }
+        : s.thinking
+          ? { x: 2.2, y: -3.2 }
+          : s.attentive
+            ? { x: -1.5, y: 2.6 }
+            : { x: sacc.current.x, y: sacc.current.y };
+      a.gazeX = approach(a.gazeX, gaze.x, dt, 120);
+      a.gazeY = approach(a.gazeY, gaze.y, dt, 120);
+
+      // Blinks on a human schedule; eyes stay open while wide-listening.
+      if (now > blink.current.next) {
+        blink.current.until = now + 130;
+        blink.current.next = now + 2200 + Math.random() * 3800 + (Math.random() < 0.15 ? -1900 : 0);
+      }
+      a.lid = approach(a.lid, now < blink.current.until ? 1 : 0, dt, 40);
+
+      setF({ ...a });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [live]);
+
+  const v = live ? f : { open: 0, curve: expressionFor(mood).curve, brow: 0, gazeX: 0, gazeY: 0, lid: 0 };
+  const mw = 9 + v.curve * 1.5; // mouth half-width
+  const openPx = v.open * 9;
+  const curvePx = v.curve * 6;
+  const browY = 37.5 - v.brow * 2.2;
+  const browTilt = v.brow < 0 ? -v.brow * 4 : 0; // furrow: inner ends dip
+  const eyeOpen = 1 - v.lid;
+  const glow = bond >= 3 ? "#e8b34b" : bond >= 2 ? (color ?? "#e8875a") : null;
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 106" aria-hidden style={{ overflow: "visible" }}>
+      {glow && <circle cx="50" cy="50" r="47" fill="none" stroke={glow} strokeWidth={bond >= 3 ? 2.5 : 1.5} opacity="0.5" />}
+      {/* shoulders + clothing, so it reads as a person, not a floating head */}
+      <path d="M 6 106 Q 10 82 30 76 L 70 76 Q 90 82 94 106 Z" fill={rig.clothes} />
+      <path d="M 6 106 Q 10 82 30 76 L 38 76 Q 24 84 20 106 Z" fill={rig.clothesShade} opacity="0.55" />
+      <path d="M 38 78 Q 50 88 62 78 L 62 74 L 38 74 Z" fill={rig.clothesShade} opacity="0.4" />
+      {/* neck */}
+      <path d="M 42 70 L 42 80 Q 50 84 58 80 L 58 70 Z" fill={rig.skinShade} />
+      {/* ears, head, hair */}
+      <circle cx="14" cy="52" r="6" fill={rig.skin} />
+      <circle cx="86" cy="52" r="6" fill={rig.skin} />
+      <ellipse cx="50" cy="52" rx="38" ry={headRy} fill={rig.skin} />
+      {/* soft studio light from the upper-left, and a shaded jaw on the right */}
+      <ellipse cx="38" cy="44" rx="20" ry={headRy * 0.55} fill={rig.skinLight} opacity="0.45" />
+      <path d="M 70 40 Q 88 52 80 74 Q 66 84 50 86 Q 72 74 70 40 Z" fill={rig.skinShade} opacity="0.3" />
+      <Hair rig={rig} />
+      {rig.beard && <path d="M 22 58 Q 26 84 50 86 Q 74 84 78 58 Q 74 76 50 78 Q 26 76 22 58 Z" fill={rig.hair} opacity="0.9" />}
+      {/* brows */}
+      <path d={`M 29 ${browY + browTilt} Q 37 ${browY - 2.5} 45 ${browY + (v.brow < 0 ? 0 : -0.5)}`} stroke={rig.hair} strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d={`M 55 ${browY + (v.brow < 0 ? 0 : -0.5)} Q 63 ${browY - 2.5} 71 ${browY + browTilt}`} stroke={rig.hair} strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* eyes: whites, iris follows the gaze, lids blink */}
+      <g>
+        <ellipse cx="37" cy={eyeY} rx={7.5 * eyeScale} ry={6 * eyeScale * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
+        <ellipse cx="63" cy={eyeY} rx={7.5 * eyeScale} ry={6 * eyeScale * Math.max(eyeOpen, 0.06)} fill="#fdf6ee" />
+        {eyeOpen > 0.25 && (
+          <>
+            <circle cx={37 + v.gazeX} cy={eyeY + v.gazeY} r={(listening ? 4 : 3.4) * eyeScale} fill={iris} />
+            <circle cx={63 + v.gazeX} cy={eyeY + v.gazeY} r={(listening ? 4 : 3.4) * eyeScale} fill={iris} />
+            <circle cx={37 + v.gazeX} cy={eyeY + v.gazeY} r={1.7 * eyeScale} fill="#1a1a2e" />
+            <circle cx={63 + v.gazeX} cy={eyeY + v.gazeY} r={1.7 * eyeScale} fill="#1a1a2e" />
+            <circle cx={38.2 + v.gazeX} cy={eyeY - 1.2 + v.gazeY} r={0.9 * eyeScale} fill="#fff" />
+            <circle cx={64.2 + v.gazeX} cy={eyeY - 1.2 + v.gazeY} r={0.9 * eyeScale} fill="#fff" />
+          </>
+        )}
+      </g>
+      {/* nose — lengthens and defines with age */}
+      <path d={`M 50 52 Q 47.5 ${noseLen - 2} 50 ${noseLen} Q 52.5 ${noseLen - 2} 50 52`} fill={rig.skinShade} opacity="0.7" />
+      {/* blush when joyful */}
+      {v.curve > 0.7 && (
+        <>
+          <ellipse cx="27" cy="60" rx="5" ry="3" fill="#e8674b" opacity="0.25" />
+          <ellipse cx="73" cy="60" rx="5" ry="3" fill="#e8674b" opacity="0.25" />
+        </>
+      )}
+      {/* mouth: loudness opens it, mood curves it */}
+      {openPx > 1 ? (
+        <path
+          d={`M ${50 - mw} 68 Q 50 ${68 - openPx * 0.35 - curvePx * 0.4} ${50 + mw} 68 Q 50 ${68 + openPx} ${50 - mw} 68 Z`}
+          fill="#33201a"
+        />
+      ) : (
+        <path
+          d={`M ${50 - mw} ${68 - curvePx * 0.15} Q 50 ${68 + curvePx} ${50 + mw} ${68 - curvePx * 0.15}`}
+          stroke="#33201a"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+        />
+      )}
+      {openPx > 4 && <ellipse cx="50" cy={68 + openPx * 0.65} rx={mw * 0.45} ry={openPx * 0.28} fill="#c25a4a" />}
+      {/* the bond, worn proudly: pin -> halo -> old-friend glow with a cap */}
+      {bond >= 1 && (
+        <g transform="translate(72 82)">
+          <path d="M 0 -5 L 1.5 -1.5 L 5.4 -1.5 L 2.2 0.9 L 3.4 4.6 L 0 2.4 L -3.4 4.6 L -2.2 0.9 L -5.4 -1.5 L -1.5 -1.5 Z" fill={bond >= 3 ? "#e8b34b" : "#fdf6ee"} stroke={rig.skinShade} strokeWidth="0.6" />
+        </g>
+      )}
+      {bond >= 3 && (
+        <g transform="translate(76 20) rotate(12)">
+          <rect x="-7" y="-2" width="14" height="4" rx="1" fill="#1a1a2e" />
+          <path d="M -9 -2 L 0 -7 L 9 -2 L 0 2 Z" fill="#1a1a2e" />
+          <line x1="7" y1="-2" x2="9" y2="4" stroke="#e8b34b" strokeWidth="1.2" />
+          <circle cx="9" cy="5" r="1.4" fill="#e8b34b" />
+        </g>
+      )}
+    </svg>
+  );
+}

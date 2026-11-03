@@ -1,12 +1,24 @@
 import { createDb, schema, type Db } from "@tutor/db";
-import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
+  betterPlan,
   mergeProfile,
+  mintReferralCode,
   scheduleAttempt,
+  type AccountExport,
+  type AuditEntry,
+  type BillingEventRecord,
+  type BillingEventRow,
+  type AuditRow,
   type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
+  type PlatformIncident,
+  type PlatformMetrics,
+  type SessionMeta,
   type SessionRecap,
+  type StaffHr,
+  type StaffMember,
   type Store,
   type UsageKind,
 } from "./types.js";
@@ -75,12 +87,63 @@ export class PostgresStore implements Store {
     return { id: student.id };
   }
 
-  async createSession(studentId: string, _personaId: string, packId: string) {
+  async createSession(meta: SessionMeta) {
     const [row] = await this.db
       .insert(schema.sessions)
-      .values({ studentId, packId })
+      .values({
+        studentId: meta.studentId,
+        packId: meta.packId,
+        personaId: meta.personaId,
+        language: meta.language,
+        plan: meta.plan,
+        ownerUserId: meta.ownerUserId,
+        parentEmail: meta.parentEmail,
+        apiKeyId: meta.apiKeyId,
+      })
       .returning({ id: schema.sessions.id });
     return row.id;
+  }
+
+  async getSessionMeta(sessionId: string) {
+    const rows = await this.db
+      .select({
+        studentId: schema.sessions.studentId,
+        personaId: schema.sessions.personaId,
+        packId: schema.sessions.packId,
+        language: schema.sessions.language,
+        plan: schema.sessions.plan,
+        ownerUserId: schema.sessions.ownerUserId,
+        parentEmail: schema.sessions.parentEmail,
+        apiKeyId: schema.sessions.apiKeyId,
+        endedAt: schema.sessions.endedAt,
+      })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, sessionId))
+      .limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      studentId: r.studentId,
+      personaId: r.personaId,
+      packId: r.packId,
+      language: r.language,
+      plan: r.plan,
+      ownerUserId: r.ownerUserId ?? undefined,
+      parentEmail: r.parentEmail ?? undefined,
+      apiKeyId: r.apiKeyId ?? undefined,
+      endedAt: r.endedAt,
+    };
+  }
+
+  async listSessionMessages(sessionId: string) {
+    const rows = await this.db
+      .select({ role: schema.messages.role, content: schema.messages.content })
+      .from(schema.messages)
+      .where(eq(schema.messages.sessionId, sessionId))
+      .orderBy(schema.messages.createdAt);
+    return rows.filter(
+      (m): m is { role: "user" | "assistant"; content: string } => m.role !== "system",
+    );
   }
 
   async saveMessage(sessionId: string, role: "user" | "assistant", content: string) {
@@ -349,15 +412,25 @@ export class PostgresStore implements Store {
   }
 
   async listStudentProfiles(userId: string) {
-    const own = await this.db
-      .select({ id: schema.students.id, displayName: schema.students.displayName })
-      .from(schema.students)
-      .where(eq(schema.students.userId, userId));
+    const cols = {
+      id: schema.students.id,
+      displayName: schema.students.displayName,
+      tutorName: schema.students.tutorName,
+      lookSkin: schema.students.lookSkin,
+      lookHair: schema.students.lookHair,
+      lookHairColor: schema.students.lookHairColor,
+    };
+    const own = await this.db.select(cols).from(schema.students).where(eq(schema.students.userId, userId));
     const children = await this.db
-      .select({ id: schema.students.id, displayName: schema.students.displayName })
+      .select(cols)
       .from(schema.students)
       .where(eq(schema.students.parentUserId, userId));
-    return [...own, ...children];
+    return [...own, ...children].map((s) => ({
+      id: s.id,
+      displayName: s.displayName,
+      tutorName: s.tutorName ?? null,
+      look: { skin: s.lookSkin ?? null, hair: s.lookHair ?? null, hairColor: s.lookHairColor ?? null },
+    }));
   }
 
   async ownsStudent(userId: string, studentId: string) {
@@ -381,6 +454,108 @@ export class PostgresStore implements Store {
       .where(eq(schema.students.id, studentId))
       .limit(1);
     return rows[0]?.displayName ?? null;
+  }
+
+  async countStudentSessions(studentId: string) {
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId));
+    return Number(row?.n ?? 0);
+  }
+
+  async firstSessionAt(studentId: string) {
+    const [row] = await this.db
+      .select({ first: sql<Date | null>`min(${schema.sessions.startedAt})` })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.studentId, studentId));
+    return row?.first ? new Date(row.first) : null;
+  }
+
+  async setTutorName(studentId: string, name: string | null) {
+    await this.db.update(schema.students).set({ tutorName: name }).where(eq(schema.students.id, studentId));
+  }
+
+  async getTutorName(studentId: string) {
+    const rows = await this.db
+      .select({ tutorName: schema.students.tutorName })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.tutorName ?? null;
+  }
+
+  async setTutorLook(studentId: string, look: { skin: string | null; hair: string | null; hairColor: string | null }) {
+    await this.db
+      .update(schema.students)
+      .set({ lookSkin: look.skin, lookHair: look.hair, lookHairColor: look.hairColor })
+      .where(eq(schema.students.id, studentId));
+  }
+
+  async getTutorLook(studentId: string) {
+    const rows = await this.db
+      .select({ skin: schema.students.lookSkin, hair: schema.students.lookHair, hairColor: schema.students.lookHairColor })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    const r = rows[0];
+    return { skin: r?.skin ?? null, hair: r?.hair ?? null, hairColor: r?.hairColor ?? null };
+  }
+
+  async setFaceHints(studentId: string, enabled: boolean) {
+    await this.db.update(schema.students).set({ faceHints: enabled }).where(eq(schema.students.id, studentId));
+  }
+
+  async getFaceHints(studentId: string) {
+    const rows = await this.db
+      .select({ on: schema.students.faceHints })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.on === true;
+  }
+
+  async setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    await this.db
+      .update(schema.students)
+      .set(enabled ? { voiceFamiliarity: true } : { voiceFamiliarity: false, voiceProfile: null })
+      .where(eq(schema.students.id, studentId));
+  }
+
+  async getVoiceFamiliarity(studentId: string) {
+    const rows = await this.db
+      .select({ on: schema.students.voiceFamiliarity })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.on === true;
+  }
+
+  async getVoiceProfile(studentId: string) {
+    const rows = await this.db
+      .select({ profile: schema.students.voiceProfile })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.profile ?? null;
+  }
+
+  async saveVoiceProfile(studentId: string, profile: unknown) {
+    // Only while it is switched on: a turn that finishes after the parent
+    // switched it off must not bring the profile back.
+    await this.db
+      .update(schema.students)
+      .set({ voiceProfile: profile })
+      .where(and(eq(schema.students.id, studentId), eq(schema.students.voiceFamiliarity, true)));
+  }
+
+  async orgOfStudent(studentId: string) {
+    const rows = await this.db
+      .select({ org: schema.students.orgId })
+      .from(schema.students)
+      .where(eq(schema.students.id, studentId))
+      .limit(1);
+    return rows[0]?.org ?? null;
   }
 
   async recordIncident(incident: {
@@ -455,11 +630,151 @@ export class PostgresStore implements Store {
 
   async getUserPlan(userId: string) {
     const rows = await this.db
-      .select({ plan: schema.users.plan })
+      .select({
+        plan: schema.users.plan,
+        boost: schema.users.planBoost,
+        boostUntil: schema.users.planBoostUntil,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
-    return rows[0]?.plan ?? "free";
+    const row = rows[0];
+    if (!row) return "free";
+    if (row.boost && row.boostUntil && row.boostUntil > new Date()) return betterPlan(row.plan, row.boost);
+    return row.plan;
+  }
+
+  async getReferralCode(userId: string) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const rows = await this.db
+        .select({ code: schema.users.referralCode })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+      if (rows[0]?.code) return rows[0].code;
+      try {
+        const set = await this.db
+          .update(schema.users)
+          .set({ referralCode: mintReferralCode() })
+          .where(and(eq(schema.users.id, userId), isNull(schema.users.referralCode)))
+          .returning({ code: schema.users.referralCode });
+        if (set[0]?.code) return set[0].code;
+      } catch {
+        // unique collision with another user's code — mint again
+      }
+    }
+    throw new Error("could not mint a referral code");
+  }
+
+  async userIdByReferralCode(code: string) {
+    const rows = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.referralCode, code.toLowerCase()))
+      .limit(1);
+    return rows[0]?.id ?? null;
+  }
+
+  async setReferredBy(userId: string, referrerId: string) {
+    if (userId === referrerId) return;
+    await this.db
+      .update(schema.users)
+      .set({ referredBy: referrerId })
+      .where(and(eq(schema.users.id, userId), isNull(schema.users.referredBy)));
+  }
+
+  async claimReferralReward(referredUserId: string) {
+    // Atomic one-shot: only the first claim flips the flag and learns who
+    // to thank; a re-verification later returns nothing.
+    const rows = await this.db
+      .update(schema.users)
+      .set({ referralRewarded: true })
+      .where(
+        and(
+          eq(schema.users.id, referredUserId),
+          eq(schema.users.referralRewarded, false),
+          isNotNull(schema.users.referredBy),
+        ),
+      )
+      .returning({ referrer: schema.users.referredBy });
+    return rows[0]?.referrer ?? null;
+  }
+
+  async grantPlanBoost(userId: string, plan: string, days: number) {
+    const rows = await this.db
+      .select({ boost: schema.users.planBoost, until: schema.users.planBoostUntil })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    const current = rows[0];
+    const from = Math.max(Date.now(), current?.until?.getTime() ?? 0);
+    const until = new Date(from + days * 86_400_000);
+    await this.db
+      .update(schema.users)
+      .set({ planBoost: betterPlan(current?.boost ?? "free", plan), planBoostUntil: until })
+      .where(eq(schema.users.id, userId));
+    return until;
+  }
+
+  async referralSummary(userId: string) {
+    const [counts] = await this.db
+      .select({
+        invited: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.referredBy, userId));
+    const me = await this.db
+      .select({ boost: schema.users.planBoost, until: schema.users.planBoostUntil })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    const live = me[0]?.boost && me[0]?.until && me[0].until > new Date() ? me[0] : null;
+    return {
+      code: await this.getReferralCode(userId),
+      invited: Number(counts?.invited ?? 0),
+      rewarded: Number(counts?.rewarded ?? 0),
+      boostPlan: live?.boost ?? null,
+      boostUntil: live?.until ?? null,
+    };
+  }
+
+  async referralStats(topN: number) {
+    const [totals] = await this.db
+      .select({
+        totalReferred: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(isNotNull(schema.users.referredBy));
+    const grouped = await this.db
+      .select({
+        referrer: schema.users.referredBy,
+        invited: sql<number>`count(*)`,
+        rewarded: sql<number>`count(*) filter (where ${schema.users.referralRewarded})`,
+      })
+      .from(schema.users)
+      .where(isNotNull(schema.users.referredBy))
+      .groupBy(schema.users.referredBy)
+      .orderBy(sql`count(*) desc`)
+      .limit(topN);
+    const ids = grouped.map((g) => g.referrer).filter((r): r is string => r !== null);
+    const emails = ids.length
+      ? await this.db
+          .select({ id: schema.users.id, email: schema.users.email })
+          .from(schema.users)
+          .where(inArray(schema.users.id, ids))
+      : [];
+    const emailOf = new Map(emails.map((e) => [e.id, e.email]));
+    return {
+      totalReferred: Number(totals?.totalReferred ?? 0),
+      rewarded: Number(totals?.rewarded ?? 0),
+      top: grouped.map((g) => ({
+        email: emailOf.get(g.referrer ?? "") ?? (g.referrer ?? "unknown"),
+        invited: Number(g.invited),
+        rewarded: Number(g.rewarded),
+      })),
+    };
   }
 
   async setUserPlan(email: string, plan: string) {
@@ -469,6 +784,118 @@ export class PostgresStore implements Store {
       .where(eq(schema.users.email, email.toLowerCase()))
       .returning({ id: schema.users.id });
     return rows.length > 0;
+  }
+
+  async getAccessGrant(userId: string) {
+    const rows = await this.db.select().from(schema.accessGrants).where(eq(schema.accessGrants.userId, userId)).limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      userId: r.userId,
+      level: r.level,
+      reason: r.reason ?? null,
+      grantedBy: r.grantedBy ?? null,
+      grantedAt: r.grantedAt,
+      expiresAt: r.expiresAt ?? null,
+      reviewIntervalDays: r.reviewIntervalDays,
+      nextReviewAt: r.nextReviewAt ?? null,
+      lastReviewAt: r.lastReviewAt ?? null,
+      lastRating: r.lastRating ?? null,
+      revokedAt: r.revokedAt ?? null,
+    };
+  }
+
+  async setAccessGrant(grant: {
+    userId: string;
+    level: string;
+    reason: string | null;
+    grantedBy: string | null;
+    expiresAt: Date | null;
+    reviewIntervalDays: number;
+    nextReviewAt: Date | null;
+  }) {
+    const values = {
+      userId: grant.userId,
+      level: grant.level,
+      reason: grant.reason,
+      grantedBy: grant.grantedBy,
+      grantedAt: new Date(),
+      expiresAt: grant.expiresAt,
+      reviewIntervalDays: grant.reviewIntervalDays,
+      nextReviewAt: grant.nextReviewAt,
+      lastReviewAt: null,
+      lastRating: null,
+      revokedAt: null,
+    };
+    await this.db
+      .insert(schema.accessGrants)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.accessGrants.userId, set: values });
+  }
+
+  async revokeAccessGrant(userId: string) {
+    await this.db.update(schema.accessGrants).set({ revokedAt: new Date() }).where(eq(schema.accessGrants.userId, userId));
+  }
+
+  async recordAccessReview(review: {
+    userId: string;
+    reviewedBy: string | null;
+    rating: string;
+    decision: string;
+    note: string | null;
+    nextReviewAt: Date | null;
+    revoke: boolean;
+  }) {
+    await this.db.insert(schema.accessReviews).values({
+      userId: review.userId,
+      reviewedBy: review.reviewedBy,
+      rating: review.rating,
+      decision: review.decision,
+      note: review.note,
+    });
+    await this.db
+      .update(schema.accessGrants)
+      .set({
+        lastReviewAt: new Date(),
+        lastRating: review.rating,
+        nextReviewAt: review.nextReviewAt,
+        revokedAt: review.revoke ? new Date() : null,
+      })
+      .where(eq(schema.accessGrants.userId, review.userId));
+  }
+
+  async listAccessGrants() {
+    const rows = await this.db
+      .select({
+        userId: schema.accessGrants.userId,
+        level: schema.accessGrants.level,
+        reason: schema.accessGrants.reason,
+        grantedBy: schema.accessGrants.grantedBy,
+        grantedAt: schema.accessGrants.grantedAt,
+        expiresAt: schema.accessGrants.expiresAt,
+        reviewIntervalDays: schema.accessGrants.reviewIntervalDays,
+        nextReviewAt: schema.accessGrants.nextReviewAt,
+        lastReviewAt: schema.accessGrants.lastReviewAt,
+        lastRating: schema.accessGrants.lastRating,
+        revokedAt: schema.accessGrants.revokedAt,
+        email: schema.users.email,
+      })
+      .from(schema.accessGrants)
+      .innerJoin(schema.users, eq(schema.users.id, schema.accessGrants.userId));
+    return rows.map((r) => ({
+      userId: r.userId,
+      level: r.level,
+      reason: r.reason ?? null,
+      grantedBy: r.grantedBy ?? null,
+      grantedAt: r.grantedAt,
+      expiresAt: r.expiresAt ?? null,
+      reviewIntervalDays: r.reviewIntervalDays,
+      nextReviewAt: r.nextReviewAt ?? null,
+      lastReviewAt: r.lastReviewAt ?? null,
+      lastRating: r.lastRating ?? null,
+      revokedAt: r.revokedAt ?? null,
+      email: r.email,
+    }));
   }
 
   async createOrg(ownerUserId: string, name: string, seats: number) {
@@ -539,6 +966,27 @@ export class PostgresStore implements Store {
 
   async deletePushSubscription(endpoint: string) {
     await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, endpoint));
+  }
+
+  async listAccounts() {
+    // Guest-session learners get generated @students.local bookkeeping
+    // accounts; nobody reads that inbox, so the digest never writes to it.
+    const rows = (await this.db.execute(sql`
+      select id as user_id, email from users
+      where email not like '%@students.local' and password_hash is not null
+    `)) as unknown as Array<{ user_id: string; email: string }>;
+    return rows.map((r) => ({ userId: r.user_id, email: r.email }));
+  }
+
+  async listAllPushSubscriptions() {
+    return this.db
+      .select({
+        userId: schema.pushSubscriptions.userId,
+        endpoint: schema.pushSubscriptions.endpoint,
+        p256dh: schema.pushSubscriptions.p256dh,
+        auth: schema.pushSubscriptions.auth,
+      })
+      .from(schema.pushSubscriptions);
   }
 
   async createPasswordReset(userId: string, tokenHash: string) {
@@ -669,33 +1117,99 @@ export class PostgresStore implements Store {
 
   async deleteAccount(userId: string) {
     const students = await this.listStudentProfiles(userId);
-    for (const s of students) {
-      const sessions = await this.db
-        .select({ id: schema.sessions.id })
-        .from(schema.sessions)
-        .where(eq(schema.sessions.studentId, s.id));
-      for (const sess of sessions) {
-        await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sess.id));
+    // All or nothing: a failure part way must not leave an account standing
+    // with its children's data half erased.
+    await this.db.transaction(async (tx) => {
+      for (const s of students) {
+        const sessions = await tx
+          .select({ id: schema.sessions.id })
+          .from(schema.sessions)
+          .where(eq(schema.sessions.studentId, s.id));
+        for (const sess of sessions) {
+          await tx.delete(schema.messages).where(eq(schema.messages.sessionId, sess.id));
+        }
+        await tx.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
+        await tx.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
+        await tx.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
+        await tx.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
+        await tx.delete(schema.careContacts).where(eq(schema.careContacts.studentId, s.id));
+        await tx.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
+        await tx.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
+        await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
+        await tx.delete(schema.students).where(eq(schema.students.id, s.id));
       }
-      await this.db.delete(schema.sessions).where(eq(schema.sessions.studentId, s.id));
-      await this.db.delete(schema.memories).where(eq(schema.memories.studentId, s.id));
-      await this.db.delete(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id));
-      await this.db.delete(schema.routines).where(eq(schema.routines.studentId, s.id));
-      await this.db.delete(schema.careContacts).where(eq(schema.careContacts.studentId, s.id));
-      await this.db.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
-      await this.db.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
-      await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
-      await this.db.delete(schema.students).where(eq(schema.students.id, s.id));
+      await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
+      await tx.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
+      await tx.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+      await tx.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
+      await tx.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
+      await tx.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
+      await tx.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
+      await tx.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+      // Free-access grants and their reviews point at the account; without
+      // these two lines the database refused to erase anyone who ever held
+      // one. The audit log, which has no such link, keeps that it happened.
+      await tx.delete(schema.accessReviews).where(eq(schema.accessReviews.userId, userId));
+      await tx.delete(schema.accessGrants).where(eq(schema.accessGrants.userId, userId));
+      await tx.delete(schema.staffMembers).where(eq(schema.staffMembers.userId, userId));
+      await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    });
+  }
+
+  async exportAccount(userId: string): Promise<AccountExport | null> {
+    const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+    if (!user) return null;
+    const { passwordHash: _secret, ...account } = user;
+    const owned = await this.listStudentProfiles(userId);
+    const learners: AccountExport["learners"] = [];
+    for (const s of owned) {
+      const [learner] = await this.db.select().from(schema.students).where(eq(schema.students.id, s.id)).limit(1);
+      if (!learner) continue;
+      const sessions = await this.db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.studentId, s.id))
+        .orderBy(schema.sessions.startedAt);
+      const withMessages = [];
+      for (const session of sessions) {
+        const messages = await this.db
+          .select()
+          .from(schema.messages)
+          .where(eq(schema.messages.sessionId, session.id))
+          .orderBy(schema.messages.createdAt);
+        withMessages.push({ session, messages });
+      }
+      const one = async <T>(rows: Promise<T[]>) => (await rows)[0] ?? null;
+      learners.push({
+        learner,
+        learnerProfile: await one(this.db.select().from(schema.learnerProfiles).where(eq(schema.learnerProfiles.studentId, s.id))),
+        routine: await one(this.db.select().from(schema.routines).where(eq(schema.routines.studentId, s.id))),
+        careContact: await one(this.db.select().from(schema.careContacts).where(eq(schema.careContacts.studentId, s.id))),
+        memories: await this.db.select().from(schema.memories).where(eq(schema.memories.studentId, s.id)),
+        mastery: await this.db.select().from(schema.mastery).where(eq(schema.mastery.studentId, s.id)),
+        safetyIncidents: await this.db.select().from(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id)),
+        usage: await this.db.select().from(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id)),
+        sessions: withMessages,
+      });
     }
-    await this.db.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
-    await this.db.delete(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
-    await this.db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
-    await this.db.delete(schema.passwordResets).where(eq(schema.passwordResets.userId, userId));
-    await this.db.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
-    await this.db.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
-    await this.db.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
-    await this.db.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
-    await this.db.delete(schema.users).where(eq(schema.users.id, userId));
+    const keys = await this.db.select().from(schema.apiKeys).where(eq(schema.apiKeys.ownerUserId, userId));
+    const push = await this.db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+    return {
+      account,
+      learners,
+      usage: await this.db.select().from(schema.usageEvents).where(eq(schema.usageEvents.userId, userId)),
+      apiKeys: keys.map(({ keyHash: _hash, ...k }) => k),
+      pushDevices: push.map((p) => ({ service: pushService(p.endpoint), createdAt: p.createdAt })),
+      billingSubscriptions: await this.db.select().from(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId)),
+      paymentRecords: await this.db
+        .select()
+        .from(schema.billingEvents)
+        .where(sql`lower(${schema.billingEvents.email}) = ${user.email.toLowerCase()}`),
+      orgsOwned: await this.db.select().from(schema.orgs).where(eq(schema.orgs.ownerUserId, userId)),
+      staff: (await this.db.select().from(schema.staffMembers).where(eq(schema.staffMembers.userId, userId)))[0] ?? null,
+      accessGrant: (await this.db.select().from(schema.accessGrants).where(eq(schema.accessGrants.userId, userId)))[0] ?? null,
+      accessReviews: await this.db.select().from(schema.accessReviews).where(eq(schema.accessReviews.userId, userId)),
+    };
   }
 
   async listRecentMessages(studentId: string, limit: number) {
@@ -778,5 +1292,484 @@ export class PostgresStore implements Store {
       .where(and(eq(schema.apiKeys.id, keyId), eq(schema.apiKeys.ownerUserId, ownerUserId)))
       .returning({ id: schema.apiKeys.id });
     return rows.length > 0;
+  }
+
+  // ---- Command Centre ----
+
+  /** Staff rows carry no email of their own; the account is the source of truth. */
+  private staffSelect() {
+    return this.db
+      .select({
+        userId: schema.staffMembers.userId,
+        email: schema.users.email,
+        displayName: schema.users.displayName,
+        role: schema.staffMembers.role,
+        title: schema.staffMembers.title,
+        status: schema.staffMembers.status,
+        createdAt: schema.staffMembers.createdAt,
+        lastSeenAt: schema.staffMembers.lastSeenAt,
+        fullName: schema.staffMembers.fullName,
+        employmentType: schema.staffMembers.employmentType,
+        startDate: schema.staffMembers.startDate,
+        endDate: schema.staffMembers.endDate,
+        managerUserId: schema.staffMembers.managerUserId,
+        location: schema.staffMembers.location,
+        notes: schema.staffMembers.notes,
+      })
+      .from(schema.staffMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.staffMembers.userId));
+  }
+
+  async listStaff(): Promise<StaffMember[]> {
+    return this.staffSelect().orderBy(schema.staffMembers.createdAt);
+  }
+
+  async getStaff(userId: string): Promise<StaffMember | null> {
+    const rows = await this.staffSelect().where(eq(schema.staffMembers.userId, userId)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  async upsertStaff(member: {
+    userId: string;
+    role: string;
+    title?: string;
+    status?: "active" | "suspended";
+    invitedBy?: string;
+  }) {
+    const role = member.role as "owner" | "admin" | "finance" | "support" | "staff" | "investor";
+    const set: Record<string, unknown> = { role };
+    if (member.title !== undefined) set.title = member.title;
+    if (member.status !== undefined) set.status = member.status;
+    await this.db
+      .insert(schema.staffMembers)
+      .values({
+        userId: member.userId,
+        role,
+        title: member.title,
+        status: member.status ?? "active",
+        invitedBy: member.invitedBy,
+      })
+      .onConflictDoUpdate({ target: schema.staffMembers.userId, set });
+  }
+
+  async removeStaff(userId: string) {
+    const rows = await this.db
+      .delete(schema.staffMembers)
+      .where(eq(schema.staffMembers.userId, userId))
+      .returning({ userId: schema.staffMembers.userId });
+    if (rows.length === 0) return false;
+    // Nobody should be left reporting to someone who is no longer here.
+    await this.db
+      .update(schema.staffMembers)
+      .set({ managerUserId: null })
+      .where(eq(schema.staffMembers.managerUserId, userId));
+    return true;
+  }
+
+  async updateStaffHr(userId: string, hr: StaffHr) {
+    // Only the keys given are touched; the rest of the record stands.
+    const set: Record<string, unknown> = {};
+    for (const key of ["fullName", "employmentType", "startDate", "endDate", "managerUserId", "location", "notes"] as const) {
+      if (hr[key] !== undefined) set[key] = hr[key];
+    }
+    if (Object.keys(set).length === 0) return (await this.getStaff(userId)) !== null;
+    const rows = await this.db
+      .update(schema.staffMembers)
+      .set(set)
+      .where(eq(schema.staffMembers.userId, userId))
+      .returning({ userId: schema.staffMembers.userId });
+    return rows.length > 0;
+  }
+
+  async touchStaffSeen(userId: string) {
+    await this.db
+      .update(schema.staffMembers)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(schema.staffMembers.userId, userId));
+  }
+
+  async recordAudit(entry: AuditEntry) {
+    await this.db.insert(schema.auditLog).values({
+      actorUserId: entry.actorUserId,
+      actorEmail: entry.actorEmail,
+      actorRole: entry.actorRole,
+      action: entry.action,
+      target: entry.target,
+      meta: entry.meta,
+      ip: entry.ip,
+    });
+  }
+
+  async listAudit(limit: number, opts: { action?: string } = {}): Promise<AuditRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.auditLog)
+      .where(opts.action ? eq(schema.auditLog.action, opts.action) : undefined)
+      .orderBy(desc(schema.auditLog.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      actorUserId: r.actorUserId,
+      actorEmail: r.actorEmail,
+      actorRole: r.actorRole,
+      action: r.action,
+      target: r.target ?? undefined,
+      meta: r.meta,
+      ip: r.ip ?? undefined,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async listPlatformIncidents(limit: number, opts: { severity?: "concern" | "danger" } = {}) {
+    // A learner belongs either to a guardian (parent_user_id) or, for adult
+    // self-learners, to their own account. Either one is who we would contact.
+    const rows = (await this.db.execute(sql`
+      select i.id, i.student_id, st.display_name as student_name,
+             coalesce(g.email, u.email) as guardian_email,
+             i.direction, i.categories, i.severity, i.excerpt, i.created_at
+      from safety_incidents i
+      join students st on st.id = i.student_id
+      left join users g on g.id = st.parent_user_id
+      left join users u on u.id = st.user_id
+      ${opts.severity ? sql`where i.severity = ${opts.severity}` : sql``}
+      order by i.created_at desc
+      limit ${Math.max(1, Math.min(500, Math.floor(limit)))}
+    `)) as unknown as Array<{
+      id: string;
+      student_id: string;
+      student_name: string;
+      guardian_email: string | null;
+      direction: string;
+      categories: string[];
+      severity: string;
+      excerpt: string;
+      created_at: Date;
+    }>;
+    return rows.map((r): PlatformIncident => ({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      // A generated @students.local address is bookkeeping, not a contact.
+      guardianEmail: r.guardian_email && !r.guardian_email.endsWith("@students.local") ? r.guardian_email : null,
+      direction: r.direction,
+      categories: r.categories,
+      severity: r.severity,
+      excerpt: r.excerpt,
+      createdAt: new Date(r.created_at),
+    }));
+  }
+
+  async countIncidentsSince(since: Date) {
+    const rows = (await this.db.execute(sql`
+      select
+        count(*) filter (where severity = 'concern') as concern,
+        count(*) filter (where severity = 'danger') as danger
+      from safety_incidents
+      where created_at >= ${since}
+    `)) as unknown as Array<{ concern: string | number; danger: string | number }>;
+    return { concern: Number(rows[0]?.concern ?? 0), danger: Number(rows[0]?.danger ?? 0) };
+  }
+
+  async recordBillingEvent(event: BillingEventRecord) {
+    // The unique (provider, event_ref) index makes retried webhooks a no-op.
+    const rows = await this.db
+      .insert(schema.billingEvents)
+      .values({
+        provider: event.provider,
+        eventRef: event.eventRef,
+        type: event.type,
+        email: event.email,
+        customerRef: event.customerRef,
+        subscriptionRef: event.subscriptionRef,
+        plan: event.plan,
+        amountMinor: event.amountMinor,
+        currency: event.currency,
+        matched: event.matched,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.billingEvents.id });
+    return rows.length > 0;
+  }
+
+  async listBillingEvents(limit: number, opts: { type?: string } = {}): Promise<BillingEventRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.billingEvents)
+      .where(opts.type ? eq(schema.billingEvents.type, opts.type as "activated") : undefined)
+      .orderBy(desc(schema.billingEvents.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      provider: r.provider,
+      eventRef: r.eventRef,
+      type: r.type,
+      email: r.email ?? undefined,
+      customerRef: r.customerRef ?? undefined,
+      subscriptionRef: r.subscriptionRef ?? undefined,
+      plan: r.plan ?? undefined,
+      amountMinor: r.amountMinor ?? undefined,
+      currency: r.currency ?? undefined,
+      matched: r.matched,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async countBillingTroubleSince(since: Date) {
+    const rows = (await this.db.execute(sql`
+      select
+        count(*) filter (where type = 'payment_failed') as failed,
+        count(*) filter (where type = 'refunded') as refunded
+      from billing_events
+      where created_at >= ${since}
+    `)) as unknown as Array<{ failed: string | number; refunded: string | number }>;
+    return { failed: Number(rows[0]?.failed ?? 0), refunded: Number(rows[0]?.refunded ?? 0) };
+  }
+
+  async getSetting(key: string) {
+    const rows = await this.db
+      .select({ value: schema.platformSettings.value })
+      .from(schema.platformSettings)
+      .where(eq(schema.platformSettings.key, key))
+      .limit(1);
+    return rows[0]?.value ?? null;
+  }
+
+  async setSetting(key: string, value: unknown, updatedBy: string | null) {
+    await this.db
+      .insert(schema.platformSettings)
+      .values({ key, value, updatedBy, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: schema.platformSettings.key,
+        set: { value, updatedBy, updatedAt: new Date() },
+      });
+  }
+
+  async claimDailyJob(key: string) {
+    // Insert-only against the settings primary key: exactly one instance
+    // across the fleet wins the claim, everyone else sees a conflict.
+    const rows = await this.db
+      .insert(schema.platformSettings)
+      .values({ key: `job:${key}`, value: "claimed", updatedAt: new Date() })
+      .onConflictDoNothing()
+      .returning({ key: schema.platformSettings.key });
+    return rows.length > 0;
+  }
+
+  async platformMetrics(days: number): Promise<PlatformMetrics> {
+    // Timestamps are stored in UTC, so every window is cut in UTC too.
+    const window = Math.max(1, Math.min(365, Math.floor(days)));
+    const totals = (await this.db.execute(sql`
+      select
+        (select count(*) from students) as learners,
+        (select count(*) from users where role = 'parent') as guardians,
+        (select count(*) from sessions) as sessions,
+        (select count(*) from sessions
+           where started_at >= date_trunc('day', now() at time zone 'utc')) as sessions_today,
+        (select count(distinct student_id) from sessions
+           where started_at >= date_trunc('day', now() at time zone 'utc')) as active_today,
+        (select count(distinct student_id) from sessions
+           where started_at >= (now() at time zone 'utc') - interval '7 days') as active_week,
+        (select count(distinct student_id) from sessions
+           where started_at >= (now() at time zone 'utc') - interval '30 days') as active_month,
+        (select count(*) from messages) as messages,
+        (select coalesce(sum(quantity), 0) from usage_events where kind = 'voice_turn') as voice_turns,
+        (select coalesce(sum(quantity), 0) from usage_events where kind = 'practice') as practice_attempts,
+        (select count(*) from safety_incidents) as safety_incidents,
+        (select count(*) from safety_incidents where severity = 'danger') as safety_danger,
+        (select count(*) from billing_subscriptions where status = 'active') as paid_subscriptions
+    `)) as unknown as Array<Record<string, string | number>>;
+    const t = totals[0] ?? {};
+    const n = (key: string) => Number(t[key] ?? 0);
+
+    const planRows = (await this.db.execute(sql`
+      select plan, count(*) as count from users group by plan order by count desc, plan
+    `)) as unknown as Array<{ plan: string; count: string | number }>;
+
+    const sessionsSeries = (await this.db.execute(sql`
+      select to_char(d, 'YYYY-MM-DD') as day,
+             (select count(*) from sessions s where s.started_at::date = d)::int as count
+      from generate_series(
+        (now() at time zone 'utc')::date - ${window - 1},
+        (now() at time zone 'utc')::date,
+        interval '1 day'
+      ) as g(d)
+    `)) as unknown as Array<{ day: string; count: number }>;
+
+    const signupsSeries = (await this.db.execute(sql`
+      select to_char(d, 'YYYY-MM-DD') as day,
+             (select count(*) from users u where u.created_at::date = d)::int as count
+      from generate_series(
+        (now() at time zone 'utc')::date - ${window - 1},
+        (now() at time zone 'utc')::date,
+        interval '1 day'
+      ) as g(d)
+    `)) as unknown as Array<{ day: string; count: number }>;
+
+    return {
+      learners: n("learners"),
+      guardians: n("guardians"),
+      sessions: n("sessions"),
+      sessionsToday: n("sessions_today"),
+      activeToday: n("active_today"),
+      activeThisWeek: n("active_week"),
+      activeThisMonth: n("active_month"),
+      messages: n("messages"),
+      voiceTurns: n("voice_turns"),
+      practiceAttempts: n("practice_attempts"),
+      safetyIncidents: n("safety_incidents"),
+      safetyDanger: n("safety_danger"),
+      paidSubscriptions: n("paid_subscriptions"),
+      planMix: planRows.map((r) => ({ plan: r.plan, count: Number(r.count) })),
+      sessionsSeries: sessionsSeries.map((r) => ({ day: r.day, count: Number(r.count) })),
+      signupsSeries: signupsSeries.map((r) => ({ day: r.day, count: Number(r.count) })),
+    };
+  }
+
+  async growthAnalytics(now: Date = new Date()) {
+    // Sessions attributed to the owning ACCOUNT (owner on the session when
+    // recorded, else the student's parent, else the student's own account).
+    // Guests resolve to nothing and stay out: the funnel is about accounts.
+    const funnelRows = (await this.db.execute(sql`
+      with owner_sessions as (
+        select coalesce(s.owner_user_id, st.parent_user_id, st.user_id) as owner, s.started_at
+        from sessions s
+        join students st on st.id = s.student_id
+      )
+      select
+        (select count(*) from users) as registered,
+        (select count(distinct owner) from owner_sessions where owner is not null) as started,
+        (select count(*) from (
+           select owner from owner_sessions where owner is not null
+           group by owner having count(distinct (started_at at time zone 'utc')::date) >= 2
+         ) t) as returned,
+        (select count(distinct user_id) from billing_subscriptions where status = 'active') as subscribed
+    `)) as unknown as Array<Record<string, string | number>>;
+    const f = funnelRows[0] ?? {};
+
+    const cohortRows = (await this.db.execute(sql`
+      with cohort as (
+        select id, date_trunc('week', created_at at time zone 'utc') as week_start
+        from users
+        where created_at >= date_trunc('week', (${now.toISOString()}::timestamptz at time zone 'utc')) - interval '7 weeks'
+      ),
+      owner_sessions as (
+        select coalesce(s.owner_user_id, st.parent_user_id, st.user_id) as owner,
+               s.started_at at time zone 'utc' as started_at
+        from sessions s
+        join students st on st.id = s.student_id
+      )
+      select to_char(c.week_start, 'YYYY-MM-DD') as week_start,
+             count(distinct c.id)::int as signups,
+             ${sql.join(
+               Array.from({ length: 6 }, (_, k) => sql`
+                 count(distinct c.id) filter (where exists (
+                   select 1 from owner_sessions os
+                   where os.owner = c.id
+                     and os.started_at >= c.week_start + ${`${k * 7} days`}::interval
+                     and os.started_at <  c.week_start + ${`${(k + 1) * 7} days`}::interval
+                 ))::int as ${sql.raw(`w${k}`)}
+               `),
+               sql`, `,
+             )}
+      from cohort c
+      group by c.week_start
+      order by c.week_start
+    `)) as unknown as Array<Record<string, string | number>>;
+
+    const nowMs = now.getTime();
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    return {
+      funnel: {
+        registered: Number(f.registered ?? 0),
+        startedSession: Number(f.started ?? 0),
+        returnedAnotherDay: Number(f.returned ?? 0),
+        subscribed: Number(f.subscribed ?? 0),
+      },
+      cohorts: cohortRows.map((r) => {
+        const weekStartMs = Date.parse(`${r.week_start}T00:00:00Z`);
+        return {
+          weekStart: String(r.week_start),
+          signups: Number(r.signups),
+          retainedByWeek: Array.from({ length: 6 }, (_, k) => {
+            // "0%" and "too early to say" must never look the same.
+            if (weekStartMs + (k + 1) * WEEK > nowMs) return null;
+            return Math.round((100 * Number(r[`w${k}`] ?? 0)) / Math.max(1, Number(r.signups)));
+          }),
+        };
+      }),
+    };
+  }
+
+  async getAccountById(userId: string) {
+    const rows = await this.db
+      .select({
+        userId: schema.users.id,
+        email: schema.users.email,
+        displayName: schema.users.displayName,
+        role: schema.users.role,
+        plan: schema.users.plan,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async listSubscriptions(limit: number) {
+    return this.db
+      .select({
+        userId: schema.billingSubscriptions.userId,
+        email: schema.users.email,
+        provider: schema.billingSubscriptions.provider,
+        plan: schema.billingSubscriptions.plan,
+        status: schema.billingSubscriptions.status,
+        subscriptionRef: schema.billingSubscriptions.subscriptionRef,
+        updatedAt: schema.billingSubscriptions.updatedAt,
+      })
+      .from(schema.billingSubscriptions)
+      .innerJoin(schema.users, eq(schema.users.id, schema.billingSubscriptions.userId))
+      .orderBy(desc(schema.billingSubscriptions.updatedAt))
+      .limit(limit);
+  }
+
+  async searchAccounts(query: string, limit: number) {
+    const q = query.trim();
+    if (!q) return [];
+    const like = `%${q.toLowerCase()}%`;
+    const rows = (await this.db.execute(sql`
+      select u.id as user_id, u.email, u.display_name, u.role, u.plan, u.created_at,
+             (select count(*) from students s where s.user_id = u.id or s.parent_user_id = u.id) as students
+      from users u
+      where lower(u.email) like ${like} or lower(coalesce(u.display_name, '')) like ${like}
+      order by u.created_at desc
+      limit ${Math.max(1, Math.min(100, Math.floor(limit)))}
+    `)) as unknown as Array<{
+      user_id: string;
+      email: string;
+      display_name: string | null;
+      role: string;
+      plan: string;
+      students: string | number;
+      created_at: Date;
+    }>;
+    return rows.map((r) => ({
+      userId: r.user_id,
+      email: r.email,
+      displayName: r.display_name,
+      role: r.role,
+      plan: r.plan,
+      students: Number(r.students),
+      createdAt: new Date(r.created_at),
+    }));
+  }
+}
+
+/** Which push service a device uses, without the address that reaches it. */
+function pushService(endpoint: string): string {
+  try {
+    return new URL(endpoint).hostname;
+  } catch {
+    return "unknown";
   }
 }

@@ -2,8 +2,40 @@
 
 import { useEffect, useRef, useState } from "react";
 import MathText from "../MathText";
+import Face from "./Face";
+import dynamic from "next/dynamic";
+import type { Speech } from "./avatar/Avatar3D";
+// The 3D engine is heavy and only needed when a tutor has a rigged model,
+// so it arrives on demand and never on the server.
+const Avatar3D = dynamic(() => import("./avatar/Avatar3D"), { ssr: false });
+// The face reader is heavy too, and only for learners allowed to use it.
+const FaceSense = dynamic(() => import("./face/FaceSense"), { ssr: false });
+import { canSeeFace } from "./face/FaceSense";
+import { hintToSend, type Hint, type Label } from "./face/expression";
+import { encodeVoice, pitchOf, rms, summarise, type Frame } from "./voice/features";
+import { bondStage, maturityFromDays, moodFromText, voiceToneFromEnergy } from "./face-logic";
+import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from "./face-appearance";
+import { audioContext, canAnalyse, canCaptureVoice, installAudioUnlock, pickRecordingFormat, unlockAudio } from "./audio";
+import { ConversationLoop, conversationSupported, type ConversationState } from "./conversation";
+import { directionFor } from "./rtl";
+import { useLang } from "../i18n";
+import Highlighted from "../Highlighted";
+import Board from "./Board";
+import {
+  enqueue, loadQueue, newId, partitionStale, readyFor, remove, saveQueue, shouldWait, waitingLine,
+  type Outgoing,
+} from "./outbox";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
+
+/** The browser's store, or nothing at all in private modes that refuse it. */
+function storageOrNull(): Storage | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 interface Persona {
   id: string;
@@ -11,6 +43,8 @@ interface Persona {
   style: string;
   color?: string;
   accent?: string;
+  /** A rigged 3D character, when the artist has made one for this tutor. */
+  model?: string;
 }
 interface Pack {
   id: string;
@@ -34,45 +68,29 @@ interface Msg {
 }
 type Format = "plain" | "story" | "comic" | "song";
 
-/** Avatar v0: stylized SVG face — blinks when idle, mouth moves while speaking. */
-function Avatar({ color = "#e8875a", accent = "#8a4b2d", speaking, size = 72 }: {
-  color?: string;
-  accent?: string;
-  speaking: boolean;
-  size?: number;
-}) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden>
-      <circle cx="50" cy="52" r="40" fill={color} />
-      <circle cx="50" cy="30" r="26" fill={accent} opacity="0.25" />
-      <g className="avatar-eyes">
-        <circle cx="38" cy="46" r="4.5" fill="#1a1a2e" />
-        <circle cx="62" cy="46" r="4.5" fill="#1a1a2e" />
-        <circle cx="39.5" cy="44.5" r="1.4" fill="#fff" />
-        <circle cx="63.5" cy="44.5" r="1.4" fill="#fff" />
-      </g>
-      {speaking ? (
-        <ellipse className="avatar-mouth-talking" cx="50" cy="66" rx="9" ry="6" fill="#1a1a2e" />
-      ) : (
-        <path d="M 41 64 Q 50 72 59 64" stroke="#1a1a2e" strokeWidth="3" fill="none" strokeLinecap="round" />
-      )}
-      <circle cx="30" cy="58" r="4" fill="#fff" opacity="0.35" />
-      <circle cx="70" cy="58" r="4" fill="#fff" opacity="0.35" />
-    </svg>
-  );
-}
+// The living persona lives in Face.tsx; its inner weather in face-logic.ts.
 
 export default function Home() {
+  const { t, suggest } = useLang();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [personaId, setPersonaId] = useState("");
   const [packId, setPackId] = useState("");
   const [languages, setLanguages] = useState<Language[]>([]);
   const [language, setLanguage] = useState("en");
+  useEffect(() => suggest(language), [language, suggest]);
   const [name, setName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [family, setFamily] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [family, setFamily] = useState<Array<{ id: string; displayName: string; tutorName?: string | null; look?: Look }>>([]);
+  const [tutorNameDraft, setTutorNameDraft] = useState("");
+  const [tutorNameSaved, setTutorNameSaved] = useState(false);
+  const [sessionTutorName, setSessionTutorName] = useState<string | null>(null);
+  const [bondSessions, setBondSessions] = useState(0);
+  const [bondDays, setBondDays] = useState(0);
+  const emptyLook: Look = { skin: null, hair: null, hairColor: null };
+  const [lookDraft, setLookDraft] = useState<Look>(emptyLook);
+  const [sessionLook, setSessionLook] = useState<Look>(emptyLook);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -99,18 +117,116 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Decided in the browser, after hydration: the server has no microphone.
+  const [canTalk, setCanTalk] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  // Questions the network swallowed. They live in the browser's own store,
+  // so closing the tab does not lose them either.
+  const [waiting, setWaiting] = useState<Outgoing[]>([]);
+  const flushing = useRef(false);
+  /** Always the current flush, so the one-time listener is never stale. */
+  const flushRef = useRef<() => void>(() => {});
   const [format, setFormat] = useState<Format>("plain");
   const [voiceOn, setVoiceOn] = useState(true);
   const [showPractice, setShowPractice] = useState(false);
+  const [lessonSkillId, setLessonSkillId] = useState<string | null>(null);
+  const [lessonTitle, setLessonTitle] = useState<string | null>(null);
+  const [examinable, setExaminable] = useState(true);
+  const [assessable, setAssessable] = useState(true);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [verdicts, setVerdicts] = useState<Record<number, boolean | null>>({});
+  const [convo, setConvo] = useState<ConversationState>("off");
   const bottom = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const voiceEnergy = useRef<number[]>([]);
+  // Voice familiarity: only when the account holder allowed it for this
+  // learner. Two numbers per tenth of a second while they talk, never audio.
+  const voiceFamiliar = useRef(false);
+  const voiceFrames = useRef<Frame[]>([]);
   const photoInput = useRef<HTMLInputElement>(null);
+  const convoLoop = useRef<ConversationLoop | null>(null);
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
+  /** The words behind the voice now playing, for lip shapes timed to it. */
+  const speechText = useRef<string>("");
+  // A browser without WebGL, or a model that would not load, gets the
+  // drawn face instead. Remembered per model so it is not retried every render.
+  const [avatarFallback, setAvatarFallback] = useState<string | null>(null);
+  // Face hints: allowed for this session by the account holder? And what the
+  // face has steadily been doing, plus what the tutor was last told.
+  const [faceAllowed, setFaceAllowed] = useState(false);
+  const steadyFace = useRef<Label>("none");
+  const lastFaceSent = useRef<{ hint: Hint | null; at: number }>({ hint: null, at: 0 });
+  /** The hint worth sending with this turn, if any. Records it as sent. */
+  function takeFaceHint(): Hint | null {
+    if (!faceAllowed) return null;
+    const now = Date.now();
+    const hint = hintToSend(steadyFace.current, lastFaceSent.current, now);
+    if (hint) lastFaceSent.current = { hint, at: now };
+    return hint;
+  }
+  const busyRef = useRef(false);
+  const speakingRef = useRef(false);
+  // At most one utterance waits while the tutor is mid-reply; a newer one
+  // replaces it (the learner's latest words are what they mean now).
+  const pendingSegment = useRef<{ blob: Blob; voice: string | null } | null>(null);
 
   const persona = personas.find((p) => p.id === personaId);
+  const bondInfo = bondStage(bondSessions);
+  const bond = bondInfo.stage;
+  const maturity = maturityFromDays(bondDays);
+  // The face's emotional weather follows the tutor's own last words.
+  const tutorMood = moodFromText([...messages].reverse().find((m) => m.role === "assistant")?.content ?? null);
+
+  // Real lipsync: an analyser rides on the playing voice so the mouth moves
+  // with the ACTUAL sound, not a canned loop. It is attached ONLY when the
+  // audio engine is awake, because routing a voice through a suspended
+  // context (Safari's default) would silence the tutor completely.
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  function getMouthLevel(): number {
+    return getMouthLevelOrNull() ?? 0;
+  }
+  /** Live loudness, or null when the voice cannot be analysed here. */
+  function getMouthLevelOrNull(): number | null {
+    const analyser = analyserRef.current;
+    const data = levelData.current;
+    if (!analyser || !data) return null;
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const d = (data[i] - 128) / 128;
+      sum += d * d;
+    }
+    return Math.min(1, Math.sqrt(sum / data.length) * 4);
+  }
+
+  // Wake the audio engine on the learner's first touch. iOS keeps it asleep
+  // until then, and an asleep engine means a silent tutor.
+  useEffect(() => installAudioUnlock(), []);
+
+  // Some browsers hand over a microphone and then have no recorder to put it
+  // in. Find out once, and never offer a button that cannot work.
+  useEffect(() => setCanTalk(canCaptureVoice(window)), []);
+
+  // Anything the network swallowed last time, including before the tab was
+  // closed, and a flush the moment the connection comes back.
+  useEffect(() => {
+    setWaiting(loadQueue(storageOrNull()));
+    const onBack = () => void flushRef.current();
+    window.addEventListener("online", onBack);
+    return () => window.removeEventListener("online", onBack);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Also flush when the session opens, or when a message joins an empty queue
+  // while the connection is already back.
+  useEffect(() => {
+    if (sessionId && waiting.length && navigator.onLine) void flushOutbox();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, waiting.length]);
 
   useEffect(() => {
     fetch(`${API}/personas`).then((r) => r.json()).then(setPersonas).catch(() => {});
@@ -119,8 +235,20 @@ export default function Home() {
     const savedLang = localStorage.getItem("dingba_language");
     if (savedLang) setLanguage(savedLang);
     // A question typed into the homepage ask box lands in the composer here.
-    const ask = new URLSearchParams(window.location.search).get("ask");
+    const params = new URLSearchParams(window.location.search);
+    const ask = params.get("ask");
     if (ask) setInput(ask.slice(0, 2000));
+    // A plan item tapped on the dashboard arrives as a lesson to start:
+    // the pack is preselected and the session opens on that skill.
+    const lessonParam = params.get("lesson");
+    const packParam = params.get("pack");
+    const studentParam = params.get("student");
+    if (lessonParam && packParam) {
+      setLessonSkillId(lessonParam);
+      setPackId(packParam);
+    }
+    // A learner opened from the school portal (or a plan) arrives preselected.
+    if (studentParam) setStudentId(studentParam);
     const t = localStorage.getItem("tutor_token");
     if (t) {
       setToken(t);
@@ -140,15 +268,121 @@ export default function Home() {
     return () => { delete document.body.dataset.session; };
   }, [sessionId]);
 
-  function playAudio(src: Blob | string) {
+  // The open mic never outlives the session it was opened for.
+  useEffect(() => {
+    if (!sessionId && convoLoop.current) {
+      convoLoop.current.stop();
+      convoLoop.current = null;
+      pendingSegment.current = null;
+    }
+    return () => {
+      convoLoop.current?.stop();
+      convoLoop.current = null;
+    };
+  }, [sessionId]);
+
+  function getSpeech(): Speech | null {
+    const audio = currentAudio.current;
+    if (!audio) return null;
+    return {
+      text: speechText.current,
+      time: audio.currentTime,
+      duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+    };
+  }
+
+  function playAudio(src: Blob | string, text = "") {
+    speechText.current = text;
     const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const audio = new Audio(url);
+    // iPhones need the element itself marked inline, and a nudge in case the
+    // learner's first tap has not woken the audio engine yet.
+    audio.preload = "auto";
+    (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    unlockAudio();
+    // Feed the face: route this voice through an analyser so the mouth
+    // follows the real loudness. HEARING THE TUTOR COMES FIRST: a suspended
+    // context (Safari's default until a gesture) would swallow the sound, so
+    // in that case we play the plain element and the mouth falls back to its
+    // natural talking wave.
+    analyserRef.current = null;
+    const ctx = audioContext();
+    if (canAnalyse(ctx) && ctx) {
+      try {
+        sourceRef.current?.disconnect();
+        const srcNode = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.4;
+        srcNode.connect(analyser);
+        analyser.connect(ctx.destination);
+        sourceRef.current = srcNode;
+        analyserRef.current = analyser;
+        levelData.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+      } catch {
+        analyserRef.current = null;
+      }
+    }
+    currentAudio.current = audio;
     setSpeaking(true);
+    speakingRef.current = true;
     audio.onended = audio.onerror = () => {
       setSpeaking(false);
+      speakingRef.current = false;
+      if (currentAudio.current === audio) currentAudio.current = null;
       if (typeof src !== "string") URL.revokeObjectURL(url);
     };
-    audio.play().catch(() => setSpeaking(false));
+    audio.play().catch(() => {
+      setSpeaking(false);
+      speakingRef.current = false;
+    });
+  }
+
+  /** Barge-in: the learner spoke over the tutor, so the tutor stops talking. */
+  function stopSpeaking() {
+    const audio = currentAudio.current;
+    if (audio) {
+      audio.pause();
+      currentAudio.current = null;
+    }
+    setSpeaking(false);
+    speakingRef.current = false;
+  }
+
+  function stopConversation() {
+    convoLoop.current?.stop();
+    convoLoop.current = null;
+    pendingSegment.current = null;
+  }
+
+  async function toggleConversation() {
+    if (convoLoop.current) {
+      stopConversation();
+      return;
+    }
+    if (!conversationSupported()) {
+      setError(t("This browser can't hold an open conversation. Use hold-to-talk instead."));
+      return;
+    }
+    setError(null);
+    const loop = new ConversationLoop({
+      onSegment: (blob, heard) => {
+        const voice = heard ? encodeVoice(heard) : null;
+        if (busyRef.current) pendingSegment.current = { blob, voice };
+        else void sendVoice(blob, "neutral", voice);
+      },
+      measureVoice: () => voiceFamiliar.current && !participantId,
+      onState: (s) => setConvo(s),
+      isTutorSpeaking: () => speakingRef.current,
+      onBargeIn: () => stopSpeaking(),
+      onError: (m) => setError(m),
+    });
+    convoLoop.current = loop;
+    try {
+      await loop.start();
+    } catch {
+      convoLoop.current = null;
+    }
   }
 
   async function speakMessage(text: string) {
@@ -160,9 +394,48 @@ export default function Home() {
         body: JSON.stringify({ text: text.slice(0, 2000), personaId, language }),
       });
       if (!res.ok) throw new Error("voice unavailable");
-      playAudio(await res.blob());
+      playAudio(await res.blob(), text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "voice unavailable");
+    }
+  }
+
+  async function saveLook(change: Partial<Look>) {
+    if (!token || !studentId) return;
+    const next: Look = { ...lookDraft, ...change };
+    setLookDraft(next); // optimistic: the preview updates instantly
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/tutor-look`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ skin: next.skin ?? "", hair: next.hair ?? "", hairColor: next.hairColor ?? "" }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = (await res.json()) as { look: Look };
+      setLookDraft(json.look);
+      setFamily((f) => f.map((s) => (s.id === studentId ? { ...s, look: json.look } : s)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save the look");
+    }
+  }
+
+  async function saveTutorName() {
+    if (!token || !studentId) return;
+    setError(null);
+    try {
+      const res = await fetch(`${API}/students/${studentId}/tutor-name`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: tutorNameDraft }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
+      const json = (await res.json()) as { tutorName: string | null };
+      setFamily((f) => f.map((s) => (s.id === studentId ? { ...s, tutorName: json.tutorName } : s)));
+      setTutorNameDraft(json.tutorName ?? "");
+      setTutorNameSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save the name");
     }
   }
 
@@ -175,15 +448,27 @@ export default function Home() {
           "content-type": "application/json",
           ...(token && studentId ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(
-          token && studentId
+        body: JSON.stringify({
+          ...(token && studentId
             ? { studentId, personaId, packId, language }
-            : { studentName: name || "Student", personaId, packId, language, ...(parentEmail ? { parentEmail } : {}) },
-        ),
+            : { studentName: name || "Student", personaId, packId, language, ...(parentEmail ? { parentEmail } : {}) }),
+          ...(lessonSkillId ? { lessonSkillId } : {}),
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
       setSessionId(json.sessionId);
+      setSessionTutorName(json.persona?.name ?? null);
+      setBondSessions(json.bond?.sessions ?? 0);
+      setBondDays(json.bond?.days ?? 0);
+      setSessionLook(json.look ?? emptyLook);
+      setLessonTitle(json.lesson?.title ?? null);
+      setExaminable(json.examinable !== false);
+      setAssessable(json.assessable !== false);
+      setFaceAllowed(json.faceHints === true);
+      voiceFamiliar.current = json.voiceFamiliarity === true;
+      steadyFace.current = "none";
+      lastFaceSent.current = { hint: null, at: 0 };
       setVerdicts({});
       if (json.greeting) {
         // The tutor speaks first, like a person would.
@@ -218,6 +503,8 @@ export default function Home() {
       const json = await res.json();
       setSessionId(json.sessionId);
       setParticipantId(json.participantId);
+      setFaceAllowed(false);
+      voiceFamiliar.current = false;
       setHostName(json.host);
       setPersonaId(json.persona.id);
       setMessages([
@@ -327,7 +614,13 @@ export default function Home() {
       setMessages((m) => [
         ...m,
         { role: "user", content: `Finished the mock exam.` },
-        { role: "assistant", content: `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.\n\n${json.postMortem}` },
+        {
+          role: "assistant",
+          content:
+            `Score: ${json.score}/${json.of} in ${Math.round(json.durationSec / 60)} min.` +
+            (json.unscored ? ` ${json.unscored} answer${json.unscored === 1 ? "" : "s"} need${json.unscored === 1 ? "s" : ""} your tutor's judgement.` : "") +
+            `\n\n${json.postMortem}`,
+        },
       ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not finish exam");
@@ -336,42 +629,46 @@ export default function Home() {
     }
   }
 
-  async function send() {
-    if (!input.trim() || !sessionId || busy) return;
-    const text = input.trim();
-    setInput("");
-    setError(null);
-    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
-    setBusy(true);
-
+  /**
+   * Deliver one message and stream the answer. Returns how it went, so the
+   * caller can tell a dead connection (worth waiting for) from an answer the
+   * server actually gave (never retried).
+   */
+  async function deliver(text: string, fmt: Format, faceHint: Hint | null = null): Promise<{ ok: boolean; threw: boolean; status?: number; error?: string }> {
+    const attempt = () =>
+      fetch(`${API}/sessions/${sessionId}/message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          text,
+          ...(fmt !== "plain" ? { format: fmt } : {}),
+          ...(participantId ? { participantId } : {}),
+          ...(faceHint && !participantId ? { faceHint } : {}),
+        }),
+      });
+    // One quick retry first: a blip is not an outage.
+    let res: Response;
     try {
-      const attempt = () =>
-        fetch(`${API}/sessions/${sessionId}/message`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            text,
-            ...(format !== "plain" ? { format } : {}),
-            ...(participantId ? { participantId } : {}),
-          }),
-        });
-      // One retry on network failure — flaky connections shouldn't eat a turn.
-      let res: Response;
+      res = await attempt();
+    } catch {
+      await new Promise((r) => setTimeout(r, 1200));
       try {
         res = await attempt();
       } catch {
-        await new Promise((r) => setTimeout(r, 1200));
-        res = await attempt();
+        return { ok: false, threw: true };
       }
-      if (res.status === 402) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? "You've reached today's limit. Upgrade to keep going.");
-      }
-      if (!res.ok || !res.body) throw new Error(`tutor unavailable (${res.status})`);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let full = "";
+    }
+    if (res.status === 402) {
+      const j = await res.json().catch(() => null);
+      return { ok: false, threw: false, status: 402, error: j?.error ?? "You've reached today's limit. Upgrade to keep going." };
+    }
+    if (!res.ok || !res.body) return { ok: false, threw: false, status: res.status, error: `tutor unavailable (${res.status})` };
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let full = "";
+    try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -383,6 +680,9 @@ export default function Home() {
           if (!data) continue;
           try {
             const evt = JSON.parse(data);
+            // At capacity is different from broken: show the server's own
+            // wording, which carries the real wait hint.
+            if (evt.busy && typeof evt.error === "string") throw new Error(evt.error);
             if (evt.error) throw new Error("Your tutor had trouble replying. Try that again.");
             // The tutor saw real distress: offer the trusted person, one tap.
             if (evt.care) setCare(evt.care);
@@ -399,38 +699,173 @@ export default function Home() {
           }
         }
       }
-      if (voiceOn && full.trim()) speakMessage(full);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "message failed");
+      // The answer was cut off part way. The tutor did hear the question, so
+      // this is not a message to send again.
+      return { ok: false, threw: false, status: res.status, error: e instanceof Error ? e.message : "message failed" };
+    }
+    if (voiceOn && full.trim()) speakMessage(full);
+    return { ok: true, threw: false };
+  }
+
+  async function send() {
+    if (!input.trim() || !sessionId || busy) return;
+    const text = input.trim();
+    setInput("");
+    setError(null);
+    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    setBusy(true);
+
+    const outcome = await deliver(text, format, takeFaceHint());
+    if (!outcome.ok) {
       setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+      if (shouldWait(outcome)) {
+        // The banner promises these send themselves later. Keep that promise.
+        const item: Outgoing = { id: newId(Date.now()), sessionId, text, format, queuedAt: Date.now() };
+        const next = enqueue(waiting, item);
+        if (next.accepted) {
+          setWaiting(next.queue);
+          saveQueue(storageOrNull(), next.queue);
+          setError(null);
+        } else {
+          setError(t("Too many messages are already waiting for the connection. Try again once you are back online."));
+        }
+      } else if (outcome.error) {
+        setError(outcome.error);
+      }
+    }
+    setBusy(false);
+  }
+
+  /** Send everything that has been waiting, oldest first, one at a time. */
+  async function flushOutbox() {
+    if (flushing.current || busy || !sessionId) return;
+    const { fresh, stale } = partitionStale(waiting, Date.now());
+    if (stale.length) {
+      // Say so rather than let a question vanish without a word.
+      setWaiting(fresh);
+      saveQueue(storageOrNull(), fresh);
+      setError(`${stale.length} message${stale.length === 1 ? "" : "s"} waited too long to be worth answering, so ${stale.length === 1 ? "it was" : "they were"} let go. Ask again if you still need to.`);
+    }
+    const mine = readyFor(fresh, sessionId);
+    if (!mine.length) return;
+    flushing.current = true;
+    setBusy(true);
+    try {
+      let queue = fresh;
+      for (const item of mine) {
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          const alreadyShown = last?.role === "user" && last.content === item.text;
+          return alreadyShown
+            ? [...m, { role: "assistant" as const, content: "" }]
+            : [...m, { role: "user" as const, content: item.text }, { role: "assistant" as const, content: "" }];
+        });
+        const outcome = await deliver(item.text, item.format as Format);
+        if (!outcome.ok) {
+          setMessages((m) => (m[m.length - 1]?.content === "" ? m.slice(0, -1) : m));
+          if (shouldWait(outcome)) break; // still no connection: leave the rest waiting
+          // The server answered, even to refuse. That is this message's fate.
+          if (outcome.error) setError(outcome.error);
+        }
+        queue = remove(queue, item.id);
+        setWaiting(queue);
+        saveQueue(storageOrNull(), queue);
+      }
     } finally {
+      flushing.current = false;
       setBusy(false);
     }
   }
 
+  flushRef.current = () => void flushOutbox();
+
   async function startRecording() {
     if (busy || recording) return;
     setError(null);
+    if (!canCaptureVoice(window)) {
+      setError(t("This browser cannot record voice. You can still type, and your tutor still speaks back."));
+      return;
+    }
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError(t("We can't reach your microphone. Check permissions and try again."));
+      return;
+    }
+    // Past this point the microphone is OPEN. Anything that goes wrong must
+    // close it again, or the recording light stays on after we have given up.
+    try {
       // iOS Safari records audio/mp4, not webm — pick the first supported type.
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find(
-        (t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(t),
-      );
+      const mime = pickRecordingFormat(MediaRecorder.isTypeSupported?.bind(MediaRecorder));
       const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunks.current = [];
+      // Listen to HOW they sound while they speak: sample their voice loudness
+      // ~10x a second so we can tell a flat, tired voice from a lively one.
+      voiceEnergy.current = [];
+      let toneSource: MediaStreamAudioSourceNode | null = null;
+      let toneTimer: ReturnType<typeof setInterval> | null = null;
+      try {
+        // The shared engine, and only while it is awake; a suspended context
+        // would just feed the tone reader silence.
+        unlockAudio();
+        const toneCtx = audioContext();
+        if (canAnalyse(toneCtx) && toneCtx) {
+          toneSource = toneCtx.createMediaStreamSource(stream);
+          const srcNode = toneSource;
+          const analyser = toneCtx.createAnalyser();
+          analyser.fftSize = 256;
+          srcNode.connect(analyser);
+          const buf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+          // A longer window for pitch, only when voice familiarity is on:
+          // enough of the wave to hold two periods of a deep voice.
+          voiceFrames.current = [];
+          const listen = voiceFamiliar.current && !participantId;
+          const pitchTap = listen ? toneCtx.createAnalyser() : null;
+          if (pitchTap) {
+            pitchTap.fftSize = 2048;
+            srcNode.connect(pitchTap);
+          }
+          const wave = pitchTap ? new Float32Array(new ArrayBuffer(pitchTap.fftSize * 4)) : null;
+          toneTimer = setInterval(() => {
+            analyser.getByteTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) {
+              const d = (buf[i] - 128) / 128;
+              sum += d * d;
+            }
+            voiceEnergy.current.push(Math.sqrt(sum / buf.length));
+            if (voiceEnergy.current.length > 400) voiceEnergy.current.shift();
+            if (pitchTap && wave) {
+              pitchTap.getFloatTimeDomainData(wave);
+              voiceFrames.current.push({ level: rms(wave), pitch: pitchOf(wave, toneCtx.sampleRate) });
+              if (voiceFrames.current.length > 1200) voiceFrames.current.shift();
+            }
+          }, 100);
+        }
+      } catch {
+        toneSource = null;
+      }
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
       rec.onstop = async () => {
+        if (toneTimer) clearInterval(toneTimer);
+        // The engine is shared and stays alive; just drop this mic tap.
+        toneSource?.disconnect();
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
         if (blob.size < 1000) return; // accidental tap
-        await sendVoice(blob);
+        const heard = voiceFamiliar.current && !participantId ? summarise(voiceFrames.current) : null;
+        voiceFrames.current = [];
+        await sendVoice(blob, voiceToneFromEnergy(voiceEnergy.current), heard ? encodeVoice(heard) : null);
       };
       recorder.current = rec;
       rec.start();
       setRecording(true);
     } catch {
-      setError("We can't reach your microphone. Check permissions and try again.");
+      stream.getTracks().forEach((t) => t.stop());
+      setError(t("This browser could not start recording. You can still type, and your tutor still speaks back."));
     }
   }
 
@@ -439,14 +874,24 @@ export default function Home() {
     setRecording(false);
   }
 
-  async function sendVoice(blob: Blob) {
+  async function sendVoice(blob: Blob, tone: "low" | "bright" | "neutral" = "neutral", voiceFeatures: string | null = null) {
     if (!sessionId) return;
+    const faceHintNow = participantId ? null : takeFaceHint();
     setBusy(true);
+    busyRef.current = true;
     setMessages((m) => [...m, { role: "user", content: "🎤 …" }]);
     try {
       const res = await fetch(`${API}/sessions/${sessionId}/voice`, {
         method: "POST",
-        headers: { "content-type": blob.type || "audio/webm" },
+        headers: {
+          "content-type": blob.type || "audio/webm",
+          // How they sounded, so the tutor can notice the person (never shown).
+          ...(tone !== "neutral" ? { "x-voice-tone": tone } : {}),
+          // What their face has steadily been doing, when they allowed it.
+          ...(faceHintNow ? { "x-face-hint": faceHintNow } : {}),
+          // Four numbers about how they sounded, when voice familiarity is on.
+          ...(voiceFeatures ? { "x-voice-features": voiceFeatures } : {}),
+        },
         body: blob,
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `voice failed (${res.status})`);
@@ -464,35 +909,49 @@ export default function Home() {
       setMessages((m) => (m[m.length - 1]?.content === "🎤 …" ? m.slice(0, -1) : m));
     } finally {
       setBusy(false);
+      busyRef.current = false;
+      // In conversation mode, anything said while the tutor was replying
+      // goes out now.
+      const next = pendingSegment.current;
+      if (next && convoLoop.current) {
+        pendingSegment.current = null;
+        void sendVoice(next.blob, "neutral", next.voice);
+      }
     }
   }
 
-  async function sendPhoto(file: File) {
+  /** The whiteboard hands over a picture; it travels as a photo does. */
+  function sendDrawing(image: Blob) {
+    setBoardOpen(false);
+    void sendPhoto(new File([image], "board.png", { type: "image/png" }), "✏️ Showed my working");
+  }
+
+  async function sendPhoto(file: File, label = "📷 Shared a photo") {
     if (!sessionId || busy) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError("That photo is too large. Keep it under 5MB.");
+      setError(t("That picture is too large. Keep it under 5MB."));
       return;
     }
     setBusy(true);
     setError(null);
-    setMessages((m) => [...m, { role: "user", content: "📷 …" }]);
+    setMessages((m) => [...m, { role: "user", content: `${label.slice(0, 2)} …` }]);
     try {
       const res = await fetch(`${API}/sessions/${sessionId}/see`, {
         method: "POST",
         headers: { "content-type": file.type || "image/jpeg" },
         body: file,
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `photo failed (${res.status})`);
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `could not send that picture (${res.status})`);
       const json = await res.json();
       setMessages((m) => [
         ...m.slice(0, -1),
-        { role: "user", content: "📷 Shared a photo" },
+        { role: "user", content: label },
         { role: "assistant", content: json.reply },
       ]);
       if (voiceOn && json.reply) speakMessage(json.reply);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "photo failed");
-      setMessages((m) => (m[m.length - 1]?.content === "📷 …" ? m.slice(0, -1) : m));
+      setError(e instanceof Error ? e.message : t("That picture could not be sent."));
+      setMessages((m) => (m[m.length - 1]?.content === `${label.slice(0, 2)} …` ? m.slice(0, -1) : m));
     } finally {
       setBusy(false);
     }
@@ -524,11 +983,11 @@ export default function Home() {
       setVerdicts((v) => ({ ...v, [p.index]: json.correct }));
       setMessages((m) => [
         ...m,
-        { role: "user", content: `My answer to "${p.prompt}": ${answer}` },
+        { role: "user", content: t("My answer to \"{prompt}\": {answer}", { prompt: p.prompt, answer }) },
         { role: "assistant", content: json.feedback },
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "practice failed");
+      setError(e instanceof Error ? e.message : t("That answer could not be checked."));
     } finally {
       setBusy(false);
     }
@@ -545,7 +1004,7 @@ export default function Home() {
       setSessionId(null);
       setShowPractice(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not end session");
+      setError(e instanceof Error ? e.message : t("The session could not be ended."));
     }
   }
 
@@ -554,12 +1013,12 @@ export default function Home() {
       <main className="shell">
         <div className="card fadeUp">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <Avatar color={persona?.color} accent={persona?.accent} speaking={false} size={56} />
-            <h2 style={{ margin: 0 }}>Session recap from {persona?.name}</h2>
+            <Face personaId={persona?.id} color={persona?.color} accent={persona?.accent} speaking={false} mood="warm" bond={bond} live={false} size={56} />
+            <h2 style={{ margin: 0 }}>{t("Session recap from {name}", { name: sessionTutorName ?? persona?.name ?? "" })}</h2>
           </div>
           <p style={{ whiteSpace: "pre-wrap" }}>{recap}</p>
           <button className="btn big" onClick={() => { setRecap(null); setMessages([]); }}>
-            Start another session
+            {t("Start another session")}
           </button>
         </div>
       </main>
@@ -570,20 +1029,20 @@ export default function Home() {
     return (
       <main className="shell">
         <div className="hero fadeUp">
-          <h1>What do you want to <span>learn</span> today?</h1>
-          <p>Ask anything. Learn anything. Your tutor remembers you.</p>
+          <h1><Highlighted text={t("What do you want to {learn} today?")} /></h1>
+          <p>{t("Ask anything. Learn anything. Your tutor remembers you.")}</p>
         </div>
         {error && <p className="err">{error}</p>}
         {personas.length === 0 && (
-          <p className="notice">Waking your tutors up. Give it a moment, then try again.</p>
+          <p className="notice">{t("Waking your tutors up. Give it a moment, then try again.")}</p>
         )}
         <div className="card fadeUp">
           {family.length > 0 ? (
             <>
-              <label className="lbl">Who&apos;s learning today?</label>
+              <label className="lbl">{t("Who's learning today?")}</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {family.map((s) => (
-                  <button key={s.id} onClick={() => setStudentId(s.id)}
+                  <button key={s.id} onClick={() => { setStudentId(s.id); setTutorNameDraft(s.tutorName ?? ""); setTutorNameSaved(false); setLookDraft(s.look ?? emptyLook); }}
                     className={`pill${studentId === s.id ? " on" : ""}`}>
                     <b>{s.displayName}</b>
                   </button>
@@ -592,26 +1051,101 @@ export default function Home() {
             </>
           ) : (
             <>
-              <label className="lbl">Your name</label>
+              <label className="lbl">{t("Your name")}</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="inp" placeholder="Ada" />
 
-              <label className="lbl">Parent email (optional, for session recaps)</label>
+              <label className="lbl">{t("Parent email (optional, for session recaps)")}</label>
               <input value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className="inp" placeholder="parent@example.com" type="email" />
             </>
           )}
 
-          <label className="lbl">Pick your tutor</label>
+          {lessonSkillId && (
+            <p className="notice" style={{ marginTop: 0 }}>
+              {t("Starting from your plan: this session opens as a lesson. Pick your tutor and go.")}
+            </p>
+          )}
+
+          <label className="lbl">{t("Pick your tutor")}</label>
           <div className="grid2">
             {personas.map((p) => (
               <button key={p.id} onClick={() => setPersonaId(p.id)}
                 className={`pill${personaId === p.id ? " on" : ""}`}>
-                <Avatar color={p.color} accent={p.accent} speaking={false} size={40} />
+                <Face personaId={p.id} color={p.color} accent={p.accent} speaking={false} live={false} size={40} />
                 <span><b>{p.name}</b><br /><small>{p.style}</small></span>
               </button>
             ))}
           </div>
 
-          <label className="lbl">What are we working on?</label>
+          {token && studentId && personaId && (
+            <>
+              <label className="lbl">
+                {t("Give your tutor their own name")} <small>{t("(optional, they keep their personality)")}</small>
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={tutorNameDraft}
+                  onChange={(e) => { setTutorNameDraft(e.target.value); setTutorNameSaved(false); }}
+                  className="inp"
+                  style={{ flex: 1 }}
+                  placeholder={persona?.name ?? t("Their name")}
+                  maxLength={30}
+                />
+                <button className="btn small" onClick={saveTutorName} disabled={tutorNameSaved}>
+                  {tutorNameSaved ? t("Saved") : t("Save name")}
+                </button>
+              </div>
+
+              <label className="lbl">
+                {t("Make your tutor look like anyone")} <small>{t("(they keep their voice and personality)")}</small>
+              </label>
+              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <Face
+                  personaId={personaId}
+                  color={persona?.color}
+                  accent={persona?.accent}
+                  speaking={false}
+                  mood="warm"
+                  skinTone={lookDraft.skin}
+                  hairStyle={lookDraft.hair}
+                  hairColor={lookDraft.hairColor}
+                  live={false}
+                  size={92}
+                />
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Skin tone")}</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
+                    {Object.entries(SKIN_TONES).map(([key, t]) => (
+                      <button key={key} title={key} aria-label={`skin ${key}`}
+                        onClick={() => saveLook({ skin: key })}
+                        style={{ width: 24, height: 24, borderRadius: 6, background: t.skin, cursor: "pointer",
+                          border: lookDraft.skin === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
+                    ))}
+                  </div>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Hair")}</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 10px" }}>
+                    {HAIR_STYLES.map((key) => (
+                      <button key={key} onClick={() => saveLook({ hair: key })}
+                        className={`pill${lookDraft.hair === key ? " on" : ""}`}
+                        style={{ padding: "3px 9px", fontSize: 12 }}>{key}</button>
+                    ))}
+                  </div>
+                  <small style={{ color: "var(--text-dim)" }}>{t("Hair colour")}</small>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "4px 0 0" }}>
+                    {Object.entries(HAIR_COLORS).map(([key, hex]) => (
+                      <button key={key} title={key} aria-label={`hair ${key}`}
+                        onClick={() => saveLook({ hairColor: key })}
+                        style={{ width: 24, height: 24, borderRadius: 6, background: hex, cursor: "pointer",
+                          border: lookDraft.hairColor === key ? "3px solid var(--brand)" : "1px solid var(--line)" }} />
+                    ))}
+                    <button onClick={() => saveLook({ skin: null, hair: null, hairColor: null })}
+                      className="btn quiet small" style={{ marginLeft: 4 }}>{t("Reset")}</button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <label className="lbl">{t("What are we working on?")}</label>
           <div className="grid2">
             {packs.map((p) => (
               <button key={p.id} onClick={() => setPackId(p.id)}
@@ -621,7 +1155,7 @@ export default function Home() {
             ))}
           </div>
 
-          <label className="lbl">Which language should your tutor teach in?</label>
+          <label className="lbl">{t("Which language should your tutor teach in?")}</label>
           <select
             value={language}
             onChange={(e) => {
@@ -629,20 +1163,19 @@ export default function Home() {
               localStorage.setItem("dingba_language", e.target.value);
             }}
             className="inp"
-            aria-label="Teaching language"
+            aria-label={t("Teaching language")}
           >
             {languages.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.native}
                 {l.native !== l.name ? ` (${l.name})` : ""}
-                {l.speaksAloud ? "" : " · text and listening"}
+                {l.speaksAloud ? "" : ` · ${t("text and listening")}`}
               </option>
             ))}
           </select>
           {languages.find((l) => l.code === language && !l.speaksAloud) && (
             <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "6px 0 0" }}>
-              Your tutor teaches and understands you in this language today. A speaking
-              voice for it is on the way.
+              {t("Your tutor teaches and understands you in this language today. A speaking voice for it is on the way.")}
             </p>
           )}
 
@@ -651,34 +1184,34 @@ export default function Home() {
             onClick={startSession}
             className="btn big"
             style={{ marginTop: 22 }}>
-            Start session
+            {t("Start session")}
           </button>
           <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             {!joinOpen ? (
               <p style={{ textAlign: "center", margin: 0 }}>
                 <button onClick={() => setJoinOpen(true)} className="btn ghost small">
-                  Have a class code? Join a friend&apos;s live class
+                  {t("Have a class code? Join a friend's live class")}
                 </button>
               </p>
             ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)}
-                  className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Class code" />
+                  className="inp" style={{ flex: 1, minWidth: 110 }} placeholder={t("Class code")} />
                 {!token && (
                   <input value={joinName} onChange={(e) => setJoinName(e.target.value)}
-                    className="inp" style={{ flex: 1, minWidth: 110 }} placeholder="Your name" />
+                    className="inp" style={{ flex: 1, minWidth: 110 }} placeholder={t("Your name")} />
                 )}
-                <button onClick={joinClass} className="btn">Join class</button>
+                <button onClick={joinClass} className="btn">{t("Join class")}</button>
               </div>
             )}
           </div>
         </div>
         <p className="footlinks">
           <a href="/account">
-            {token ? "Family dashboard" : "Parents: create an account for progress reports"}
+            {token ? t("Family dashboard") : t("Parents: create an account for progress reports")}
           </a>
           {" · "}
-          <a href="/credits">Built on open work 💙</a>
+          <a href="/credits">{t("Built on open work 💙")}</a>
         </p>
       </main>
     );
@@ -688,71 +1221,124 @@ export default function Home() {
     <main className="session">
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span className="avatar-live">
-            <Avatar color={persona?.color} accent={persona?.accent} speaking={speaking} size={52} />
+          <span className={`avatar-live${convo === "hearing" ? " avatar-hearing" : ""}`}>
+            {persona?.model && avatarFallback !== persona.model ? (
+              <Avatar3D
+                modelUrl={persona.model}
+                color={persona.color}
+                speaking={speaking}
+                thinking={busy && !speaking}
+                listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
+                attentive={input.trim().length > 0}
+                mood={tutorMood}
+                getLevel={getMouthLevelOrNull}
+                getSpeech={getSpeech}
+                onFallback={() => setAvatarFallback(persona.model ?? null)}
+                size={96}
+              />
+            ) : (
+            <Face
+              personaId={persona?.id}
+              color={persona?.color}
+              accent={persona?.accent}
+              speaking={speaking}
+              thinking={busy && !speaking}
+              listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
+              attentive={input.trim().length > 0}
+              mood={tutorMood}
+              bond={bond}
+              maturity={maturity}
+              skinTone={sessionLook.skin}
+              hairStyle={sessionLook.hair}
+              hairColor={sessionLook.hairColor}
+              getLevel={getMouthLevel}
+              size={96}
+            />
+            )}
           </span>
           <div>
-            <h2>{persona?.name}</h2>
-            <div className="status">{speaking ? "speaking…" : busy ? "thinking…" : "listening"}</div>
+            <h2>
+              {sessionTutorName ?? persona?.name}{" "}
+              <small style={{ fontWeight: 500, fontSize: 12, color: "var(--text-dim)" }} title={t("Your friendship grows with every session")}>
+                · {t(bondInfo.label)}
+              </small>
+            </h2>
+            <div className="status">
+              {lessonTitle ? `${t("Lesson: {title}", { title: lessonTitle })} · ` : ""}
+              {speaking
+                ? convo !== "off" ? t("speaking, talk over me any time") : t("speaking…")
+                : busy
+                  ? t("thinking…")
+                  : convo === "hearing"
+                    ? t("hearing you…")
+                    : convo === "listening"
+                      ? t("in conversation, just talk")
+                      : t("listening")}
+            </div>
+            {faceAllowed && !participantId && canSeeFace() && (
+              <FaceSense
+                tutorName={sessionTutorName ?? persona?.name ?? t("your tutor")}
+                onSteady={(label) => { steadyFace.current = label; }}
+              />
+            )}
           </div>
         </div>
         <div className="session-actions">
-          <button onClick={() => setVoiceOn(!voiceOn)} className="btn quiet small" title="Your tutor reads replies aloud">
-            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
+          <button onClick={() => setVoiceOn(!voiceOn)} className="btn quiet small" title={t("Your tutor reads replies aloud")}>
+            {voiceOn ? `🔊 ${t("Voice on")}` : `🔇 ${t("Voice off")}`}
           </button>
           {!participantId && (
             <>
-              <button onClick={startDiagnostic} className="btn quiet small">Check my level</button>
-              <button onClick={inviteFriend} className="btn quiet small">Invite</button>
-              <button onClick={startExam} className="btn quiet small">Mock exam</button>
-              <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>Practice</button>
-              <button onClick={endSession} className="btn ghost small">End</button>
+              {assessable && <button onClick={startDiagnostic} className="btn quiet small">{t("Check my level")}</button>}
+              <button onClick={inviteFriend} className="btn quiet small">{t("Invite")}</button>
+              {examinable && <button onClick={startExam} className="btn quiet small">{t("Mock exam")}</button>}
+              <button onClick={openPractice} className={`btn small${showPractice ? "" : " quiet"}`}>{t("Practice")}</button>
+              <button onClick={endSession} className="btn ghost small">{t("End")}</button>
             </>
           )}
-          {participantId && <span className="status">in {hostName}&apos;s class</span>}
+          {participantId && <span className="status">{t("in {name}'s class", { name: hostName ?? "" })}</span>}
         </div>
       </div>
 
       {inviteCode && (
         <div className="card tray" style={{ textAlign: "center" }}>
-          Friends join with code <span className="invite-code">{inviteCode}</span>
-          <div><small className="status">They tap &ldquo;Join a friend&apos;s live class&rdquo; on the home page and enter it.</small></div>
+          {t("Friends join with code")} <span className="invite-code">{inviteCode}</span>
+          <div><small className="status">{t("They tap \"Join a friend's live class\" on the home page and enter it.")}</small></div>
         </div>
       )}
 
       {care && (
         <div className="care-card fadeUp">
           <div style={{ flex: 1 }}>
-            <b>You don&apos;t have to sit with this alone.</b>
+            <b>{t("You don't have to sit with this alone.")}</b>
             <p style={{ margin: "4px 0 0", fontSize: 14.5 }}>
-              {care.name}
-              {care.relationship ? ` (${care.relationship})` : ""} is here for you. One tap and their phone rings.
+              {t("{who} is here for you. One tap and their phone rings.", { who: `${care.name}${care.relationship ? ` (${care.relationship})` : ""}` })}
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <a href={`tel:${care.phone.replace(/[^0-9+]/g, "")}`} className="btn care-call">
-              📞 Call {care.name.split(" ")[0]}
+              📞 {t("Call {name}", { name: care.name.split(" ")[0] })}
             </a>
-            <button onClick={() => setCare(null)} className="btn ghost small">Not now</button>
+            <button onClick={() => setCare(null)} className="btn ghost small">{t("Not now")}</button>
           </div>
         </div>
       )}
 
       {diagProblems && (
         <div className="card tray">
-          <b>Level check. Answer what you can, skip what you can&apos;t. Results at the end.</b>
+          <b>{t("Level check. Answer what you can, skip what you can't. Results at the end.")}</b>
           {diagProblems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>{diagSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
               <input value={diagAnswers[p.index] ?? ""} disabled={diagSubmitted.has(p.index)}
                 onChange={(e) => setDiagAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                className="inp" placeholder="answer" />
+                className="inp" placeholder={t("answer")} />
               <button onClick={() => submitDiagAnswer(p.index)} disabled={diagSubmitted.has(p.index)}
-                className="btn quiet small">Lock in</button>
+                className="btn quiet small">{t("Lock in")}</button>
             </div>
           ))}
           <button onClick={finishDiagnostic} disabled={busy || diagSubmitted.size === 0} className="btn" style={{ marginTop: 8 }}>
-            Show me where I stand
+            {t("Show me where I stand")}
           </button>
         </div>
       )}
@@ -760,14 +1346,14 @@ export default function Home() {
       {diagResult && (
         <div className="card tray">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>Where you stand</b>
-            <button onClick={() => setDiagResult(null)} className="btn quiet small">Close</button>
+            <b>{t("Where you stand")}</b>
+            <button onClick={() => setDiagResult(null)} className="btn quiet small">{t("Close")}</button>
           </div>
           {diagResult.skills.map((s) => (
             <div key={s.skillId} style={{ margin: "8px 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 3 }}>
                 <span>{s.title}</span>
-                <span style={{ color: "var(--text-dim)" }}>{s.assessed ? `${s.pct}%` : "not assessed"}</span>
+                <span style={{ color: "var(--text-dim)" }}>{s.assessed ? `${s.pct}%` : t("not assessed")}</span>
               </div>
               <div style={{ background: "var(--surface-2)", borderRadius: 6, height: 9 }}>
                 <div style={{
@@ -779,7 +1365,7 @@ export default function Home() {
             </div>
           ))}
           <p style={{ margin: "8px 0 0", fontSize: 14 }}>
-            Starting point: <b>{diagResult.recommend.title}</b>{" "}
+            {t("Starting point:")} <b>{diagResult.recommend.title}</b>{" "}
             <span style={{ color: "var(--text-dim)" }}>({diagResult.recommend.reason})</span>
           </p>
         </div>
@@ -787,26 +1373,26 @@ export default function Home() {
 
       {examProblems && (
         <div className="card tray">
-          <b>Mock exam. Answers are checked at the end, keep moving.</b>
+          <b>{t("Mock exam. Answers are checked at the end, keep moving.")}</b>
           {examProblems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>{examSubmitted.has(p.index) ? "✓ " : ""}{p.prompt}</span>
               <input value={examAnswers[p.index] ?? ""} disabled={examSubmitted.has(p.index)}
                 onChange={(e) => setExamAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
-                className="inp" placeholder="answer" />
+                className="inp" placeholder={t("answer")} />
               <button onClick={() => submitExamAnswer(p.index)} disabled={examSubmitted.has(p.index)}
-                className="btn quiet small">Lock in</button>
+                className="btn quiet small">{t("Lock in")}</button>
             </div>
           ))}
           <button onClick={finishExam} disabled={busy} className="btn" style={{ marginTop: 8 }}>
-            Finish exam and get my results
+            {t("Finish exam and get my results")}
           </button>
         </div>
       )}
 
       {showPractice && (
         <div className="card tray">
-          {problems.length === 0 && <small>No practice problems in this pack yet.</small>}
+          {problems.length === 0 && <small>{t("No practice problems in this pack yet.")}</small>}
           {problems.map((p) => (
             <div key={p.index} className="row">
               <span style={{ flex: 1 }}>
@@ -818,22 +1404,22 @@ export default function Home() {
                 value={practiceAnswers[p.index] ?? ""}
                 onChange={(e) => setPracticeAnswers((a) => ({ ...a, [p.index]: e.target.value }))}
                 className="inp"
-                placeholder="answer"
+                placeholder={t("answer")}
               />
-              <button onClick={() => submitPractice(p)} disabled={busy} className="btn quiet small">Check</button>
+              <button onClick={() => submitPractice(p)} disabled={busy} className="btn quiet small">{t("Check")}</button>
             </div>
           ))}
         </div>
       )}
 
-      <div className="chat" style={{ marginTop: 10 }}>
+      <div className="chat" dir={directionFor(language)} style={{ marginTop: 10 }}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role === "user" ? "user" : "tutor"}`}>
             {m.role === "assistant" && m.content ? <MathText text={m.content} /> : m.content || "…"}
             {m.role === "assistant" && m.content && !m.content.startsWith("(") && (
               <span className="tools">
-                <button onClick={() => speakMessage(m.content)} title="Hear this">🔊</button>
-                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title="Copy">📋</button>
+                <button onClick={() => speakMessage(m.content)} title={t("Hear this")}>🔊</button>
+                <button onClick={() => navigator.clipboard?.writeText(m.content).catch(() => {})} title={t("Copy")}>📋</button>
               </span>
             )}
           </div>
@@ -845,13 +1431,17 @@ export default function Home() {
         {(["plain", "story", "comic", "song"] as Format[]).map((f) => (
           <button key={f} onClick={() => setFormat(f)}
             className={`chip${format === f ? " on" : ""}`}>
-            {f === "plain" ? "normal" : `as a ${f}`}
+            {f === "plain" ? t("normal") : f === "story" ? t("as a story") : f === "comic" ? t("as a comic") : t("as a song")}
           </button>
         ))}
       </div>
 
+      {sessionId && boardOpen && !participantId && (
+        <Board onShow={sendDrawing} onClose={() => setBoardOpen(false)} busy={busy} />
+      )}
+
       <div className="composer">
-        {!participantId && <button
+        {!participantId && canTalk && convo === "off" && <button
           onMouseDown={startRecording}
           onMouseUp={stopRecording}
           onMouseLeave={() => recording && stopRecording()}
@@ -859,9 +1449,16 @@ export default function Home() {
           onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
           disabled={busy}
           className={`btn${recording ? " danger rec-pulse" : ""}`}
-          title="Hold to talk"
+          title={t("Hold to talk")}
           style={{ minWidth: 52, padding: "12px 14px" }}>
           🎤
+        </button>}
+        {!participantId && <button
+          onClick={toggleConversation}
+          className={`btn${convo !== "off" ? (convo === "hearing" ? " danger rec-pulse" : "") : " quiet"}`}
+          title={convo === "off" ? t("Open conversation: your tutor listens, and you can talk over it") : t("End the open conversation")}
+          style={{ minWidth: 52, padding: "12px 14px" }}>
+          {convo === "off" ? "💬" : convo === "hearing" ? "👂" : "💬 on"}
         </button>}
         {!participantId && (
           <>
@@ -881,18 +1478,32 @@ export default function Home() {
               onClick={() => photoInput.current?.click()}
               disabled={busy}
               className="btn quiet"
-              title="Show your tutor a photo"
+              title={t("Show your tutor a photo")}
               style={{ minWidth: 52, padding: "12px 14px" }}>
               📷
+            </button>
+            <button
+              onClick={() => setBoardOpen((open) => !open)}
+              disabled={busy}
+              className={`btn${boardOpen ? "" : " quiet"}`}
+              title={t("Work it out on the board")}
+              style={{ minWidth: 52, padding: "12px 14px" }}>
+              ✏️
             </button>
           </>
         )}
         <input value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          className="inp" placeholder={recording ? "listening…" : "Say something to your tutor…"} />
-        <button onClick={send} disabled={busy} className="btn">Send</button>
+          dir={directionFor(language)}
+          className="inp" placeholder={recording ? t("listening…") : t("Say something to your tutor…")} />
+        <button onClick={send} disabled={busy} className="btn">{t("Send")}</button>
       </div>
       {error && <p className="err">{error}</p>}
+      {waiting.length > 0 && (
+        <p className="waiting" role="status">
+          {waitingLine(readyFor(waiting, sessionId ?? "").length || waiting.length, t)}
+        </p>
+      )}
     </main>
   );
 }

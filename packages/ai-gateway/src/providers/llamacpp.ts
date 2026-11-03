@@ -11,12 +11,16 @@ export class LlamaCppChatProvider implements ChatProvider {
   constructor(
     private baseUrl: string,
     private model = "default",
+    private brainKey?: string,
   ) {}
 
   async *chat(messages: ChatMessage[], opts?: ChatOptions): AsyncIterable<string> {
     const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(this.brainKey ? { "x-brain-key": this.brainKey } : {}),
+      },
       signal: opts?.signal,
       body: JSON.stringify({
         model: this.model,
@@ -58,13 +62,17 @@ export class LlamaCppVisionProvider implements VisionProvider {
   constructor(
     private baseUrl: string,
     private model = "default",
+    private brainKey?: string,
   ) {}
 
   async see(image: Uint8Array, mimeType: string, instruction: string): Promise<string> {
     const b64 = Buffer.from(image).toString("base64");
     const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(this.brainKey ? { "x-brain-key": this.brainKey } : {}),
+      },
       body: JSON.stringify({
         model: this.model,
         messages: [

@@ -1,0 +1,79 @@
+# The gatekeeper in front of every self-hosted AI door.
+#
+# Every request must carry the shared secret in the `x-brain-key` header;
+# without it the gate answers 401 and the AI services are never reached.
+# GET /health stays open on each door (it reveals nothing) so uptime
+# checks and the switch-on guide's curl lines keep working.
+#
+# BRAIN_KEY is substituted by the nginx image's envsubst at container
+# start, from the same-named variable in deploy/.env.
+
+map $http_x_brain_key $brain_key_ok {
+    default 0;
+    "${BRAIN_KEY}" 1;
+}
+
+# Docker's embedded DNS. Resolving through variables means one crashed
+# service returns 502 on its own door instead of killing the whole gate.
+resolver 127.0.0.11 valid=10s;
+
+server {
+    listen 8080;
+    set $llm http://llm:8080;
+    location = /health {
+        proxy_pass $llm;
+    }
+    location / {
+        if ($brain_key_ok = 0) { return 401; }
+        proxy_pass $llm;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+        client_max_body_size 30m;
+    }
+}
+
+server {
+    listen 8081;
+    set $stt http://stt:8000;
+    location = /health {
+        proxy_pass $stt;
+    }
+    location / {
+        if ($brain_key_ok = 0) { return 401; }
+        proxy_pass $stt;
+        proxy_http_version 1.1;
+        proxy_read_timeout 120s;
+        client_max_body_size 30m;
+    }
+}
+
+server {
+    listen 8082;
+    set $tts http://tts:8880;
+    location = /health {
+        proxy_pass $tts;
+    }
+    location / {
+        if ($brain_key_ok = 0) { return 401; }
+        proxy_pass $tts;
+        proxy_http_version 1.1;
+        proxy_read_timeout 120s;
+        client_max_body_size 5m;
+    }
+}
+
+server {
+    listen 8090;
+    set $mathcheck http://mathcheck:8090;
+    location = /health {
+        proxy_pass $mathcheck;
+    }
+    location / {
+        if ($brain_key_ok = 0) { return 401; }
+        proxy_pass $mathcheck;
+        proxy_http_version 1.1;
+        proxy_read_timeout 60s;
+        client_max_body_size 1m;
+    }
+}

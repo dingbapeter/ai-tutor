@@ -51,6 +51,20 @@
       "url": "https://katex.org"
     },
     {
+      "name": "three.js",
+      "by": "Ricardo Cabello (mrdoob) & contributors",
+      "license": "MIT",
+      "role": "Draws the 3D tutors and moves their faces as they speak",
+      "url": "https://github.com/mrdoob/three.js"
+    },
+    {
+      "name": "MediaPipe Face Landmarker",
+      "by": "Google",
+      "license": "Apache-2.0",
+      "role": "Reads a learner's visible expression on their own device, when their family allows it",
+      "url": "https://github.com/google-ai-edge/mediapipe"
+    },
+    {
       "name": "Claude API",
       "by": "Anthropic",
       "license": "Commercial API",

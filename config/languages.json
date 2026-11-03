@@ -679,6 +679,13 @@
       }
     },
     {
+      "code": "pcm",
+      "name": "Nigerian Pidgin",
+      "native": "Naijá",
+      "engine": "pending",
+      "voices": null
+    },
+    {
       "code": "yo",
       "name": "Yoruba",
       "native": "Yorùbá",

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearRef, storedRef } from "../referral";
+import { useLang } from "../i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -22,6 +24,25 @@ interface LearnerRoutine {
   examDates: Array<{ date: string; label: string }>;
   notes: string;
 }
+interface PlanItem {
+  kind: "review" | "practice" | "exam-prep" | "rest";
+  skillId?: string;
+  packId?: string;
+  title: string;
+  why: string;
+}
+interface PlanDay {
+  date: string;
+  weekday: string;
+  load: "free" | "light" | "busy";
+  items: PlanItem[];
+  examLabel?: string;
+}
+interface StudyPlan {
+  headline: string;
+  days: PlanDay[];
+}
+
 interface StudentRow {
   id: string;
   displayName: string;
@@ -32,6 +53,12 @@ interface StudentRow {
   profile?: LearnerProfile | null;
   routine?: LearnerRoutine | null;
   careContact?: { name: string; phone: string; relationship?: string } | null;
+  /** The account holder has let this learner turn on face hints. */
+  faceHints?: boolean;
+  voiceFamiliarity?: boolean;
+  voiceStatus?: { stage: "listening" | "knows"; sessionsHeard: number };
+  onSchoolRoster?: boolean;
+  plan?: StudyPlan | null;
 }
 
 const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
@@ -43,6 +70,7 @@ const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
 ];
 
 export default function Account() {
+  const { t, tx } = useLang();
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,6 +81,7 @@ export default function Account() {
   const [meEmail, setMeEmail] = useState("");
   const [newChild, setNewChild] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [usage, setUsage] = useState<{
     plan: string;
     today: { messages: number; voiceTurns: number; limits: { messages: number; voiceTurns: number } };
@@ -60,17 +89,37 @@ export default function Account() {
   const [transcript, setTranscript] = useState<{ studentId: string; messages: Array<{ role: string; content: string; createdAt: string }> } | null>(null);
   const [pushState, setPushState] = useState<"unknown" | "on" | "off" | "unsupported">("unknown");
   const [forgotSent, setForgotSent] = useState(false);
+  const [signupsPaused, setSignupsPaused] = useState<{ paused: boolean; reason: string }>({ paused: false, reason: "" });
   const [emailVerified, setEmailVerified] = useState(true);
   const [verifySent, setVerifySent] = useState(false);
   const [billingOn, setBillingOn] = useState(false);
+  // What this family would pay, in the currency their device suggests or the
+  // one they chose; the amounts are what the processor will charge.
+  const [quote, setQuote] = useState<{ currency: string; provider: string; currencies: string[]; monthly: { plus: { amount: number }; premium: { amount: number } } } | null>(null);
+  const [pricesDown, setPricesDown] = useState(false);
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [routineBusy, setRoutineBusy] = useState<string | null>(null);
   const [careEditing, setCareEditing] = useState<string | null>(null);
   const [careForm, setCareForm] = useState<{ name: string; phone: string; relationship: string }>({ name: "", phone: "", relationship: "" });
+  const [referral, setReferral] = useState<{
+    link: string;
+    invited: number;
+    rewarded: number;
+    boostPlan: string | null;
+    boostUntil: string | null;
+    rewardDays: number;
+  } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("tutor_token");
     if (t) setToken(t);
+    // Whether new accounts are open is a Command Centre switch; ask before
+    // showing someone a form that cannot succeed.
+    fetch(`${API}/platform`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && setSignupsPaused({ paused: !!b.signupsPaused, reason: b.signupsPausedReason ?? "" }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -86,7 +135,19 @@ export default function Account() {
         return;
       }
       const dash = await res.json();
-      setStudents(dash.students);
+      // The week ahead, per learner. A plan that fails to load is simply not
+      // shown; the dashboard never breaks over it.
+      const withPlans = await Promise.all(
+        (dash.students as StudentRow[]).map(async (s) => {
+          try {
+            const p = await fetch(`${API}/students/${s.id}/plan`, { headers: { authorization: `Bearer ${t}` } });
+            return p.ok ? { ...s, plan: (await p.json()) as StudyPlan } : s;
+          } catch {
+            return s;
+          }
+        }),
+      );
+      setStudents(withPlans);
       const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
       if (me.ok) {
         const meJson = await me.json();
@@ -95,8 +156,13 @@ export default function Account() {
       }
       const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${t}` } });
       if (u.ok) setUsage(await u.json());
+      const r = await fetch(`${API}/account/referral`, { headers: { authorization: `Bearer ${t}` } });
+      if (r.ok) setReferral(await r.json());
       const b = await fetch(`${API}/billing/status`);
-      if (b.ok) setBillingOn((await b.json()).configured === true);
+      if (b.ok && (await b.json()).configured === true) {
+        setBillingOn(true);
+        await loadQuote(null);
+      }
     } catch {
       setError("could not load dashboard");
     }
@@ -109,11 +175,21 @@ export default function Account() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          mode === "register" ? { email, password, displayName, role } : { email, password },
+          mode === "register"
+            ? {
+                email,
+                password,
+                role,
+                ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+                // Credit the friend whose link brought them here, if any.
+                ...(storedRef() ? { ref: storedRef() } : {}),
+              }
+            : { email, password },
         ),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `error ${res.status}`);
       const json = await res.json();
+      if (mode === "register") clearRef();
       localStorage.setItem("tutor_token", json.token);
       setToken(json.token);
     } catch (e) {
@@ -138,6 +214,46 @@ export default function Account() {
     }
   }
 
+  /** The family's own currency choice is kept on this device. */
+  async function loadQuote(chosen: string | null) {
+    let stored: string | null = null;
+    try {
+      stored = chosen ?? localStorage.getItem("dingba_currency");
+    } catch {
+      /* no storage: the device's suggestion is used */
+    }
+    const q = new URLSearchParams({
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "",
+      lang: navigator.language ?? "",
+      ...(stored ? { currency: stored } : {}),
+    });
+    const res = await fetch(`${API}/billing/quote?${q}`).catch(() => null);
+    if (res?.ok) {
+      setQuote(await res.json());
+      setPricesDown(false);
+    } else {
+      setQuote(null);
+      setPricesDown(true);
+    }
+  }
+
+  function chooseCurrency(code: string) {
+    try {
+      localStorage.setItem("dingba_currency", code);
+    } catch {
+      /* kept for this visit only */
+    }
+    void loadQuote(code);
+  }
+
+  function money(amount: number, currency: string) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: Number.isInteger(amount) ? 0 : 2 }).format(amount);
+    } catch {
+      return `${amount} ${currency}`;
+    }
+  }
+
   async function upgrade(plan: "plus" | "premium") {
     if (!token) return;
     setUpgrading(plan);
@@ -146,7 +262,7 @@ export default function Account() {
       const res = await fetch(`${API}/billing/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, ...(quote ? { currency: quote.currency } : {}) }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "checkout unavailable");
       window.location.href = (await res.json()).url;
@@ -238,6 +354,43 @@ export default function Account() {
     }
   }
 
+  async function setFaceHints(studentId: string, enabled: boolean) {
+    if (!token) return;
+    setError(null);
+    const res = await fetch(`${API}/students/${studentId}/face-hints`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? "could not change face hints");
+      return;
+    }
+    setStudents((list) => list.map((st) => (st.id === studentId ? { ...st, faceHints: enabled } : st)));
+  }
+
+  async function setVoiceFamiliarity(studentId: string, enabled: boolean) {
+    if (!token) return;
+    setError(null);
+    const res = await fetch(`${API}/students/${studentId}/voice-familiarity`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? "could not change voice familiarity");
+      return;
+    }
+    // Switching off forgets what was learned, so it starts again from scratch.
+    setStudents((list) =>
+      list.map((st) =>
+        st.id === studentId
+          ? { ...st, voiceFamiliarity: enabled, voiceStatus: enabled ? st.voiceStatus : { stage: "listening", sessionsHeard: 0 } }
+          : st,
+      ),
+    );
+  }
+
   async function removeCareContact(studentId: string) {
     if (!token) return;
     await fetch(`${API}/students/${studentId}/care-contact`, {
@@ -258,8 +411,34 @@ export default function Account() {
     if (res.ok) setTranscript({ studentId, messages: (await res.json()).messages });
   }
 
+  /** The family's own copy of everything we hold, as one file. */
+  async function downloadEverything() {
+    if (!token) return;
+    setError(null);
+    setExporting(true);
+    try {
+      const res = await fetch(`${API}/me/export`, { headers: { authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "could not prepare your download");
+      const name =
+        res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ??
+        `dingba-data-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not prepare your download");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function deleteEverything() {
-    const sure = prompt('This permanently erases your account, every student, and all their history. Type DELETE to confirm.');
+    const sure = prompt('This permanently erases your account, every student, and all their history. If you want a copy, use "Download all our data" first. Type DELETE to confirm.');
     if (sure !== "DELETE" || !token) return;
     const res = await fetch(`${API}/me`, {
       method: "DELETE",
@@ -275,7 +454,7 @@ export default function Account() {
 
   async function forgotPassword() {
     if (!email) {
-      setError("type your email above first, then tap forgot password");
+      setError(t("Type your email above first, then tap forgot password."));
       return;
     }
     await fetch(`${API}/auth/forgot`, {
@@ -290,55 +469,63 @@ export default function Account() {
     return (
       <main className="shell" style={{ maxWidth: 480 }}>
         <div className="hero fadeUp" style={{ paddingBottom: 12 }}>
-          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+          <h1>{mode === "login" ? t("Welcome back") : t("Create your account")}</h1>
         </div>
         {error && <p className="err">{error}</p>}
         <div className="card fadeUp">
+          {mode === "register" && signupsPaused.paused && (
+            <p className="notice" style={{ marginTop: 0 }}>{signupsPaused.reason}</p>
+          )}
           {mode === "register" && (
             <>
-              <label className="lbl">Your name</label>
+              <label className="lbl">{t("Your name")}</label>
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="inp" />
-              <label className="lbl">I am a…</label>
+              <label className="lbl">{t("I am a…")}</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setRole("parent")} className={`pill${role === "parent" ? " on" : ""}`} style={{ flex: 1 }}>
-                  <span><b>Parent</b><br /><small>my kids will learn</small></span>
+                  <span><b>{t("Parent")}</b><br /><small>{t("my kids will learn")}</small></span>
                 </button>
                 <button onClick={() => setRole("student")} className={`pill${role === "student" ? " on" : ""}`} style={{ flex: 1 }}>
-                  <span><b>Learner</b><br /><small>it&apos;s for me</small></span>
+                  <span><b>{t("Learner")}</b><br /><small>{t("it's for me")}</small></span>
                 </button>
               </div>
             </>
           )}
-          <label className="lbl">Email</label>
+          <label className="lbl">{t("Email")}</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} className="inp" type="email" />
-          <label className="lbl">Password {mode === "register" && <small>(8+ characters)</small>}</label>
+          <label className="lbl">{t("Password")} {mode === "register" && <small>{t("(8+ characters)")}</small>}</label>
           <input value={password} onChange={(e) => setPassword(e.target.value)} className="inp" type="password"
             onKeyDown={(e) => e.key === "Enter" && submit()} />
           {mode === "register" && (
             <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 0 }}>
-              By creating an account you confirm you are an adult, you agree to our{" "}
-              <a href="/terms">Terms</a> and{" "}
-              <a href="/privacy">Privacy Policy</a>, and you consent to your
-              children&apos;s learning data being processed to run their tutoring.
+              {tx("By creating an account you confirm you are an adult, you agree to our {terms} and {privacy}, and you consent to your children's learning data being processed to run their tutoring.", {
+                terms: <a href="/terms">{t("Terms")}</a>,
+                privacy: <a href="/privacy">{t("Privacy Policy")}</a>,
+              })}
             </p>
           )}
-          <button onClick={submit} className="btn big" style={{ marginTop: 18 }}>
-            {mode === "login" ? "Sign in" : "Create account"}
+          <button
+            onClick={submit}
+            className="btn big"
+            style={{ marginTop: 18 }}
+            disabled={mode === "register" && signupsPaused.paused}
+          >
+            {mode === "login" ? t("Sign in") : signupsPaused.paused ? t("Signups are closed right now") : t("Create account")}
           </button>
           <p style={{ textAlign: "center", marginBottom: 0 }}>
             <button onClick={() => setMode(mode === "login" ? "register" : "login")}
               style={{ border: "none", background: "none", color: "var(--brand)", cursor: "pointer", fontFamily: "inherit", fontSize: 14.5 }}>
-              {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
+              {mode === "login" ? t("New here? Create an account") : t("Already have an account? Sign in")}
             </button>
           </p>
           {mode === "login" && (
             <p style={{ textAlign: "center", marginBottom: 0 }}>
               {forgotSent ? (
-                <small style={{ color: "var(--ok)" }}>If that email has an account, a reset link is on its way. ✉️</small>
+                <small style={{ color: "var(--ok)" }}>{t("If that email has an account, a reset link is on its way.")} ✉️</small>
               ) : (
                 <button onClick={forgotPassword}
                   style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-                  Forgot password?
+                  {t("Forgot password?")}
                 </button>
               )}
             </p>
@@ -394,17 +581,65 @@ export default function Account() {
             <button onClick={enableNotifications} className="btn quiet small">🔔 Enable study reminders</button>
           )}
           {billingOn && usage.plan !== "premium" && (
-            <span style={{ display: "flex", gap: 8 }}>
+            <span className="plan-offer">
               {usage.plan === "free" && (
                 <button disabled={upgrading !== null} onClick={() => upgrade("plus")} className="btn small">
-                  {upgrading === "plus" ? "Opening checkout…" : "⭐ Upgrade to Plus"}
+                  {upgrading === "plus" ? "Opening checkout…" : quote ? `⭐ Plus, ${money(quote.monthly.plus.amount, quote.currency)} a month` : "⭐ Upgrade to Plus"}
                 </button>
               )}
               <button disabled={upgrading !== null} onClick={() => upgrade("premium")} className="btn small" style={{ background: "var(--brand-deep)" }}>
-                {upgrading === "premium" ? "Opening checkout…" : "👑 Go Premium"}
+                {upgrading === "premium" ? "Opening checkout…" : quote ? `👑 Premium, ${money(quote.monthly.premium.amount, quote.currency)} a month` : "👑 Go Premium"}
               </button>
+              {quote && quote.currencies.length > 1 && (
+                <label className="plan-currency">
+                  Prices in{" "}
+                  <select value={quote.currency} onChange={(e) => chooseCurrency(e.target.value)} aria-label="Currency">
+                    {quote.currencies.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {quote && <small className="plan-note">Cancel any time. Paid through {quote.provider === "paystack" ? "Paystack" : quote.provider === "stripe" ? "Stripe" : quote.provider}.</small>}
+              {pricesDown && <small className="plan-note">Prices are not available right now. The buttons still work; the price is shown at checkout.</small>}
             </span>
           )}
+        </div>
+      )}
+
+      {referral && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <b>🎁 Invite a friend</b>
+          <p style={{ margin: "6px 0 8px", color: "var(--text-dim)", fontSize: 14 }}>
+            Share your link. When a friend joins and confirms their email, you BOTH get {referral.rewardDays} days
+            of Plus free.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <code style={{ padding: "6px 10px", background: "var(--bg-soft, rgba(0,0,0,0.06))", borderRadius: 8, fontSize: 13, wordBreak: "break-all" }}>
+              {referral.link}
+            </code>
+            <button
+              className="btn quiet small"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(referral.link);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2500);
+                } catch {
+                  // Clipboard blocked (rare): the link is visible to copy by hand.
+                }
+              }}
+            >
+              {linkCopied ? "Copied!" : "Copy link"}
+            </button>
+          </div>
+          <small style={{ color: "var(--text-dim)", display: "block", marginTop: 8 }}>
+            {referral.invited === 0
+              ? "No friends yet. Send it to someone who would love a tutor."
+              : `${referral.invited} joined so far, ${referral.rewarded} confirmed.`}
+            {referral.boostUntil &&
+              ` Your thank-you ${referral.boostPlan ?? "plus"} runs until ${new Date(referral.boostUntil).toLocaleDateString()}.`}
+          </small>
         </div>
       )}
 
@@ -419,14 +654,17 @@ export default function Account() {
 
       {students.length === 0 && <p>No students yet. Add one above, then start a session from the <a href="/">home page</a>.</p>}
 
-      {students.length > 0 && (
-        <p style={{ textAlign: "right" }}>
-          <button onClick={deleteEverything}
-            style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-            Delete my account and all data
-          </button>
-        </p>
-      )}
+      <p className="data-rights">
+        <button onClick={downloadEverything} disabled={exporting}
+          title="Everything Dingba holds about your family, as one file you keep"
+          style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit", textDecoration: "underline" }}>
+          {exporting ? "Preparing your download…" : "Download all our data"}
+        </button>
+        <button onClick={deleteEverything}
+          style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+          Delete my account and all data
+        </button>
+      </p>
 
       {students.map((s) => (
         <div key={s.id} className="card fadeUp" style={{ marginBottom: 14 }}>
@@ -503,6 +741,50 @@ export default function Account() {
             )}
           </div>
 
+          {!s.onSchoolRoster && (
+            <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: 14.5 }}>Face hints</b>
+                <button
+                  onClick={() => setFaceHints(s.id, !s.faceHints)}
+                  className={`btn small${s.faceHints ? " ghost" : " quiet"}`}
+                  aria-pressed={Boolean(s.faceHints)}
+                >
+                  {s.faceHints ? "Switch off" : "Allow"}
+                </button>
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
+                {s.faceHints
+                  ? `${s.displayName} may turn on their camera in a lesson, if they want to. It is off at the start of every lesson. The camera is read on their own device; no picture or video is recorded or sent. Their tutor only gets a plain word now and then, like "smiling" or "looking away", and never a guess at how they feel.`
+                  : `Off. If you allow it, ${s.displayName} can choose to turn on their camera in a lesson so their tutor can respond to their face the way a person in the room would. Pictures never leave their device.`}
+              </p>
+            </div>
+          )}
+
+          {!s.onSchoolRoster && (
+            <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: 14.5 }}>Knowing their voice</b>
+                <button
+                  onClick={() => setVoiceFamiliarity(s.id, !s.voiceFamiliarity)}
+                  className={`btn small${s.voiceFamiliarity ? " ghost" : " quiet"}`}
+                  aria-pressed={Boolean(s.voiceFamiliarity)}
+                >
+                  {s.voiceFamiliarity ? "Switch off and forget" : "Allow"}
+                </button>
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
+                {s.voiceFamiliarity
+                  ? `${
+                      s.voiceStatus?.stage === "knows"
+                        ? `Their tutor knows how ${s.displayName} usually sounds.`
+                        : `Their tutor is getting to know how ${s.displayName} usually sounds (${s.voiceStatus?.sessionsHeard ?? 0} of 2 spoken lessons so far).`
+                    } When they talk, it keeps a few running averages (how high their voice is, how much it moves, how loud and how fast they speak), never a recording. If one day they sound quite unlike themselves, their tutor may gently ask how they are, and never guesses how they feel. Switching off forgets it all.`
+                  : `Off. If you allow it, their tutor gets to know how ${s.displayName} usually sounds over their first two spoken lessons, so it can notice on a day they sound unlike themselves, the way someone who knows them would. It keeps a few averages, never a recording, and nothing that could identify their voice.`}
+              </p>
+            </div>
+          )}
+
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", flexWrap: "wrap" }}>
             <label className="btn quiet small" style={{ cursor: "pointer" }}>
               {routineBusy === s.id ? "Reading timetable…" : s.routine ? "Replace timetable" : "📅 Upload timetable"}
@@ -524,6 +806,41 @@ export default function Account() {
                 : "A photo or screenshot of their timetable teaches Dingba their week."}
             </small>
           </div>
+
+          {s.plan && (
+            <div style={{ marginTop: 14 }}>
+              <h4 style={{ marginBottom: 2 }}>The week ahead</h4>
+              <p style={{ color: "var(--text-dim)", fontSize: 13.5, margin: "0 0 10px" }}>{s.plan.headline}</p>
+              <div className="plan-week">
+                {s.plan.days.map((d) => (
+                  <div className={`plan-day${d.examLabel ? " exam" : ""}`} key={d.date}>
+                    <div className="plan-day-head">
+                      <b>{d.weekday.slice(0, 3)}</b>
+                      <span>{d.date.slice(8)}</span>
+                      {d.load === "busy" && <span className="plan-load">busy day</span>}
+                    </div>
+                    {d.examLabel && <div className="plan-exam">{d.examLabel}</div>}
+                    {d.items.map((item, i) =>
+                      item.skillId && item.packId ? (
+                        <a
+                          className={`plan-item link ${item.kind}`}
+                          key={i}
+                          title={`${item.why}. Tap to start this as a lesson.`}
+                          href={`/learn?lesson=${encodeURIComponent(item.skillId)}&pack=${encodeURIComponent(item.packId)}&student=${encodeURIComponent(s.id)}`}
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        <div className={`plan-item ${item.kind}`} key={i} title={item.why}>
+                          {item.title}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {s.routine && (s.routine.subjects.length > 0 || s.routine.weekly.length > 0 || s.routine.examDates.length > 0 || s.routine.notes) && (
             <>
@@ -635,6 +952,9 @@ export default function Account() {
           )}
         </div>
       ))}
+      <p className="footlinks">
+        Teaching a class or running a school? <a href="/school">Open the school portal</a>
+      </p>
     </main>
   );
 }
