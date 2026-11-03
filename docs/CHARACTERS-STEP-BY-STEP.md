@@ -95,5 +95,7 @@ gaming or design computer and the rest on any machine.
   back to step 10 and use one of the two tools there.
 - The character shows but is grey: do step 12; the tidy step packs the
   textures in.
+- "triangles" in red, with a number in the millions: do step 12; the
+  tidy step brings any heavy file down to about 50,000 on its own.
 - Anything else: send the Studio report here and I will tell you what
   it means.

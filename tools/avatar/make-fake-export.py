@@ -29,6 +29,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--head", default=os.path.join(os.path.dirname(__file__), "..", "..", "apps", "web", "test", "fixtures", "test-head.glb"))
     p.add_argument("--out", required=True)
+    p.add_argument("--heavy", action="store_true", help="add a scanned-style hair piece of about 65,000 triangles, past the budget")
     a = p.parse_args(args_after_dashes())
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -88,6 +89,22 @@ def main():
     bm.object = arm
     bg = body.vertex_groups.new(name="spine_01")
     bg.add(range(len(body.data.vertices)), 1.0, "REPLACE")
+
+    # Hair the way a scan or an image-to-3D tool delivers it: one dense,
+    # sliderless lump with every triangle its own island, well past budget.
+    if a.heavy:
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=256, ring_count=128, radius=0.13, location=(0, 0, 0.92))
+        hair = bpy.context.active_object
+        hair.name = "hair_scan"
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.edge_split()
+        bpy.ops.object.mode_set(mode="OBJECT")
+        hair.parent = arm
+        hm = hair.modifiers.new("skin", "ARMATURE")
+        hm.object = arm
+        hg = hair.vertex_groups.new(name="head")
+        hg.add(range(len(hair.data.vertices)), 1.0, "REPLACE")
 
     # Lower levels of detail, which a real export carries along.
     for lod in (1, 2):

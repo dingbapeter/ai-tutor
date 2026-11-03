@@ -46,6 +46,31 @@ describe("preparing a raw export", () => {
     expect(report.pass).toBe(true);
   }, 180_000);
 
+  it.skipIf(!hasBlender)("brings a scan-heavy export under the triangle budget without touching the face sliders", () => {
+    const dir = mkdtempSync(join(tmpdir(), "prepare-heavy-"));
+    const fbx = join(dir, "fake-scan.fbx");
+    const glb = join(dir, "out.glb");
+    execFileSync("blender", ["-b", "-P", join(repo, "tools", "avatar", "make-fake-export.py"), "--", "--out", fbx, "--heavy"], { encoding: "utf8", stdio: "pipe" });
+    const log = execFileSync("blender", ["-b", "-P", join(repo, "tools", "avatar", "prepare-character.py"), "--", "--in", fbx, "--out", glb], {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    const m = log.match(/triangles: ([\d,]+) reduced to ([\d,]+) \((\d+) mesh\(es\) without sliders reduced; untouched: (.*)\)/);
+    expect(m, log).not.toBeNull();
+    const [, before, after, count, kept] = m!;
+    expect(Number(before.replace(/,/g, ""))).toBeGreaterThan(60_000);
+    expect(Number(after.replace(/,/g, ""))).toBeLessThanOrEqual(60_000);
+    expect(Number(after.replace(/,/g, ""))).toBeGreaterThanOrEqual(30_000);
+    expect(count).toBe("1");
+    expect(kept).toMatch(/head/);
+
+    const report = checkGlb(new Uint8Array(readFileSync(glb)), { lenient: true });
+    const lines = report.lines.map((l) => `${l.level} ${l.text}`);
+    expect(lines.some((l) => /^ok [\d,]+ triangles \(30,000 to 60,000\)/.test(l)), lines.join("\n")).toBe(true);
+    expect(lines).toContain("ok every slider really moves vertices");
+    expect(report.pass).toBe(true);
+  }, 300_000);
+
   it.skipIf(hasBlender)("is skipped here: Blender is not installed (run it where it is)", () => {
     expect(hasBlender).toBe(false);
   });

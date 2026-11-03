@@ -70,17 +70,24 @@ the face; renames bones from MetaHuman, Mixamo and Blender names to Hips,
 Spine, Neck, Head, LeftEye and RightEye, and steps a mesh aside if it
 would share a bone's name; renames sliders to the exact ARKit names
 whatever prefix or casing the tool used (`CTRL_expressions_JawOpen` becomes
-`jawOpen`); zeroes every slider and clears the pose; shrinks textures over
-2048 px and packs them in (`--jpeg` for a smaller file); and exports one
-.glb, +Y up, with morph targets, skin and materials. Blender 4.0 or newer,
+`jawOpen`); zeroes every slider and clears the pose; brings a heavy file
+under the triangle budget by joining and reducing the meshes that carry
+no sliders (hair, clothes, a scanned head) until the file sits near
+50,000 triangles, never touching a mesh with sliders, since reducing its
+vertices would throw the sliders away; shrinks textures over 2048 px and
+packs them in (`--jpeg` for a smaller file); and exports one .glb, +Y up,
+with morph targets, skin and materials. A 1.9-million-triangle head from
+an image-to-3D tool comes out at 50,000 and 3 MB with the likeness kept. Blender 4.0 or newer,
 nothing else to install.
 
 It is proven through real headless Blender: `tools/avatar/make-fake-export.py`
 builds a stand-in Unreal export from the test head (lower levels of
 detail, a body to the floor, MetaHuman bone names, Unreal slider names, a
-4096 px texture, centimetres), and `apps/web/test/prepare-character.test.ts`
-runs the pipeline on it and checks every step's log line and the result's
-rig checks. The test runs wherever Blender is installed and says so where
+4096 px texture, centimetres; with `--heavy`, a 65,000-triangle hair
+piece made of loose triangles the way a scan delivers it), and
+`apps/web/test/prepare-character.test.ts` runs the pipeline on it and
+checks every step's log line and the result's rig checks, including that
+the heavy piece lands inside the budget while the face keeps its sliders. The test runs wherever Blender is installed and says so where
 it is not; CI has no Blender.
 
 Then, when the Studio says "Ready":

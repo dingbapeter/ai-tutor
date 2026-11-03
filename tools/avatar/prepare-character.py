@@ -21,8 +21,12 @@ What it does, in order:
   6. renames face sliders to the exact ARKit names, whatever prefix or
      casing the tool used, and viseme sliders to viseme_xx;
   7. zeroes every slider and clears the pose, so the file is neutral;
-  8. shrinks textures above the limit and packs them into the file;
-  9. exports one .glb, +Y up, with morph targets, skin and materials.
+  8. brings a heavy file under the triangle budget: meshes without face
+     sliders (hair, body, clothes, a scanned head) are joined at their
+     seams and reduced until the whole file sits near 50,000 triangles;
+     a mesh with sliders is never reduced, since that would break them;
+  9. shrinks textures above the limit and packs them into the file;
+ 10. exports one .glb, +Y up, with morph targets, skin and materials.
 
 Blender 4.0 or newer. Nothing else to install.
 """
@@ -255,6 +259,60 @@ def neutralise():
             pb.matrix_basis.identity()
 
 
+TRIANGLE_LIMIT = 60_000
+TRIANGLE_TARGET = 50_000
+
+
+def triangles_of(obj):
+    return sum(len(p.vertices) - 2 for p in obj.data.polygons)
+
+
+def reduce_triangles(limit=TRIANGLE_LIMIT, target=TRIANGLE_TARGET):
+    """
+    Image-to-3D tools and scans hand over millions of triangles, far past
+    what a phone browser can animate. Only meshes without face sliders are
+    reduced: a slider is a stored displacement per vertex, and reducing the
+    vertices would throw the sliders away. Loose triangles are joined at
+    their seams first, otherwise the reducer tears the surface into shards.
+    """
+    import bmesh
+
+    before = {o.name: triangles_of(o) for o in meshes()}
+    total = sum(before.values())
+    if total <= limit:
+        return
+    # Only the heavy pieces are reduced; eyeballs, teeth and other small
+    # parts keep every triangle, since they are already cheap and the
+    # reducer would only coarsen them.
+    heavy = [o for o in meshes() if not has_sliders(o) and before[o.name] >= max(1000, total // 50)]
+    fixed = total - sum(before[o.name] for o in heavy)
+    room = target - fixed
+    movable = heavy
+    movable_total = sum(before[o.name] for o in movable)
+    if room <= 0 or not movable:
+        log(f"triangles: {total:,} is over the {limit:,} budget, but every heavy mesh carries face sliders, so none can be reduced here")
+        return
+    ratio = min(1.0, room / movable_total)
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in movable:
+        if o.data.users > 1:
+            o.data = o.data.copy()
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+        bm.to_mesh(o.data)
+        bm.free()
+        o.data.update()
+        mod = o.modifiers.new("reduce", "DECIMATE")
+        mod.ratio = ratio
+        mod.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.modifier_apply(modifier="reduce")
+    after = sum(triangles_of(o) for o in meshes())
+    kept = [o.name for o in meshes() if has_sliders(o)]
+    log(f"triangles: {total:,} reduced to {after:,} ({len(movable)} mesh(es) without sliders reduced{'; untouched: ' + ', '.join(kept) if kept else ''})")
+
+
 def shrink_textures(limit):
     shrunk = 0
     for img in bpy.data.images:
@@ -265,10 +323,13 @@ def shrink_textures(limit):
             s = limit / max(w, h)
             img.scale(max(1, int(w * s)), max(1, int(h * s)))
             shrunk += 1
-        try:
-            img.pack()
-        except RuntimeError:
-            pass
+        # An image that arrived packed (a .glb import) is left as it is;
+        # packing it again hands the exporter an empty copy.
+        if img.packed_file is None:
+            try:
+                img.pack()
+            except RuntimeError:
+                pass
     log(f"textures: {shrunk} shrunk to {limit} px or under, all packed into the file")
 
 
@@ -315,6 +376,7 @@ def main():
         cut_to_bust(a.cut_at)
     rename_sliders()
     neutralise()
+    reduce_triangles()
     shrink_textures(a.texture_max)
     export(os.path.abspath(a.dst), a.jpeg)
     log("done; now check it: node tools/avatar/validate-glb.ts " + a.dst)
