@@ -16,8 +16,11 @@
  *     Yorùbá, tone marks intact, with the four Nigerian drafts on offer;
  *   - back to English, English is English.
  *
+ *   - a signed-in parent's dashboard follows into Yorùbá with the learner's
+ *     name inside the sentences and none of its own words left in English.
+ *
  *   node tools/device/lang-probe.mjs [--url http://127.0.0.1:3100]
- *     [--engines webkit,chromium,firefox] [--chromium PATH]
+ *     [--api http://127.0.0.1:4100] [--engines webkit,chromium,firefox] [--chromium PATH]
  */
 import { chromium, firefox, webkit } from "@playwright/test";
 
@@ -25,6 +28,7 @@ const args = Object.fromEntries(
   process.argv.slice(2).map((a, i, all) => (a.startsWith("--") ? [a.slice(2), all[i + 1]] : [])).filter((p) => p.length),
 );
 const WEB = args.url ?? "http://127.0.0.1:3100";
+const API = args.api ?? "http://127.0.0.1:4100";
 const CHROME = args.chromium ?? process.env.CHROMIUM_PATH ?? undefined;
 const ENGINES = { webkit, chromium, firefox };
 const WANTED = (args.engines ?? "webkit,chromium,firefox").split(",").map((s) => s.trim());
@@ -106,6 +110,30 @@ for (const name of WANTED) {
     check("a lesson taught in Yorùbá follows into Yorùbá, tone marks and all", body.includes("Bẹ̀rẹ̀ ìpàdé") && body.includes("Yan olùkọ́ rẹ"), body.slice(0, 80));
     check("and the lesson start screen fits the screen in Yorùbá", await fits(page));
     check("the switch offers the Nigerian drafts", ["Naijá (draft)", "Yorùbá (draft)", "Igbo (draft)", "Hausa (draft)"].every((o) => options.includes(o)), options.join(", "));
+
+    // A signed-in parent's dashboard follows the choice too, with nothing left in English.
+    {
+      const email = `lang-${Date.now()}@example.com`;
+      const reg = await fetch(`${API}/auth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: "password12", role: "parent" }) }).then((r) => r.json()).catch(() => null);
+      if (reg?.token) {
+        await fetch(`${API}/students`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${reg.token}` }, body: JSON.stringify({ displayName: "Tolu" }) }).catch(() => {});
+        await page.evaluate((t) => localStorage.setItem("tutor_token", t), reg.token);
+        await page.locator(".lang-switch").selectOption("yo");
+        await page.goto(`${WEB}/account`, { waitUntil: "domcontentloaded" });
+        await page.locator("h2", { hasText: "Tolu" }).waitFor({ timeout: 15_000 }).catch(() => {});
+        body = await text(page);
+        check("the family dashboard follows into Yorùbá", body.includes("Ojú-ìwé ìdílé") && body.includes("Fi akẹ́kọ̀ọ́ kún un") && body.includes("Ẹni ìgbẹ́kẹ̀lé"), body.slice(0, 120).replace(/\n/g, " | "));
+        check("with the learner's name inside the translated sentences", body.includes("Tolu") && /Tolu bá dún bí ẹni/.test(body));
+        const leftovers = ["Family dashboard", "Add a student", "Care contact", "Face hints", "Sign out", "Recent sessions"].filter((w) => body.includes(w));
+        check("and none of the dashboard's own words left in English", leftovers.length === 0, leftovers.join(", "));
+        check("the dashboard fits the screen in Yorùbá", await fits(page));
+        await page.evaluate(() => localStorage.removeItem("tutor_token"));
+        await page.goto(`${WEB}/learn`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(600);
+      } else {
+        check("the family dashboard follows into Yorùbá (needs the API)", false, "no API at " + API);
+      }
+    }
 
     await page.locator(".lang-switch").selectOption("en");
     await page.waitForTimeout(600);

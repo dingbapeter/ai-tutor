@@ -61,16 +61,17 @@ interface StudentRow {
   plan?: StudyPlan | null;
 }
 
-const PROFILE_SECTIONS: Array<{ key: keyof LearnerProfile; label: string }> = [
-  { key: "goals", label: "Goals" },
-  { key: "strengths", label: "Going well" },
-  { key: "strugglingWith", label: "Working on" },
-  { key: "interests", label: "Interests" },
-  { key: "preferences", label: "Learns best with" },
-];
+const PROFILE_SECTIONS: Array<keyof LearnerProfile> = ["goals", "strengths", "strugglingWith", "interests", "preferences"];
 
 export default function Account() {
   const { t, tx } = useLang();
+  const profileLabel: Record<keyof LearnerProfile, string> = {
+    goals: t("Goals"),
+    strengths: t("Going well"),
+    strugglingWith: t("Working on"),
+    interests: t("Interests"),
+    preferences: t("Learns best with"),
+  };
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -126,9 +127,9 @@ export default function Account() {
     if (token) refresh(token);
   }, [token]);
 
-  async function refresh(t: string) {
+  async function refresh(tok: string) {
     try {
-      const res = await fetch(`${API}/dashboard`, { headers: { authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API}/dashboard`, { headers: { authorization: `Bearer ${tok}` } });
       if (res.status === 401) {
         localStorage.removeItem("tutor_token");
         setToken(null);
@@ -140,7 +141,7 @@ export default function Account() {
       const withPlans = await Promise.all(
         (dash.students as StudentRow[]).map(async (s) => {
           try {
-            const p = await fetch(`${API}/students/${s.id}/plan`, { headers: { authorization: `Bearer ${t}` } });
+            const p = await fetch(`${API}/students/${s.id}/plan`, { headers: { authorization: `Bearer ${tok}` } });
             return p.ok ? { ...s, plan: (await p.json()) as StudyPlan } : s;
           } catch {
             return s;
@@ -148,15 +149,15 @@ export default function Account() {
         }),
       );
       setStudents(withPlans);
-      const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${t}` } });
+      const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${tok}` } });
       if (me.ok) {
         const meJson = await me.json();
         setMeEmail(meJson.email);
         setEmailVerified(meJson.emailVerified !== false);
       }
-      const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${t}` } });
+      const u = await fetch(`${API}/me/usage`, { headers: { authorization: `Bearer ${tok}` } });
       if (u.ok) setUsage(await u.json());
-      const r = await fetch(`${API}/account/referral`, { headers: { authorization: `Bearer ${t}` } });
+      const r = await fetch(`${API}/account/referral`, { headers: { authorization: `Bearer ${tok}` } });
       if (r.ok) setReferral(await r.json());
       const b = await fetch(`${API}/billing/status`);
       if (b.ok && (await b.json()).configured === true) {
@@ -164,7 +165,7 @@ export default function Account() {
         await loadQuote(null);
       }
     } catch {
-      setError("could not load dashboard");
+      setError(t("The dashboard could not be loaded."));
     }
   }
 
@@ -193,7 +194,7 @@ export default function Account() {
       localStorage.setItem("tutor_token", json.token);
       setToken(json.token);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "sign-in failed");
+      setError(e instanceof Error ? e.message : t("Sign-in failed."));
     }
   }
 
@@ -206,11 +207,11 @@ export default function Account() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ displayName: newChild.trim() }),
       });
-      if (!res.ok) throw new Error("could not add student");
+      if (!res.ok) throw new Error(t("That student could not be added."));
       setNewChild("");
       refresh(token);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not add student");
+      setError(e instanceof Error ? e.message : t("That student could not be added."));
     }
   }
 
@@ -289,7 +290,7 @@ export default function Account() {
       }
       const vapid = await fetch(`${API}/push/vapid`);
       if (!vapid.ok) {
-        setError("notifications aren't switched on for this server yet");
+        setError(t("Notifications are not switched on for this server yet."));
         return;
       }
       const { publicKey } = await vapid.json();
@@ -309,7 +310,7 @@ export default function Account() {
   async function uploadRoutine(studentId: string, file: File) {
     if (!token) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError("That image is too large. Keep it under 5MB.");
+      setError(t("That picture is too large. Keep it under 5MB."));
       return;
     }
     setRoutineBusy(studentId);
@@ -332,7 +333,7 @@ export default function Account() {
   async function saveCareContact(studentId: string) {
     if (!token) return;
     if (!careForm.name.trim() || !careForm.phone.trim()) {
-      setError("A care contact needs both a name and a phone number.");
+      setError(t("A care contact needs both a name and a phone number."));
       return;
     }
     setError(null);
@@ -438,7 +439,7 @@ export default function Account() {
   }
 
   async function deleteEverything() {
-    const sure = prompt('This permanently erases your account, every student, and all their history. If you want a copy, use "Download all our data" first. Type DELETE to confirm.');
+    const sure = prompt(t("This permanently erases your account, every student, and all their history. If you want a copy, use \"Download all our data\" first. Type DELETE to confirm."));
     if (sure !== "DELETE" || !token) return;
     const res = await fetch(`${API}/me`, {
       method: "DELETE",
@@ -538,19 +539,19 @@ export default function Account() {
   return (
     <main className="shell wide">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-        <h1 style={{ margin: "6px 0" }}>Family dashboard</h1>
+        <h1 style={{ margin: "6px 0" }}>{t("Family dashboard")}</h1>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <small style={{ color: "var(--text-dim)" }}>{meEmail}</small>
-          <button onClick={signOut} className="btn quiet small">Sign out</button>
+          <button onClick={signOut} className="btn quiet small">{t("Sign out")}</button>
         </div>
       </div>
       {error && <p className="err">{error}</p>}
 
       {!emailVerified && (
         <p className="notice">
-          Please confirm your email so recaps and safety alerts reach you. Check your inbox.{" "}
+          {t("Please confirm your email so recaps and safety alerts reach you. Check your inbox.")}{" "}
           {verifySent ? (
-            <b>Sent!</b>
+            <b>{t("Sent!")}</b>
           ) : (
             <button
               onClick={async () => {
@@ -562,7 +563,7 @@ export default function Account() {
               }}
               style={{ border: "none", background: "none", color: "inherit", textDecoration: "underline", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
             >
-              Resend the link
+              {t("Resend the link")}
             </button>
           )}
         </p>
@@ -570,38 +571,38 @@ export default function Account() {
 
       {usage && (
         <div className="card" style={{ marginBottom: 14, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
-          <b style={{ textTransform: "capitalize" }}>{usage.plan} plan</b>
-          <span>💬 Today: {usage.today.messages}/{usage.today.limits.messages} messages</span>
-          <span>🎤 {usage.today.voiceTurns}/{usage.today.limits.voiceTurns} voice turns</span>
+          <b style={{ textTransform: "capitalize" }}>{t("{plan} plan", { plan: usage.plan })}</b>
+          <span>💬 {t("Today: {used}/{limit} messages", { used: usage.today.messages, limit: usage.today.limits.messages })}</span>
+          <span>🎤 {t("{used}/{limit} voice turns", { used: usage.today.voiceTurns, limit: usage.today.limits.voiceTurns })}</span>
           {pushState === "on" ? (
-            <span style={{ color: "var(--ok)" }}>🔔 Notifications on</span>
+            <span style={{ color: "var(--ok)" }}>🔔 {t("Notifications on")}</span>
           ) : pushState === "unsupported" ? (
-            <small style={{ color: "var(--text-dim)" }}>notifications unsupported on this browser</small>
+            <small style={{ color: "var(--text-dim)" }}>{t("notifications unsupported on this browser")}</small>
           ) : (
-            <button onClick={enableNotifications} className="btn quiet small">🔔 Enable study reminders</button>
+            <button onClick={enableNotifications} className="btn quiet small">🔔 {t("Enable study reminders")}</button>
           )}
           {billingOn && usage.plan !== "premium" && (
             <span className="plan-offer">
               {usage.plan === "free" && (
                 <button disabled={upgrading !== null} onClick={() => upgrade("plus")} className="btn small">
-                  {upgrading === "plus" ? "Opening checkout…" : quote ? `⭐ Plus, ${money(quote.monthly.plus.amount, quote.currency)} a month` : "⭐ Upgrade to Plus"}
+                  {upgrading === "plus" ? t("Opening checkout…") : quote ? `⭐ ${t("Plus, {price} a month", { price: money(quote.monthly.plus.amount, quote.currency) })}` : `⭐ ${t("Upgrade to Plus")}`}
                 </button>
               )}
               <button disabled={upgrading !== null} onClick={() => upgrade("premium")} className="btn small" style={{ background: "var(--brand-deep)" }}>
-                {upgrading === "premium" ? "Opening checkout…" : quote ? `👑 Premium, ${money(quote.monthly.premium.amount, quote.currency)} a month` : "👑 Go Premium"}
+                {upgrading === "premium" ? t("Opening checkout…") : quote ? `👑 ${t("Premium, {price} a month", { price: money(quote.monthly.premium.amount, quote.currency) })}` : `👑 ${t("Go Premium")}`}
               </button>
               {quote && quote.currencies.length > 1 && (
                 <label className="plan-currency">
-                  Prices in{" "}
-                  <select value={quote.currency} onChange={(e) => chooseCurrency(e.target.value)} aria-label="Currency">
+                  {t("Prices in")}{" "}
+                  <select value={quote.currency} onChange={(e) => chooseCurrency(e.target.value)} aria-label={t("Currency")}>
                     {quote.currencies.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
                 </label>
               )}
-              {quote && <small className="plan-note">Cancel any time. Paid through {quote.provider === "paystack" ? "Paystack" : quote.provider === "stripe" ? "Stripe" : quote.provider}.</small>}
-              {pricesDown && <small className="plan-note">Prices are not available right now. The buttons still work; the price is shown at checkout.</small>}
+              {quote && <small className="plan-note">{t("Cancel any time. Paid through {provider}.", { provider: quote.provider === "paystack" ? "Paystack" : quote.provider === "stripe" ? "Stripe" : quote.provider })}</small>}
+              {pricesDown && <small className="plan-note">{t("Prices are not available right now. The buttons still work; the price is shown at checkout.")}</small>}
             </span>
           )}
         </div>
@@ -609,10 +610,9 @@ export default function Account() {
 
       {referral && (
         <div className="card" style={{ marginBottom: 14 }}>
-          <b>🎁 Invite a friend</b>
+          <b>🎁 {t("Invite a friend")}</b>
           <p style={{ margin: "6px 0 8px", color: "var(--text-dim)", fontSize: 14 }}>
-            Share your link. When a friend joins and confirms their email, you BOTH get {referral.rewardDays} days
-            of Plus free.
+            {t("Share your link. When a friend joins and confirms their email, you BOTH get {n} days of Plus free.", { n: referral.rewardDays })}
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <code style={{ padding: "6px 10px", background: "var(--bg-soft, rgba(0,0,0,0.06))", borderRadius: 8, fontSize: 13, wordBreak: "break-all" }}>
@@ -630,39 +630,39 @@ export default function Account() {
                 }
               }}
             >
-              {linkCopied ? "Copied!" : "Copy link"}
+              {linkCopied ? t("Copied!") : t("Copy link")}
             </button>
           </div>
           <small style={{ color: "var(--text-dim)", display: "block", marginTop: 8 }}>
             {referral.invited === 0
-              ? "No friends yet. Send it to someone who would love a tutor."
-              : `${referral.invited} joined so far, ${referral.rewarded} confirmed.`}
+              ? t("No friends yet. Send it to someone who would love a tutor.")
+              : t("{joined} joined so far, {confirmed} confirmed.", { joined: referral.invited, confirmed: referral.rewarded })}
             {referral.boostUntil &&
-              ` Your thank-you ${referral.boostPlan ?? "plus"} runs until ${new Date(referral.boostUntil).toLocaleDateString()}.`}
+              " " + t("Your thank-you {plan} runs until {date}.", { plan: referral.boostPlan ?? "plus", date: new Date(referral.boostUntil).toLocaleDateString() })}
           </small>
         </div>
       )}
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <b>Add a student</b>
+        <b>{t("Add a student")}</b>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <input value={newChild} onChange={(e) => setNewChild(e.target.value)} className="inp"
-            placeholder="Child's name" onKeyDown={(e) => e.key === "Enter" && addChild()} />
-          <button onClick={addChild} className="btn">Add</button>
+            placeholder={t("Child's name")} onKeyDown={(e) => e.key === "Enter" && addChild()} />
+          <button onClick={addChild} className="btn">{t("Add")}</button>
         </div>
       </div>
 
-      {students.length === 0 && <p>No students yet. Add one above, then start a session from the <a href="/">home page</a>.</p>}
+      {students.length === 0 && <p>{tx("No students yet. Add one above, then start a session from the {home}.", { home: <a href="/">{t("home page")}</a> })}</p>}
 
       <p className="data-rights">
         <button onClick={downloadEverything} disabled={exporting}
-          title="Everything Dingba holds about your family, as one file you keep"
+          title={t("Everything Dingba holds about your family, as one file you keep")}
           style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13, fontFamily: "inherit", textDecoration: "underline" }}>
-          {exporting ? "Preparing your download…" : "Download all our data"}
+          {exporting ? t("Preparing your download…") : t("Download all our data")}
         </button>
         <button onClick={deleteEverything}
           style={{ border: "none", background: "none", color: "var(--danger)", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-          Delete my account and all data
+          {t("Delete my account and all data")}
         </button>
       </p>
 
@@ -672,24 +672,24 @@ export default function Account() {
             <h2 style={{ margin: 0 }}>
               {s.displayName}
               {(s.streakDays ?? 0) > 0 && (
-                <span style={{ fontSize: 15, marginLeft: 10 }}>🔥 {s.streakDays}-day streak</span>
+                <span style={{ fontSize: 15, marginLeft: 10 }}>🔥 {t("{n}-day streak", { n: s.streakDays ?? 0 })}</span>
               )}
             </h2>
             <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button onClick={() => viewTranscript(s.id)}
                 style={{ border: "none", background: "none", color: "var(--text-dim)", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}>
-                {transcript?.studentId === s.id ? "Hide transcript" : "View transcript"}
+                {transcript?.studentId === s.id ? t("Hide transcript") : t("View transcript")}
               </button>
-              <a href="/">Start a session</a>
+              <a href="/">{t("Start a session")}</a>
             </span>
           </div>
 
           {transcript?.studentId === s.id && (
             <div style={{ background: "var(--surface-2)", borderRadius: 10, padding: 12, margin: "10px 0", maxHeight: 260, overflowY: "auto" }}>
-              {transcript.messages.length === 0 && <small>No conversation recorded yet.</small>}
+              {transcript.messages.length === 0 && <small>{t("No conversation recorded yet.")}</small>}
               {transcript.messages.map((m, i) => (
                 <p key={i} style={{ margin: "4px 0", fontSize: 13 }}>
-                  <b>{m.role === "user" ? s.displayName : "Tutor"}:</b> {m.content.slice(0, 400)}
+                  <b>{m.role === "user" ? s.displayName : t("Tutor")}:</b> {m.content.slice(0, 400)}
                 </p>
               ))}
             </div>
@@ -697,9 +697,9 @@ export default function Account() {
 
           <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <b style={{ fontSize: 14.5 }}>Care contact</b>
+              <b style={{ fontSize: 14.5 }}>{t("Care contact")}</b>
               {careEditing === s.id ? (
-                <button onClick={() => setCareEditing(null)} className="btn ghost small">Cancel</button>
+                <button onClick={() => setCareEditing(null)} className="btn ghost small">{t("Cancel")}</button>
               ) : (
                 <span style={{ display: "flex", gap: 8 }}>
                   <button
@@ -713,10 +713,10 @@ export default function Account() {
                     }}
                     className="btn quiet small"
                   >
-                    {s.careContact ? "Change" : "Add someone"}
+                    {s.careContact ? t("Change") : t("Add someone")}
                   </button>
                   {s.careContact && (
-                    <button onClick={() => removeCareContact(s.id)} className="btn ghost small">Remove</button>
+                    <button onClick={() => removeCareContact(s.id)} className="btn ghost small">{t("Remove")}</button>
                   )}
                 </span>
               )}
@@ -725,18 +725,18 @@ export default function Account() {
             {careEditing === s.id ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
                 <input value={careForm.name} onChange={(e) => setCareForm((f) => ({ ...f, name: e.target.value }))}
-                  className="inp" style={{ flex: "1 1 130px" }} placeholder="Their name" />
+                  className="inp" style={{ flex: "1 1 130px" }} placeholder={t("Their name")} />
                 <input value={careForm.phone} onChange={(e) => setCareForm((f) => ({ ...f, phone: e.target.value }))}
-                  className="inp" style={{ flex: "1 1 130px" }} placeholder="Phone number" type="tel" />
+                  className="inp" style={{ flex: "1 1 130px" }} placeholder={t("Phone number")} type="tel" />
                 <input value={careForm.relationship} onChange={(e) => setCareForm((f) => ({ ...f, relationship: e.target.value }))}
-                  className="inp" style={{ flex: "1 1 110px" }} placeholder="Mum, uncle, coach…" />
-                <button onClick={() => saveCareContact(s.id)} className="btn">Save</button>
+                  className="inp" style={{ flex: "1 1 110px" }} placeholder={t("Mum, uncle, coach…")} />
+                <button onClick={() => saveCareContact(s.id)} className="btn">{t("Save")}</button>
               </div>
             ) : (
               <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
                 {s.careContact
-                  ? `${s.careContact.name}${s.careContact.relationship ? ` (${s.careContact.relationship})` : ""} · ${s.careContact.phone}. If ${s.displayName} ever sounds like they're in real trouble, their tutor offers a one-tap call to this number. Dingba never dials on its own.`
-                  : `Name one trusted person. If ${s.displayName} ever sounds like they're in real trouble, their tutor will offer a one-tap call to them. Nothing is ever dialed automatically.`}
+                  ? `${s.careContact.name}${s.careContact.relationship ? ` (${s.careContact.relationship})` : ""} · ${s.careContact.phone}. ${t("If {name} ever sounds like they're in real trouble, their tutor offers a one-tap call to this number. Dingba never dials on its own.", { name: s.displayName })}`
+                  : t("Name one trusted person. If {name} ever sounds like they're in real trouble, their tutor will offer a one-tap call to them. Nothing is ever dialed automatically.", { name: s.displayName })}
               </p>
             )}
           </div>
@@ -744,19 +744,19 @@ export default function Account() {
           {!s.onSchoolRoster && (
             <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <b style={{ fontSize: 14.5 }}>Face hints</b>
+                <b style={{ fontSize: 14.5 }}>{t("Face hints")}</b>
                 <button
                   onClick={() => setFaceHints(s.id, !s.faceHints)}
                   className={`btn small${s.faceHints ? " ghost" : " quiet"}`}
                   aria-pressed={Boolean(s.faceHints)}
                 >
-                  {s.faceHints ? "Switch off" : "Allow"}
+                  {s.faceHints ? t("Switch off") : t("Allow")}
                 </button>
               </div>
               <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
                 {s.faceHints
-                  ? `${s.displayName} may turn on their camera in a lesson, if they want to. It is off at the start of every lesson. The camera is read on their own device; no picture or video is recorded or sent. Their tutor only gets a plain word now and then, like "smiling" or "looking away", and never a guess at how they feel.`
-                  : `Off. If you allow it, ${s.displayName} can choose to turn on their camera in a lesson so their tutor can respond to their face the way a person in the room would. Pictures never leave their device.`}
+                  ? t("{name} may turn on their camera in a lesson, if they want to. It is off at the start of every lesson. The camera is read on their own device; no picture or video is recorded or sent. Their tutor only gets a plain word now and then, like \"smiling\" or \"looking away\", and never a guess at how they feel.", { name: s.displayName })
+                  : t("Off. If you allow it, {name} can choose to turn on their camera in a lesson so their tutor can respond to their face the way a person in the room would. Pictures never leave their device.", { name: s.displayName })}
               </p>
             </div>
           )}
@@ -764,30 +764,30 @@ export default function Account() {
           {!s.onSchoolRoster && (
             <div style={{ margin: "12px 0", padding: "12px 14px", borderRadius: 12, background: "var(--surface-2)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <b style={{ fontSize: 14.5 }}>Knowing their voice</b>
+                <b style={{ fontSize: 14.5 }}>{t("Knowing their voice")}</b>
                 <button
                   onClick={() => setVoiceFamiliarity(s.id, !s.voiceFamiliarity)}
                   className={`btn small${s.voiceFamiliarity ? " ghost" : " quiet"}`}
                   aria-pressed={Boolean(s.voiceFamiliarity)}
                 >
-                  {s.voiceFamiliarity ? "Switch off and forget" : "Allow"}
+                  {s.voiceFamiliarity ? t("Switch off and forget") : t("Allow")}
                 </button>
               </div>
               <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text-dim)" }}>
                 {s.voiceFamiliarity
                   ? `${
                       s.voiceStatus?.stage === "knows"
-                        ? `Their tutor knows how ${s.displayName} usually sounds.`
-                        : `Their tutor is getting to know how ${s.displayName} usually sounds (${s.voiceStatus?.sessionsHeard ?? 0} of 2 spoken lessons so far).`
-                    } When they talk, it keeps a few running averages (how high their voice is, how much it moves, how loud and how fast they speak), never a recording. If one day they sound quite unlike themselves, their tutor may gently ask how they are, and never guesses how they feel. Switching off forgets it all.`
-                  : `Off. If you allow it, their tutor gets to know how ${s.displayName} usually sounds over their first two spoken lessons, so it can notice on a day they sound unlike themselves, the way someone who knows them would. It keeps a few averages, never a recording, and nothing that could identify their voice.`}
+                        ? t("Their tutor knows how {name} usually sounds.", { name: s.displayName })
+                        : t("Their tutor is getting to know how {name} usually sounds ({heard} of 2 spoken lessons so far).", { name: s.displayName, heard: s.voiceStatus?.sessionsHeard ?? 0 })
+                    } ${t("When they talk, it keeps a few running averages (how high their voice is, how much it moves, how loud and how fast they speak), never a recording. If one day they sound quite unlike themselves, their tutor may gently ask how they are, and never guesses how they feel. Switching off forgets it all.")}`
+                  : t("Off. If you allow it, their tutor gets to know how {name} usually sounds over their first two spoken lessons, so it can notice on a day they sound unlike themselves, the way someone who knows them would. It keeps a few averages, never a recording, and nothing that could identify their voice.", { name: s.displayName })}
               </p>
             </div>
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", flexWrap: "wrap" }}>
             <label className="btn quiet small" style={{ cursor: "pointer" }}>
-              {routineBusy === s.id ? "Reading timetable…" : s.routine ? "Replace timetable" : "📅 Upload timetable"}
+              {routineBusy === s.id ? t("Reading timetable…") : s.routine ? t("Replace timetable") : `📅 ${t("Upload timetable")}`}
               <input
                 type="file"
                 accept="image/*"
@@ -802,14 +802,14 @@ export default function Account() {
             </label>
             <small style={{ color: "var(--text-dim)" }}>
               {s.routine
-                ? "Their tutor plans around this schedule."
-                : "A photo or screenshot of their timetable teaches Dingba their week."}
+                ? t("Their tutor plans around this schedule.")
+                : t("A photo or screenshot of their timetable teaches Dingba their week.")}
             </small>
           </div>
 
           {s.plan && (
             <div style={{ marginTop: 14 }}>
-              <h4 style={{ marginBottom: 2 }}>The week ahead</h4>
+              <h4 style={{ marginBottom: 2 }}>{t("The week ahead")}</h4>
               <p style={{ color: "var(--text-dim)", fontSize: 13.5, margin: "0 0 10px" }}>{s.plan.headline}</p>
               <div className="plan-week">
                 {s.plan.days.map((d) => (
@@ -817,7 +817,7 @@ export default function Account() {
                     <div className="plan-day-head">
                       <b>{d.weekday.slice(0, 3)}</b>
                       <span>{d.date.slice(8)}</span>
-                      {d.load === "busy" && <span className="plan-load">busy day</span>}
+                      {d.load === "busy" && <span className="plan-load">{t("busy day")}</span>}
                     </div>
                     {d.examLabel && <div className="plan-exam">{d.examLabel}</div>}
                     {d.items.map((item, i) =>
@@ -825,7 +825,7 @@ export default function Account() {
                         <a
                           className={`plan-item link ${item.kind}`}
                           key={i}
-                          title={`${item.why}. Tap to start this as a lesson.`}
+                          title={`${item.why}. ${t("Tap to start this as a lesson.")}`}
                           href={`/learn?lesson=${encodeURIComponent(item.skillId)}&pack=${encodeURIComponent(item.packId)}&student=${encodeURIComponent(s.id)}`}
                         >
                           {item.title}
@@ -844,7 +844,7 @@ export default function Account() {
 
           {s.routine && (s.routine.subjects.length > 0 || s.routine.weekly.length > 0 || s.routine.examDates.length > 0 || s.routine.notes) && (
             <>
-              <h4 style={{ marginBottom: 6 }}>Learning routine</h4>
+              <h4 style={{ marginBottom: 6 }}>{t("Learning routine")}</h4>
               {s.routine.subjects.length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                   {s.routine.subjects.map((sub) => (
@@ -862,7 +862,7 @@ export default function Account() {
               ))}
               {s.routine.examDates.length > 0 && (
                 <p style={{ margin: "4px 0", fontSize: 13.5 }}>
-                  <b>Exams:</b>{" "}
+                  <b>{t("Exams")}:</b>{" "}
                   <span style={{ color: "var(--text-dim)" }}>
                     {s.routine.examDates.map((e) => `${e.label} (${e.date})`).join(" · ")}
                   </span>
@@ -874,14 +874,14 @@ export default function Account() {
             </>
           )}
 
-          {s.profile && PROFILE_SECTIONS.some(({ key }) => (s.profile?.[key] ?? []).length > 0) && (
+          {s.profile && PROFILE_SECTIONS.some((key) => (s.profile?.[key] ?? []).length > 0) && (
             <>
-              <h4 style={{ marginBottom: 6 }}>{s.displayName}&apos;s learning profile</h4>
+              <h4 style={{ marginBottom: 6 }}>{t("{name}'s learning profile", { name: s.displayName })}</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                {PROFILE_SECTIONS.map(({ key, label }) =>
+                {PROFILE_SECTIONS.map((key) =>
                   (s.profile?.[key] ?? []).length > 0 ? (
                     <div key={key} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
-                      <small style={{ color: "var(--text-dim)", minWidth: 96 }}>{label}</small>
+                      <small style={{ color: "var(--text-dim)", minWidth: 96 }}>{profileLabel[key]}</small>
                       {(s.profile?.[key] ?? []).map((item) => (
                         <span key={item} style={{ fontSize: 13, background: "var(--brand-soft)", color: "var(--brand-strong)", borderRadius: 999, padding: "2px 10px" }}>
                           {item}
@@ -896,7 +896,7 @@ export default function Account() {
 
           {s.mastery.length > 0 && (
             <>
-              <h4 style={{ marginBottom: 6 }}>Skill progress</h4>
+              <h4 style={{ marginBottom: 6 }}>{t("Skill progress")}</h4>
               {s.mastery.map((m) => (
                 <div key={m.skillId} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
@@ -904,7 +904,7 @@ export default function Account() {
                       {m.title ?? m.skillId.split(".").slice(1).join(" · ").replace(/-/g, " ")}
                       {m.due && (
                         <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: "var(--brand-strong)", background: "var(--brand-soft)", borderRadius: 999, padding: "1px 8px" }}>
-                          due for review
+                          {t("due for review")}
                         </span>
                       )}
                     </small>
@@ -924,26 +924,26 @@ export default function Account() {
 
           {s.sessions.length > 0 && (
             <>
-              <h4 style={{ marginBottom: 6 }}>Recent sessions</h4>
+              <h4 style={{ marginBottom: 6 }}>{t("Recent sessions")}</h4>
               {s.sessions.map((sess, i) => (
                 <div key={i} style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10, marginBottom: 8 }}>
                   <small style={{ color: "var(--text-dim)" }}>{new Date(sess.startedAt).toLocaleString()}</small>
                   <p style={{ margin: "4px 0", whiteSpace: "pre-wrap" }}>
-                    {sess.summary ? sess.summary.slice(0, 300) : sess.endedAt ? "(no recap)" : "(in progress)"}
+                    {sess.summary ? sess.summary.slice(0, 300) : sess.endedAt ? t("(no recap)") : t("(in progress)")}
                   </p>
                 </div>
               ))}
             </>
           )}
-          {s.sessions.length === 0 && <small style={{ color: "var(--text-dim)" }}>No sessions yet. A fresh start is a beautiful thing.</small>}
+          {s.sessions.length === 0 && <small style={{ color: "var(--text-dim)" }}>{t("No sessions yet. A fresh start is a beautiful thing.")}</small>}
 
           {s.safety?.length > 0 && (
             <>
-              <h4 style={{ marginBottom: 6, color: "var(--danger)" }}>Flagged moments ({s.safety.length})</h4>
+              <h4 style={{ marginBottom: 6, color: "var(--danger)" }}>{t("Flagged moments ({n})", { n: s.safety.length })}</h4>
               {s.safety.map((i, idx) => (
                 <div key={idx} style={{ borderLeft: `3px solid ${i.severity === "danger" ? "var(--danger)" : "#d9a13f"}`, paddingLeft: 10, marginBottom: 8 }}>
                   <small style={{ color: "var(--text-dim)" }}>
-                    {new Date(i.createdAt).toLocaleString()} · {i.severity} · {i.categories.join(", ")} · said by {i.direction === "student" ? s.displayName : "the tutor"}
+                    {new Date(i.createdAt).toLocaleString()} · {i.severity} · {i.categories.join(", ")} · {t("said by {who}", { who: i.direction === "student" ? s.displayName : t("the tutor") })}
                   </small>
                   <p style={{ margin: "2px 0", fontSize: 14 }}>&ldquo;{i.excerpt}&rdquo;</p>
                 </div>
@@ -953,7 +953,7 @@ export default function Account() {
         </div>
       ))}
       <p className="footlinks">
-        Teaching a class or running a school? <a href="/school">Open the school portal</a>
+        {t("Teaching a class or running a school?")} <a href="/school">{t("Open the school portal")}</a>
       </p>
     </main>
   );

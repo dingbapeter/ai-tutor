@@ -196,7 +196,11 @@ Yorùbá, Igbo, Hausa), written without a native reviewer and therefore never ch
 reviewer opens any page with `?uiDrafts=1`, picks the language from the
 switch, reads every screen in place, fixes the dictionary, and flips the
 flag. Arabic lays the whole page out right to left. The family dashboard,
-the legal pages, the Command Centre and the Studio stay English for now.
+the password reset page and the email confirmation page follow the same
+choice, with the learner's name filled into the translated sentences, and
+the probe signs a parent in and checks the dashboard in Yorùbá carries
+none of its own words in English. The school portal, the legal pages, the
+Command Centre and the Studio stay English for now.
 
 `tools/device/lang-probe.mjs` proves it on every engine: a French browser
 still sees English while French is a draft and gets no switch; a reviewer

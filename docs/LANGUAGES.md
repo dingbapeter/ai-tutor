@@ -126,7 +126,8 @@ us more than the feature gains.
 Teaching in a language and showing the app in it are two different
 things. The tutor's languages are the table above. The app's own words
 (buttons, labels, the status line, the home page, sign-in, the camera
-consent) are in `apps/web/app/i18n/`, one dictionary per language, with
+consent, the family dashboard, password reset and email confirmation)
+are in `apps/web/app/i18n/`, one dictionary per language, with
 ten drafts shipped (French, Spanish, Portuguese, Arabic, Swahili, Hindi,
 Nigerian Pidgin, Yorùbá, Igbo, Hausa) and none shown to a child until a
 speaker has reviewed
