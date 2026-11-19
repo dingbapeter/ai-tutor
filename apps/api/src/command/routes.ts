@@ -6,6 +6,8 @@ import { grantStatus, nextReviewFrom, PERFORMANCE_RATINGS, REVIEW_DECISIONS } fr
 import { normalize, type ControlsReader, type PlatformControls } from "./settings.js";
 import { csvFilename, toCsv } from "./csv.js";
 import type { Metrics } from "../ops/metrics.js";
+import { reportFor } from "../pilot/routes.js";
+import { loadPack } from "../tutor/prompt.js";
 
 /**
  * The Command Centre API: the backend of everything. Metrics, money, people,
@@ -146,6 +148,37 @@ export async function registerCommandCentre(
     if (!actor) return;
     const [analytics, referrals] = await Promise.all([store.growthAnalytics(), store.referralStats(5)]);
     return { ...analytics, referrals };
+  });
+
+  /**
+   * Evidence: what each school pilot measured. The same report the school
+   * reads, cut down to its headline, with no learner named.
+   */
+  app.get("/command/pilots", async (req, reply) => {
+    const actor = await requireCap(req, reply, "metrics:read");
+    if (!actor) return;
+    const out = [];
+    for (const pilot of await store.listAllPilots()) {
+      const r = await reportFor(store, pilot);
+      out.push({
+        id: pilot.id,
+        school: pilot.orgName,
+        name: pilot.name,
+        subject: loadPack(pilot.packId).title,
+        status: pilot.status,
+        design: r.design,
+        questionsPerTest: r.itemsPerForm,
+        createdAt: r.pilot.createdAt,
+        closedAt: r.pilot.closedAt,
+        flow: r.flow,
+        strength: r.strength,
+        tutor: r.tutor,
+        comparison: r.comparison,
+        difference: r.difference,
+        reading: r.reading,
+      });
+    }
+    return { pilots: out };
   });
 
   // ---- Money ----

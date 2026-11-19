@@ -7,6 +7,8 @@ import {
   real,
   jsonb,
   boolean,
+  primaryKey,
+  unique,
 } from "drizzle-orm/pg-core";
 
 /** Accounts. A parent account may own several student profiles (family plan). */
@@ -383,3 +385,50 @@ export const platformSettings = pgTable("platform_settings", {
   updatedBy: uuid("updated_by"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+/**
+ * School pilots: a before-and-after measurement of what learners gained
+ * (see apps/api/src/pilot). Mirrors migrations/0021_pilots.sql.
+ */
+export const pilots = pgTable("pilots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  packId: text("pack_id").notNull(),
+  skillIds: jsonb("skill_ids").$type<string[]>().notNull().default([]),
+  comparison: boolean("comparison").notNull().default(false),
+  status: text("status", { enum: ["baseline", "endline", "closed"] }).notNull().default("baseline"),
+  /** Forms A and B, copied in full when the pilot is made. */
+  forms: jsonb("forms").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  endlineOpenedAt: timestamp("endline_opened_at"),
+  closedAt: timestamp("closed_at"),
+});
+
+export const pilotMembers = pgTable(
+  "pilot_members",
+  {
+    pilotId: uuid("pilot_id").notNull().references(() => pilots.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+    arm: text("arm", { enum: ["tutor", "comparison"] }).notNull().default("tutor"),
+    formOrder: text("form_order", { enum: ["AB", "BA"] }).notNull().default("AB"),
+    /** The learner's own test link; good only for sitting this pilot's tests. */
+    code: text("code").notNull().unique(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.pilotId, t.studentId] }) }),
+);
+
+export const pilotAttempts = pgTable(
+  "pilot_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pilotId: uuid("pilot_id").notNull().references(() => pilots.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+    phase: text("phase", { enum: ["baseline", "endline"] }).notNull(),
+    form: text("form", { enum: ["A", "B"] }).notNull(),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    finishedAt: timestamp("finished_at"),
+    answers: jsonb("answers").$type<Record<string, { answer: string; correct: boolean | null; exact?: boolean }>>().notNull().default({}),
+  },
+  (t) => ({ once: unique().on(t.pilotId, t.studentId, t.phase) }),
+);

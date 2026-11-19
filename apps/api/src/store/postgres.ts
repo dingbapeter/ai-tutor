@@ -13,6 +13,10 @@ import {
   type CareContact,
   type LearnerProfile,
   type LearnerRoutine,
+  type PilotAnswer,
+  type PilotAttempt,
+  type PilotMember,
+  type PilotRecord,
   type PlatformIncident,
   type PlatformMetrics,
   type SessionMeta,
@@ -23,6 +27,7 @@ import {
   type UsageKind,
 } from "./types.js";
 import { loadPack } from "../tutor/prompt.js";
+import type { PilotForms } from "../pilot/forms.js";
 
 export class PostgresStore implements Store {
   readonly kind = "postgres";
@@ -944,6 +949,151 @@ export class PostgresStore implements Store {
     return Number(rows[0]?.n ?? 0);
   }
 
+  // ---- School pilots ----
+
+  private pilotRow(r: typeof schema.pilots.$inferSelect): PilotRecord {
+    return {
+      id: r.id,
+      orgId: r.orgId,
+      name: r.name,
+      packId: r.packId,
+      skillIds: r.skillIds,
+      comparison: r.comparison,
+      status: r.status,
+      forms: r.forms as PilotForms,
+      createdAt: r.createdAt,
+      endlineOpenedAt: r.endlineOpenedAt,
+      closedAt: r.closedAt,
+    };
+  }
+
+  async createPilot(input: Parameters<Store["createPilot"]>[0]) {
+    // The pilot and its enrolment are one fact: both or neither.
+    return this.db.transaction(async (tx) => {
+      const [pilot] = await tx
+        .insert(schema.pilots)
+        .values({ orgId: input.orgId, name: input.name, packId: input.packId, skillIds: input.skillIds, comparison: input.comparison, forms: input.forms })
+        .returning({ id: schema.pilots.id });
+      if (input.members.length) {
+        await tx.insert(schema.pilotMembers).values(input.members.map((m) => ({ pilotId: pilot.id, ...m })));
+      }
+      return pilot;
+    });
+  }
+
+  async listPilots(orgId: string) {
+    const rows = await this.db.select().from(schema.pilots).where(eq(schema.pilots.orgId, orgId)).orderBy(desc(schema.pilots.createdAt));
+    return rows.map((r) => this.pilotRow(r));
+  }
+
+  async listAllPilots() {
+    const rows = await this.db
+      .select({ pilot: schema.pilots, orgName: schema.orgs.name })
+      .from(schema.pilots)
+      .innerJoin(schema.orgs, eq(schema.pilots.orgId, schema.orgs.id))
+      .orderBy(desc(schema.pilots.createdAt));
+    return rows.map((r) => ({ ...this.pilotRow(r.pilot), orgName: r.orgName }));
+  }
+
+  async getPilot(pilotId: string) {
+    const [row] = await this.db.select().from(schema.pilots).where(eq(schema.pilots.id, pilotId)).limit(1);
+    return row ? this.pilotRow(row) : null;
+  }
+
+  async listPilotMembers(pilotId: string): Promise<PilotMember[]> {
+    return this.db
+      .select({
+        studentId: schema.pilotMembers.studentId,
+        displayName: schema.students.displayName,
+        arm: schema.pilotMembers.arm,
+        formOrder: schema.pilotMembers.formOrder,
+        code: schema.pilotMembers.code,
+      })
+      .from(schema.pilotMembers)
+      .innerJoin(schema.students, eq(schema.pilotMembers.studentId, schema.students.id))
+      .where(eq(schema.pilotMembers.pilotId, pilotId));
+  }
+
+  async setPilotStatus(pilotId: string, status: "endline" | "closed", at: Date) {
+    await this.db
+      .update(schema.pilots)
+      .set(status === "endline" ? { status, endlineOpenedAt: at } : { status, closedAt: at })
+      .where(eq(schema.pilots.id, pilotId));
+  }
+
+  async deletePilot(pilotId: string) {
+    // Members and sittings go with it (on delete cascade).
+    await this.db.delete(schema.pilots).where(eq(schema.pilots.id, pilotId));
+  }
+
+  async pilotMemberByCode(code: string) {
+    const [row] = await this.db
+      .select({
+        pilotId: schema.pilotMembers.pilotId,
+        studentId: schema.pilotMembers.studentId,
+        displayName: schema.students.displayName,
+        arm: schema.pilotMembers.arm,
+        formOrder: schema.pilotMembers.formOrder,
+        code: schema.pilotMembers.code,
+      })
+      .from(schema.pilotMembers)
+      .innerJoin(schema.students, eq(schema.pilotMembers.studentId, schema.students.id))
+      .where(eq(schema.pilotMembers.code, code))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async openPilotOfStudent(studentId: string) {
+    const [row] = await this.db
+      .select({ pilot: schema.pilots, arm: schema.pilotMembers.arm, formOrder: schema.pilotMembers.formOrder })
+      .from(schema.pilotMembers)
+      .innerJoin(schema.pilots, eq(schema.pilotMembers.pilotId, schema.pilots.id))
+      .where(and(eq(schema.pilotMembers.studentId, studentId), sql`${schema.pilots.status} <> 'closed'`))
+      .orderBy(desc(schema.pilots.createdAt))
+      .limit(1);
+    return row ? { pilot: this.pilotRow(row.pilot), arm: row.arm, formOrder: row.formOrder } : null;
+  }
+
+  async getPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline"): Promise<PilotAttempt | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.pilotAttempts)
+      .where(and(eq(schema.pilotAttempts.pilotId, pilotId), eq(schema.pilotAttempts.studentId, studentId), eq(schema.pilotAttempts.phase, phase)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async startPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline", form: "A" | "B"): Promise<PilotAttempt> {
+    // Two taps on the link must not make two sittings: the unique key
+    // decides, and whoever lost the race reads the winner's row.
+    await this.db.insert(schema.pilotAttempts).values({ pilotId, studentId, phase, form }).onConflictDoNothing();
+    return (await this.getPilotAttempt(pilotId, studentId, phase))!;
+  }
+
+  async addPilotMembers(pilotId: string, members: Array<Omit<PilotMember, "displayName">>) {
+    if (members.length) await this.db.insert(schema.pilotMembers).values(members.map((m) => ({ pilotId, ...m }))).onConflictDoNothing();
+  }
+
+  async savePilotAnswer(attemptId: string, itemId: string, record: PilotAnswer) {
+    // Merged inside the database, so two answers landing at once cannot overwrite each other.
+    const patch = JSON.stringify({ [itemId]: record });
+    await this.db
+      .update(schema.pilotAttempts)
+      .set({ answers: sql`${schema.pilotAttempts.answers} || ${patch}::jsonb` })
+      .where(eq(schema.pilotAttempts.id, attemptId));
+  }
+
+  async finishPilotAttempt(attemptId: string, at: Date) {
+    await this.db
+      .update(schema.pilotAttempts)
+      .set({ finishedAt: at })
+      .where(and(eq(schema.pilotAttempts.id, attemptId), isNull(schema.pilotAttempts.finishedAt)));
+  }
+
+  async listPilotAttempts(pilotId: string): Promise<PilotAttempt[]> {
+    return this.db.select().from(schema.pilotAttempts).where(eq(schema.pilotAttempts.pilotId, pilotId));
+  }
+
   // ---- Trust & retention ----
 
   async savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }) {
@@ -1136,6 +1286,8 @@ export class PostgresStore implements Store {
         await tx.delete(schema.mastery).where(eq(schema.mastery.studentId, s.id));
         await tx.delete(schema.safetyIncidents).where(eq(schema.safetyIncidents.studentId, s.id));
         await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.studentId, s.id));
+        await tx.delete(schema.pilotAttempts).where(eq(schema.pilotAttempts.studentId, s.id));
+        await tx.delete(schema.pilotMembers).where(eq(schema.pilotMembers.studentId, s.id));
         await tx.delete(schema.students).where(eq(schema.students.id, s.id));
       }
       await tx.delete(schema.usageEvents).where(eq(schema.usageEvents.userId, userId));
@@ -1145,6 +1297,9 @@ export class PostgresStore implements Store {
       await tx.delete(schema.emailVerifications).where(eq(schema.emailVerifications.userId, userId));
       await tx.delete(schema.billingSubscriptions).where(eq(schema.billingSubscriptions.userId, userId));
       await tx.delete(schema.authTokens).where(eq(schema.authTokens.userId, userId));
+      // A school's pilots go with the school; their members and sittings go with them.
+      const owned = await tx.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+      for (const org of owned) await tx.delete(schema.pilots).where(eq(schema.pilots.orgId, org.id));
       await tx.delete(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
       // Free-access grants and their reviews point at the account; without
       // these two lines the database refused to erase anyone who ever held
@@ -1206,10 +1361,26 @@ export class PostgresStore implements Store {
         .from(schema.billingEvents)
         .where(sql`lower(${schema.billingEvents.email}) = ${user.email.toLowerCase()}`),
       orgsOwned: await this.db.select().from(schema.orgs).where(eq(schema.orgs.ownerUserId, userId)),
+      pilots: await this.exportPilots(userId),
       staff: (await this.db.select().from(schema.staffMembers).where(eq(schema.staffMembers.userId, userId)))[0] ?? null,
       accessGrant: (await this.db.select().from(schema.accessGrants).where(eq(schema.accessGrants.userId, userId)))[0] ?? null,
       accessReviews: await this.db.select().from(schema.accessReviews).where(eq(schema.accessReviews.userId, userId)),
     };
+  }
+
+  private async exportPilots(userId: string): Promise<AccountExport["pilots"]> {
+    const out: AccountExport["pilots"] = [];
+    const owned = await this.db.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.ownerUserId, userId));
+    for (const org of owned) {
+      for (const pilot of await this.db.select().from(schema.pilots).where(eq(schema.pilots.orgId, org.id))) {
+        out.push({
+          pilot,
+          members: await this.db.select().from(schema.pilotMembers).where(eq(schema.pilotMembers.pilotId, pilot.id)),
+          attempts: await this.db.select().from(schema.pilotAttempts).where(eq(schema.pilotAttempts.pilotId, pilot.id)),
+        });
+      }
+    }
+    return out;
   }
 
   async listRecentMessages(studentId: string, limit: number) {

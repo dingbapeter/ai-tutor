@@ -329,6 +329,22 @@ and silently ship worse teaching.
 
 ---
 
+### 3.4 The first school pilot — kit BUILT 2026-11-19; see docs/PILOT.md
+
+The thing that turns a demo into a fundable company: a measured learning
+gain. The kit is built and proven (tests on memory and Postgres, a whole
+pilot walked in a real browser). What it needs from you:
+
+- [ ] The real model on (1.2) and the maths checker reachable
+      (`MATHCHECK_URL`). A pilot on the stand-in providers measures a script.
+- [ ] One school willing to run six weeks. Thirty or more learners in each
+      half if they will take a comparison group; that is the design that
+      carries weight outside the school.
+- [ ] The school tells parents and gets the consent its own policy asks
+      for. Have the lawyer (3.1) read the wording.
+- [ ] Read the result in the Command Centre, Evidence tab. That page is
+      the one to show an investor.
+
 ## Part 4: the horizon (your calls to make)
 
 | Decision | Why it needs you |

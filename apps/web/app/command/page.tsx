@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Chart from "./Chart";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
@@ -219,11 +219,12 @@ interface GrowthView {
   };
 }
 
-type Tab = "overview" | "growth" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
+type Tab = "overview" | "growth" | "evidence" | "safety" | "money" | "people" | "team" | "controls" | "ops" | "trail";
 
 const TABS: Array<{ id: Tab; label: string; needs: Capability }> = [
   { id: "overview", label: "Overview", needs: "metrics:read" },
   { id: "growth", label: "Growth", needs: "metrics:read" },
+  { id: "evidence", label: "Evidence", needs: "metrics:read" },
   { id: "safety", label: "Safety", needs: "safety:read" },
   { id: "money", label: "Money", needs: "finance:aggregate" },
   { id: "people", label: "People", needs: "people:read" },
@@ -354,6 +355,7 @@ export default function CommandCentre() {
         )}
         {tab === "overview" && <Overview call={call} token={token} />}
         {tab === "growth" && <Growth call={call} />}
+        {tab === "evidence" && <Evidence call={call} />}
         {tab === "safety" && <Safety call={call} token={token} />}
         {tab === "money" && <Money call={call} me={me} token={token} />}
         {tab === "people" && <People call={call} me={me} />}
@@ -1726,6 +1728,140 @@ function uptimeWords(seconds: number): string {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+interface PilotGain {
+  n: number;
+  preMean: number;
+  postMean: number;
+  gain: number;
+  ci: [number, number] | null;
+}
+interface PilotHeadline {
+  id: string;
+  school: string;
+  name: string;
+  subject: string;
+  status: "baseline" | "endline" | "closed";
+  design: string;
+  createdAt: string;
+  flow: { tutor: { enrolled: number; matched: number }; comparison: { enrolled: number; matched: number } };
+  strength: "not-finished" | "too-few" | "early" | "result";
+  tutor: PilotGain | null;
+  difference: { difference: number; ci: [number, number] | null; effect: number | null } | null;
+  reading: string[];
+}
+
+/**
+ * What the school pilots measured. The diligence question after "do
+ * families come back?" is "does it work?", and this is where the answer
+ * accumulates, in the same words the schools themselves read.
+ */
+function Evidence({ call }: { call: Call }) {
+  const [pilots, setPilots] = useState<PilotHeadline[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    call("/command/pilots")
+      .then((d) => setPilots((d as { pilots: PilotHeadline[] }).pilots))
+      .catch((err) => setError((err as Error).message));
+  }, [call]);
+
+  if (error) return <div className="err">{error}</div>;
+  if (!pilots) return <p className="cc-empty">Gathering the results.</p>;
+
+  const one = (n: number) => (Math.round(n * 10) / 10).toString();
+  const signed = (n: number) => `${n > 0 ? "+" : ""}${one(n)}`;
+  const span = (ci: [number, number] | null) => (ci ? `${one(ci[0])} to ${one(ci[1])}` : "–");
+  const reported = pilots.filter((p) => p.tutor);
+  const learners = reported.reduce((a, p) => a + p.flow.tutor.matched + p.flow.comparison.matched, 0);
+  const STATE: Record<PilotHeadline["status"], string> = { baseline: "Starting test", endline: "Final test", closed: "Closed" };
+  const STRENGTH: Record<PilotHeadline["strength"], string> = {
+    "not-finished": "Running",
+    "too-few": "Too few learners",
+    early: "Early signal",
+    result: "Result",
+  };
+
+  return (
+    <>
+      <div className="cc-h">
+        <h2>Evidence</h2>
+      </div>
+      <p className="cc-lede">
+        What each school pilot measured: a test before, a matched test after, marked by machine. No learner
+        is named here. A randomised comparison can speak about cause; a before-and-after cannot, and each
+        pilot says which it is.
+      </p>
+
+      <div className="cc-stats">
+        <Stat k="Pilots" v={num(pilots.length)} n={`${pilots.filter((p) => p.status !== "closed").length} running now`} />
+        <Stat k="With a result" v={num(reported.length)} n="enough learners sat both tests" />
+        <Stat k="Learners measured" v={num(learners)} n="sat both tests, across those pilots" />
+        <Stat k="Randomised" v={num(pilots.filter((p) => p.design === "randomised comparison").length)} n="with a comparison group picked by chance" />
+      </div>
+
+      <div className="cc-panel">
+        <h3>Pilots</h3>
+        {pilots.length === 0 ? (
+          <p className="cc-empty">No school has started a pilot yet. A school starts one from its portal, under Measure the difference.</p>
+        ) : (
+          <div className="cc-table-wrap">
+            <table className="cc-table">
+              <thead>
+                <tr>
+                  <th>School and pilot</th>
+                  <th>Design</th>
+                  <th>State</th>
+                  <th className="num">Sat both</th>
+                  <th className="num">Before</th>
+                  <th className="num">After</th>
+                  <th className="num">Change (95%)</th>
+                  <th className="num">More than comparison (95%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pilots.map((p) => (
+                  <Fragment key={p.id}>
+                    <tr className="click" onClick={() => setOpen(open === p.id ? null : p.id)}>
+                      <td>
+                        <b>{p.school}</b>
+                        <br />
+                        {p.name} · {p.subject}
+                      </td>
+                      <td>{p.design === "randomised comparison" ? "Randomised" : "Before and after"}</td>
+                      <td>
+                        <span className={`cc-tag${p.strength === "result" ? " ok" : ""}`}>{p.status === "closed" ? STRENGTH[p.strength] : STATE[p.status]}</span>
+                      </td>
+                      <td className="num">{p.flow.tutor.matched + p.flow.comparison.matched} of {p.flow.tutor.enrolled + p.flow.comparison.enrolled}</td>
+                      <td className="num">{p.tutor ? `${one(p.tutor.preMean)}%` : "–"}</td>
+                      <td className="num">{p.tutor ? `${one(p.tutor.postMean)}%` : "–"}</td>
+                      <td className="num">{p.tutor ? `${signed(p.tutor.gain)} (${span(p.tutor.ci)})` : "–"}</td>
+                      <td className="num">{p.difference ? `${signed(p.difference.difference)} (${span(p.difference.ci)})` : "–"}</td>
+                    </tr>
+                    {open === p.id && (
+                      <tr>
+                        <td colSpan={8}>
+                          {p.reading.map((line, i) => (
+                            <p key={i} style={{ margin: "0 0 6px", fontSize: 14 }}>{line}</p>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
+          Tap a pilot to read its result in full. Changes are in percentage points. An interval that includes zero
+          means that pilot cannot tell its change apart from chance.
+        </p>
+      </div>
+    </>
+  );
 }
 
 function Growth({ call }: { call: Call }) {

@@ -961,7 +961,7 @@ export default function Home() {
     setShowPractice(!showPractice);
     if (problems.length === 0 && packId) {
       try {
-        const res = await fetch(`${API}/packs/${packId}/problems`);
+        const res = await fetch(`${API}/packs/${packId}/problems${sessionId ? `?session=${sessionId}` : ""}`);
         if (res.ok) setProblems(await res.json());
       } catch {}
     }

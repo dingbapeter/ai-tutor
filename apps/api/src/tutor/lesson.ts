@@ -35,7 +35,11 @@ export class UnknownSkillError extends Error {
 
 const PRACTICE_COUNT = 3;
 
-export function buildLessonBrief(pack: CurriculumPack, skillId: string): LessonBrief {
+/**
+ * `setAside` holds the prompts of questions a learner's pilot tests use;
+ * a lesson never works through or practises one of those.
+ */
+export function buildLessonBrief(pack: CurriculumPack, skillId: string, setAside?: Set<string>): LessonBrief {
   const skill = pack.skills.find((s) => s.id === skillId);
   if (!skill) throw new UnknownSkillError(skillId, pack.id);
 
@@ -45,7 +49,7 @@ export function buildLessonBrief(pack: CurriculumPack, skillId: string): LessonB
     .slice(0, 2);
 
   // Bank problems for this skill, in bank order so the lesson is stable.
-  const bank = pack.problems.filter((p) => p.skillId === skillId && p.answer);
+  const bank = pack.problems.filter((p) => p.skillId === skillId && p.answer && !setAside?.has(p.prompt));
   const workedExample = bank[0] ? { prompt: bank[0].prompt, answer: bank[0].answer! } : null;
   const practice = bank.slice(1, 1 + PRACTICE_COUNT).map((p) => ({ prompt: p.prompt, answer: p.answer! }));
 

@@ -12,6 +12,10 @@ import {
   type LearnerProfile,
   type LearnerRoutine,
   type MasteryState,
+  type PilotAnswer,
+  type PilotAttempt,
+  type PilotMember,
+  type PilotRecord,
   type PlatformIncident,
   type PlatformMetrics,
   type SessionMeta,
@@ -327,6 +331,7 @@ export class MemoryStore implements Store {
       this.memories.delete(sid);
       this.mastery.delete(sid);
       this.orgStudents.delete(sid);
+      this.forgetLearnerInPilots(sid);
       for (const [id, s] of this.sessions) {
         if (s.meta.studentId === sid) {
           this.sessions.delete(id);
@@ -354,7 +359,11 @@ export class MemoryStore implements Store {
     this.accessGrants.delete(userId);
     this.accessReviews = this.accessReviews.filter((r) => r.userId !== userId);
     this.staff.delete(userId);
-    for (const [id, o] of this.orgs) if (o.ownerUserId === userId) this.orgs.delete(id);
+    for (const [id, o] of this.orgs) {
+      if (o.ownerUserId !== userId) continue;
+      for (const p of await this.listPilots(id)) await this.deletePilot(p.id);
+      this.orgs.delete(id);
+    }
     for (const [email, a] of this.accounts) if (a.userId === userId) this.accounts.delete(email);
   }
 
@@ -403,6 +412,13 @@ export class MemoryStore implements Store {
       billingSubscriptions: [...this.subscriptions.values()].filter((s) => s.userId === userId),
       paymentRecords: this.billingEvents.filter((e) => e.email?.toLowerCase() === acct.email.toLowerCase()),
       orgsOwned: [...this.orgs.values()].filter((o) => o.ownerUserId === userId),
+      pilots: [...this.pilots.values()]
+        .filter((p) => this.orgs.get(p.orgId)?.ownerUserId === userId)
+        .map((p) => ({
+          pilot: p,
+          members: this.pilotMembers.get(p.id) ?? [],
+          attempts: [...this.pilotAttempts.values()].filter((a) => a.pilotId === p.id),
+        })),
       staff: this.staff.get(userId) ?? null,
       accessGrant: this.accessGrants.get(userId) ?? null,
       accessReviews: this.accessReviews.filter((r) => r.userId === userId),
@@ -800,6 +816,122 @@ export class MemoryStore implements Store {
 
   async countOrgStudents(orgId: string) {
     return (await this.listOrgStudents(orgId)).length;
+  }
+
+  // ---- School pilots ----
+
+  private pilots = new Map<string, PilotRecord>();
+  private pilotMembers = new Map<string, Array<Omit<PilotMember, "displayName">>>(); // pilotId -> members
+  private pilotAttempts = new Map<string, PilotAttempt>(); // attemptId -> attempt
+
+  async createPilot(input: Parameters<Store["createPilot"]>[0]) {
+    const id = crypto.randomUUID();
+    this.pilots.set(id, {
+      id,
+      orgId: input.orgId,
+      name: input.name,
+      packId: input.packId,
+      skillIds: input.skillIds,
+      comparison: input.comparison,
+      status: "baseline",
+      forms: structuredClone(input.forms),
+      createdAt: new Date(),
+      endlineOpenedAt: null,
+      closedAt: null,
+    });
+    this.pilotMembers.set(id, input.members.map((m) => ({ ...m })));
+    return { id };
+  }
+
+  async listPilots(orgId: string) {
+    return [...this.pilots.values()].filter((p) => p.orgId === orgId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async listAllPilots() {
+    return [...this.pilots.values()]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((p) => ({ ...p, orgName: this.orgs.get(p.orgId)?.name ?? "" }));
+  }
+
+  async getPilot(pilotId: string) {
+    return this.pilots.get(pilotId) ?? null;
+  }
+
+  async listPilotMembers(pilotId: string) {
+    return (this.pilotMembers.get(pilotId) ?? []).map((m) => ({ ...m, displayName: this.profiles.get(m.studentId)?.displayName ?? "Student" }));
+  }
+
+  async setPilotStatus(pilotId: string, status: "endline" | "closed", at: Date) {
+    const p = this.pilots.get(pilotId);
+    if (!p) return;
+    p.status = status;
+    if (status === "endline") p.endlineOpenedAt = at;
+    else p.closedAt = at;
+  }
+
+  async deletePilot(pilotId: string) {
+    this.pilots.delete(pilotId);
+    this.pilotMembers.delete(pilotId);
+    for (const [id, a] of this.pilotAttempts) if (a.pilotId === pilotId) this.pilotAttempts.delete(id);
+  }
+
+  async pilotMemberByCode(code: string) {
+    for (const [pilotId, members] of this.pilotMembers) {
+      const m = members.find((x) => x.code === code);
+      if (m) return { ...m, pilotId, displayName: this.profiles.get(m.studentId)?.displayName ?? "Student" };
+    }
+    return null;
+  }
+
+  async openPilotOfStudent(studentId: string) {
+    for (const pilot of await this.listAllPilots()) {
+      if (pilot.status === "closed") continue;
+      const m = (this.pilotMembers.get(pilot.id) ?? []).find((x) => x.studentId === studentId);
+      if (m) return { pilot: this.pilots.get(pilot.id)!, arm: m.arm, formOrder: m.formOrder };
+    }
+    return null;
+  }
+
+  async getPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline") {
+    for (const a of this.pilotAttempts.values()) {
+      if (a.pilotId === pilotId && a.studentId === studentId && a.phase === phase) return structuredClone(a);
+    }
+    return null;
+  }
+
+  async startPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline", form: "A" | "B") {
+    // Looked up and created in one breath, with no await between: two taps
+    // on the link must find the same sitting, as the database's unique key ensures.
+    for (const a of this.pilotAttempts.values()) {
+      if (a.pilotId === pilotId && a.studentId === studentId && a.phase === phase) return structuredClone(a);
+    }
+    const attempt: PilotAttempt = { id: crypto.randomUUID(), pilotId, studentId, phase, form, startedAt: new Date(), finishedAt: null, answers: {} };
+    this.pilotAttempts.set(attempt.id, attempt);
+    return structuredClone(attempt);
+  }
+
+  async savePilotAnswer(attemptId: string, itemId: string, record: PilotAnswer) {
+    const a = this.pilotAttempts.get(attemptId);
+    if (a) a.answers[itemId] = { ...record };
+  }
+
+  async addPilotMembers(pilotId: string, members: Array<Omit<PilotMember, "displayName">>) {
+    this.pilotMembers.set(pilotId, [...(this.pilotMembers.get(pilotId) ?? []), ...members.map((m) => ({ ...m }))]);
+  }
+
+  async finishPilotAttempt(attemptId: string, at: Date) {
+    const a = this.pilotAttempts.get(attemptId);
+    if (a && !a.finishedAt) a.finishedAt = at;
+  }
+
+  async listPilotAttempts(pilotId: string) {
+    return [...this.pilotAttempts.values()].filter((a) => a.pilotId === pilotId).map((a) => structuredClone(a));
+  }
+
+  /** A learner leaving takes their place in any pilot, and their sittings, with them. */
+  private forgetLearnerInPilots(studentId: string) {
+    for (const [pilotId, members] of this.pilotMembers) this.pilotMembers.set(pilotId, members.filter((m) => m.studentId !== studentId));
+    for (const [id, a] of this.pilotAttempts) if (a.studentId === studentId) this.pilotAttempts.delete(id);
   }
 
   async createApiKey(ownerUserId: string, name: string, keyHash: string, scopes: string[], monthlyQuota = 10_000) {

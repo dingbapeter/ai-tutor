@@ -30,6 +30,7 @@ import { sendParentRecap, sendSafetyAlert, sendVerifyEmail, sendWeeklyDigest, ty
 import { hashPassword, mintToken, userFromRequest, verifyPassword } from "./auth.js";
 import { registerBilling } from "./billing.js";
 import { registerCommandCentre } from "./command/routes.js";
+import { pilotGate, registerPilots } from "./pilot/routes.js";
 import { ControlsReader } from "./command/settings.js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -77,6 +78,8 @@ interface LiveSession {
   faceHints?: boolean;
   /** The tutor may get to know how this learner sounds (see tutor/voice.ts). */
   voiceFamiliar?: boolean;
+  /** Questions set aside for this learner's pilot tests: never practised, never in a mock (see pilot/). */
+  heldOut?: Set<number>;
 }
 
 export interface PlanLimits {
@@ -109,6 +112,8 @@ export interface AppDeps {
   env?: Record<string, string | undefined>;
   /** Override plan limits (tests); defaults to config/plans.json. */
   plans?: Record<string, PlanLimits>;
+  /** Stand in for the maths checker when marking pilot tests (tests); defaults to the real one. */
+  checkAnswer?: typeof verifyAnswer;
 }
 
 const MAX_TEXT = 4000;
@@ -147,7 +152,7 @@ function loadPlans(): Record<string, PlanLimits> {
   return (JSON.parse(readFileSync(join(root, "config/plans.json"), "utf8")) as { plans: Record<string, PlanLimits> }).plans;
 }
 
-export async function buildApp({ gateway, store, env = process.env, plans }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({ gateway, store, env = process.env, plans, checkAnswer }: AppDeps): Promise<FastifyInstance> {
   const live = new Map<string, LiveSession>();
   const app = Fastify({ logger: env.NODE_ENV !== "test", bodyLimit: 1 << 20 });
   const PLANS = plans ?? loadPlans();
@@ -370,10 +375,11 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     cap: number,
     maxPerSkill = Infinity,
     eligible: (p: CurriculumProblem) => boolean = machineVerifiable,
+    heldOut?: Set<number>,
   ): number[] {
     const bySkill = new Map<string, number[]>();
     for (const [i, p] of pack.problems.entries()) {
-      if (!p.skillId || !eligible(p)) continue;
+      if (!p.skillId || !eligible(p) || heldOut?.has(i)) continue;
       const list = bySkill.get(String(p.skillId)) ?? [];
       list.push(i);
       bySkill.set(String(p.skillId), list);
@@ -1078,6 +1084,8 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         onSchoolRoster: Boolean(await store.orgOfStudent(meta.studentId)),
         viaApiKey: Boolean(meta.apiKeyId),
       }),
+      // Held out again on a rebuilt session, so a restart never leaks a test question into practice.
+      heldOut: (await pilotGate(store, meta.studentId, pack)).heldOut,
     };
     // Two concurrent requests can race the rebuild; the first one in wins.
     const raced = live.get(sessionId);
@@ -1144,15 +1152,20 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   );
 
   /** Practice problems, sanitized — answers and misconception tables never leave the server. */
-  app.get<{ Params: { packId: string } }>("/packs/:packId/problems", async (req, reply) => {
+  app.get<{ Params: { packId: string }; Querystring: { session?: string } }>("/packs/:packId/problems", async (req, reply) => {
     try {
       const pack = loadPack(req.params.packId);
-      return pack.problems.map((p, i) => ({
-        index: i,
-        skillId: p.skillId,
-        prompt: p.prompt,
-        timeLimitSec: p.timeLimitSec ?? null,
-      }));
+      // A learner in a pilot does not see the questions set aside for their tests.
+      const session = req.query.session ? await sessionFor(req.query.session) : undefined;
+      const heldOut = session?.packId === pack.id ? session.heldOut : undefined;
+      return pack.problems
+        .map((p, i) => ({
+          index: i,
+          skillId: p.skillId,
+          prompt: p.prompt,
+          timeLimitSec: p.timeLimitSec ?? null,
+        }))
+        .filter((p) => !heldOut?.has(p.index));
     } catch (err) {
       if (err instanceof UnknownPackError) return reply.code(404).send({ error: err.message });
       throw err;
@@ -1227,6 +1240,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       let apiKeyQuota: number | undefined;
       let plan = "free";
       let signedInLearner = false;
+      let heldOut: Set<number> | undefined;
 
       // B2B path: Tutor-as-a-Service via X-Api-Key (guest-style body, metered per key).
       const rawKey = req.headers["x-api-key"];
@@ -1261,6 +1275,13 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         ownerUserId = user.userId;
         plan = await effectivePlan(user);
         signedInLearner = true;
+        // A school pilot decides two things here: a learner in the comparison
+        // group waits, and nobody is tutored before their starting test.
+        const gate = await pilotGate(store, studentIdResolved, pack);
+        if (gate.blocked) return reply.code(403).send({ error: gate.blocked, pilot: true });
+        heldOut = gate.heldOut;
+        // A lesson must not work through a question the learner will be tested on.
+        if (lesson && gate.heldPrompts.size) lesson = buildLessonBrief(pack, req.body.lessonSkillId!, gate.heldPrompts);
       } else if (req.body.studentName) {
         if (!apiKeyId) {
           const day = new Date().toISOString().slice(0, 10);
@@ -1355,6 +1376,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
         apiKeyQuota,
         faceHints,
         voiceFamiliar,
+        heldOut,
       });
       // A live tutor speaks first. Generate the opening line in-character;
       // if the model stalls or fails, a warm deterministic line covers it.
@@ -1585,6 +1607,9 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
       const pack = loadPack(session.packId);
       const problem = pack.problems[req.body.problemIndex];
       if (!problem) return reply.code(400).send({ error: "unknown problem" });
+      if (session.heldOut?.has(req.body.problemIndex)) {
+        return reply.code(400).send({ error: "that question is set aside for your class test" });
+      }
       session.busy = true;
 
       try {
@@ -2070,7 +2095,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     // Breadth first: one machine-verifiable problem per skill in curriculum
     // order, then a second lap, capped at 12. A deep pack's level check
     // should sweep the whole ladder, not drill its first rungs.
-    const problemIndexes = sampleAcrossSkills(pack, 12, 2);
+    const problemIndexes = sampleAcrossSkills(pack, 12, 2, machineVerifiable, session.heldOut);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no checkable problems yet, your tutor will place you in conversation instead" });
     }
@@ -2202,7 +2227,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
     // gateway to judge them (see rubricExamsOpen). Sampling is one problem
     // per skill, then further laps, so a mock spans the curriculum instead of
     // asking eight variants of the first skill.
-    const problemIndexes = sampleAcrossSkills(pack, 8, Infinity, examEligible);
+    const problemIndexes = sampleAcrossSkills(pack, 8, Infinity, examEligible, session.heldOut);
     if (problemIndexes.length === 0) {
       return reply.code(400).send({ error: "this subject has no timed mock yet, practice with your tutor instead" });
     }
@@ -2961,6 +2986,7 @@ export async function buildApp({ gateway, store, env = process.env, plans }: App
   await registerBilling(app, store, env, (req) => userFromRequest(req as Parameters<typeof userFromRequest>[0], store));
 
   // ---- Command Centre (Sprint 15) ----
+  await registerPilots(app, { store, userFromRequest: (req) => userFromRequest(req, store), verify: checkAnswer ?? verifyAnswer });
   await registerCommandCentre(app, store, env, (req) => userFromRequest(req, store), controls, metrics, gateway.queue ?? null);
 
   return app;

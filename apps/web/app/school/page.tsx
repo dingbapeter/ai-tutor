@@ -206,6 +206,15 @@ export default function SchoolPage() {
         {error && <p className="err">{error}</p>}
       </div>
 
+      <div className="card">
+        <b>Measure the difference</b>
+        <p style={{ fontSize: 14, color: "var(--text-dim)", margin: "4px 0 10px" }}>
+          Run a pilot: a short test before, some weeks with the tutor, a matched test after, and a one-page
+          report of what your learners gained.
+        </p>
+        <a className="btn quiet small" href="/school/pilot">Open the pilot page</a>
+      </div>
+
       {dash.students.length === 0 ? (
         <div className="card"><p className="cc-empty" style={{ margin: 0 }}>No learners yet. Import your roster above and this page comes alive.</p></div>
       ) : (

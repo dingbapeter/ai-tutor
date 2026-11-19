@@ -3,6 +3,8 @@
  * talks to this interface only. `memory` runs anywhere with zero setup;
  * `postgres` is production. Selected by DATABASE_URL presence.
  */
+import type { Arm, FormOrder, PilotForms } from "../pilot/forms.js";
+
 /** What a session needs to be picked back up by any process. */
 export interface SessionMeta {
   studentId: string;
@@ -42,9 +44,48 @@ export interface AccountExport {
    *  deletion, as accounting law requires, so the family sees them here. */
   paymentRecords: unknown[];
   orgsOwned: unknown[];
+  /** Pilots run by a school this account owns, with who was enrolled and what each learner answered. */
+  pilots: Array<{ pilot: unknown; members: unknown[]; attempts: unknown[] }>;
   staff: unknown;
   accessGrant: unknown;
   accessReviews: unknown[];
+}
+
+export interface PilotRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  packId: string;
+  skillIds: string[];
+  comparison: boolean;
+  status: "baseline" | "endline" | "closed";
+  forms: PilotForms;
+  createdAt: Date;
+  endlineOpenedAt: Date | null;
+  closedAt: Date | null;
+}
+export interface PilotMember {
+  studentId: string;
+  displayName: string;
+  arm: Arm;
+  formOrder: FormOrder;
+  code: string;
+}
+/** One answer in a sitting. `exact` marks one judged by plain matching because the maths checker could not be reached. */
+export interface PilotAnswer {
+  answer: string;
+  correct: boolean | null;
+  exact?: boolean;
+}
+export interface PilotAttempt {
+  id: string;
+  pilotId: string;
+  studentId: string;
+  phase: "baseline" | "endline";
+  form: "A" | "B";
+  startedAt: Date;
+  finishedAt: Date | null;
+  answers: Record<string, PilotAnswer>;
 }
 
 export interface SessionRecap {
@@ -407,6 +448,37 @@ export interface Store {
   addOrgStudents(orgId: string, ownerUserId: string, names: string[]): Promise<Array<{ id: string; displayName: string }>>;
   listOrgStudents(orgId: string): Promise<Array<{ id: string; displayName: string }>>;
   countOrgStudents(orgId: string): Promise<number>;
+
+  // ---- School pilots: a before-and-after measurement (see ../pilot) ----
+
+  createPilot(input: {
+    orgId: string;
+    name: string;
+    packId: string;
+    skillIds: string[];
+    comparison: boolean;
+    forms: PilotForms;
+    members: Array<{ studentId: string; arm: Arm; formOrder: FormOrder; code: string }>;
+  }): Promise<{ id: string }>;
+  listPilots(orgId: string): Promise<PilotRecord[]>;
+  /** Every pilot on the platform with its school's name, for the Command Centre. */
+  listAllPilots(): Promise<Array<PilotRecord & { orgName: string }>>;
+  getPilot(pilotId: string): Promise<PilotRecord | null>;
+  listPilotMembers(pilotId: string): Promise<PilotMember[]>;
+  setPilotStatus(pilotId: string, status: "endline" | "closed", at: Date): Promise<void>;
+  deletePilot(pilotId: string): Promise<void>;
+  /** Whose test link this is, or null. */
+  pilotMemberByCode(code: string): Promise<(PilotMember & { pilotId: string }) | null>;
+  /** The pilot this learner is in that has not been closed, if any. */
+  openPilotOfStudent(studentId: string): Promise<{ pilot: PilotRecord; arm: Arm; formOrder: FormOrder } | null>;
+  getPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline"): Promise<PilotAttempt | null>;
+  /** Starts the sitting, or returns the one already started: a learner sits each test once. */
+  startPilotAttempt(pilotId: string, studentId: string, phase: "baseline" | "endline", form: "A" | "B"): Promise<PilotAttempt>;
+  savePilotAnswer(attemptId: string, itemId: string, record: PilotAnswer): Promise<void>;
+  /** Enrols more of the roster while the starting test is still open. */
+  addPilotMembers(pilotId: string, members: Array<{ studentId: string; arm: Arm; formOrder: FormOrder; code: string }>): Promise<void>;
+  finishPilotAttempt(attemptId: string, at: Date): Promise<void>;
+  listPilotAttempts(pilotId: string): Promise<PilotAttempt[]>;
 
   // ---- Trust & retention (blind-spot sprint) ----
 
