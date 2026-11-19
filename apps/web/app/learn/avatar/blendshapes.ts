@@ -147,3 +147,15 @@ export function resolveSlider(names: readonly string[], wanted: string): number 
 export function hasVisemeSliders(names: readonly string[]): boolean {
   return ["aa", "oh", "PP"].every((v) => resolveSlider(names, `viseme_${v}`) >= 0);
 }
+
+/**
+ * mouthClose brings the lips together by undoing the jaw's opening on
+ * them, so it can never usefully exceed how far the jaw is open: past
+ * that, on a rig built to the ARKit meaning, it drives the lower lip up
+ * through the upper one. A "p" with the jaw nearly shut is the lips
+ * pressed, not the lips closed harder.
+ */
+export function settleMouth(weights: Weights): Weights {
+  if ((weights.mouthClose ?? 0) > (weights.jawOpen ?? 0)) weights.mouthClose = weights.jawOpen ?? 0;
+  return weights;
+}

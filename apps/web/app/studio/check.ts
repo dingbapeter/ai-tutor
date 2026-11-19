@@ -246,6 +246,10 @@ export function checkGlb(bytes: Uint8Array, opts: CheckOptions = {}): Report {
   // ---------------------------------------------------------------- meshes
   const targetNamesAll = new Set<string>();
   const dead: string[] = [];
+  // A slider is judged over the whole character, not piece by piece: teeth
+  // have no eyebrows, and a head split by material is still one head. It
+  // is dead only if it moves nothing anywhere.
+  const reach = new Map<string, { moved: boolean; positions: boolean }>();
   let extent: { min: number[]; max: number[] } | null = null;
   for (const mesh of json.meshes ?? []) {
     const names = mesh.extras?.targetNames ?? [];
@@ -272,10 +276,10 @@ export function checkGlb(bytes: Uint8Array, opts: CheckOptions = {}): Report {
         targets.forEach((t, ti) => {
           const name = names[ti] ?? `#${ti}`;
           targetNamesAll.add(name);
-          if (t.POSITION === undefined) {
-            dead.push(`${name} (no positions)`);
-            return;
-          }
+          const seen = reach.get(name) ?? { moved: false, positions: false };
+          reach.set(name, seen);
+          if (t.POSITION === undefined) return;
+          seen.positions = true;
           // Real deformation: the largest move of any vertex must be more
           // than numerical noise relative to the mesh's own size.
           const a = readAccessor(t.POSITION);
@@ -283,10 +287,14 @@ export function checkGlb(bytes: Uint8Array, opts: CheckOptions = {}): Report {
           for (let k = 0; k < a.count; k++) {
             maxLen = Math.max(maxLen, Math.hypot(a.data[k * 3], a.data[k * 3 + 1], a.data[k * 3 + 2]));
           }
-          if (maxLen < size * 1e-4) dead.push(`${name} (moves nothing)`);
+          if (maxLen >= size * 1e-4) seen.moved = true;
         });
       }
     }
+  }
+  for (const [name, seen] of reach) {
+    if (!seen.positions) dead.push(`${name} (no positions)`);
+    else if (!seen.moved) dead.push(`${name} (moves nothing)`);
   }
   facts.targets = [...targetNamesAll];
   budget(facts.triangles >= 30_000 && facts.triangles <= 60_000, `${facts.triangles.toLocaleString()} triangles (30,000 to 60,000)`);

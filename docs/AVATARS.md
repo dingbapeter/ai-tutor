@@ -77,7 +77,8 @@ no sliders (hair, clothes, a scanned head) until the file sits near
 vertices would throw the sliders away; shrinks textures over 2048 px and
 packs them in (`--jpeg` for a smaller file); and exports one .glb, +Y up,
 with morph targets, skin and materials. A 1.9-million-triangle head from
-an image-to-3D tool comes out at 50,000 and 3 MB with the likeness kept. Blender 4.0 or newer,
+an image-to-3D tool comes out at 50,000 and 3 MB with the likeness kept
+(still a statue: the next section gives a scan its bones and controls). Blender 4.0 or newer,
 nothing else to install.
 
 It is proven through real headless Blender: `tools/avatar/make-fake-export.py`
@@ -100,6 +101,93 @@ It checks the file again (it refuses one that fails), copies it to
 `apps/web/public/tutors/amara.glb`, names it on Amara in
 `config/personas.json`, and says what to commit. Deploy web and API, and
 every lesson with Amara loads the 3D engine from then on.
+
+## From a scan to a tutor file
+
+A scan is a statue. What an image-to-3D tool or a scanner delivers is one
+textured surface: no bones, no face controls, often millions of loose
+triangles, and whatever expression the person had when it was made. It
+looks finished and cannot move. One command gives it everything the
+engine needs:
+
+```
+node tools/avatar/rig/rig-scan.ts scan.glb adaugo.glb
+```
+
+No artist, no template head, no trained model beyond the small face
+finder the app already ships, no GPU, no server. It needs Blender 4.0 or
+newer and this repository with its packages installed, and nothing else.
+On a 4-core machine with no graphics card, a 55 MB scan of 1.9 million
+triangles becomes a 4.4 MB character of 52,650 triangles that passes the
+contract with no warnings, in under four minutes.
+
+What it does, in order:
+
+1. Renders the scan from the front and finds the face in the picture,
+   with the same on-device face model the lesson uses for the learner's
+   camera, run in a headless browser. That gives 478 points on the face
+   and a score for every expression the face is already making.
+2. Lifts those points onto the surface by casting each one back along
+   the camera's line, and sets up the face's own ruler: the origin
+   between the eyes, the distance between the eyes as the unit. Every
+   later measurement is in that ruler, so a child's head and an adult's
+   are treated alike.
+3. Joins the loose triangles at their seams and reduces the surface to
+   the budget in two passes, spending 45% of the triangles on the face
+   and the rest on everything else, so the mouth and eyes keep the
+   detail they need to bend.
+4. Cuts the lips apart along the line where they meet (a scan's mouth
+   is painted shut), and builds a small dark pocket behind them with two
+   rows of teeth and a tongue, so an open mouth shows a mouth.
+5. Adds the six bones the contract names, resting upright with no turn
+   of their own, and weights the skin to them. The painted eyes turn
+   with the eye bones.
+6. Builds the 52 controls as movements of the scan's own surface,
+   worked out from where the landmarks are: the jaw swings on a hinge
+   under the ears, a blink brings each lid to the other along the eye's
+   own curve, a smile draws the mouth's corner out and up and lifts the
+   cheek. Left is the person's left.
+7. If the scan was smiling, takes most of that smile out of the resting
+   face, by as much as the face model scored it, so the tutor can rest
+   neutral and smile when it means to.
+8. Checks the result against the contract, with the same checker as the
+   Studio page.
+9. Judges its own work: renders the face with every control fully on,
+   has the face model score each picture, and writes one sheet of all
+   of them (`adaugo-controls.png`) for a person to look over. The
+   command fails unless the face model itself sees the jaw open, both
+   smiles, both blinks and the brows rise.
+
+The likeness is the scan's own: no vertex is replaced by a template, and
+the texture is untouched.
+
+What it cannot do, said plainly. The teeth and tongue are plain shapes,
+not that person's teeth. A scan has no eyeball behind the lid, so a
+blink and a turn of the eye work, and a wide-eyed look can only stretch
+the paint. A third of the controls are small on any face (a cheek
+puffed, the jaw pushed forward), and the face model hardly ever scores
+them even on a living person, so the judge lists them as unseen and the
+sheet is there for the eye. Hair, glasses and a beard are part of the
+one surface and move as skin. The face must look at the camera in the
+scan, mouth closed or nearly so. A character sculpted by an artist with
+separate eyes and teeth will always be finer; this is the route when
+there is a scan and no artist.
+
+It is proven two ways. `apps/web/test/rig-scan.test.ts` runs the rigger
+through real headless Blender on a stand-in head made by
+`tools/avatar/rig/make-test-scan.py` (an egg on shoulders with a face's
+proportions and its landmarks supplied, so no face model is needed),
+and checks the contract, the resting bones, the cut lips, and that each
+control moves the right part of the face the right way. It runs wherever
+Blender is installed and says so where it is not; CI has no Blender. And
+the command's own judge runs on every real scan.
+
+Two changes came out of the first real scan and are in the engine and
+the checker for every character. A character in several parts (skin,
+teeth, tongue) carries every control on every part, and most move only
+the skin: the checker now calls a control dead only if it moves nothing
+anywhere. And a head that is a bone has no size of its own to frame the
+camera by: the engine now measures the skin that follows it.
 
 ## Check a delivery from the command line
 

@@ -27,6 +27,8 @@ export interface BuildOptions {
   corruptLength?: boolean;
   /** Leave out the target names. */
   dropTargetNames?: boolean;
+  /** Extra parts of the same mesh (teeth, a tongue) on which no slider moves anything. */
+  stillParts?: number;
 }
 
 const align4 = (n: number) => (n + 3) & ~3;
@@ -130,6 +132,11 @@ export function buildGlb(opts: BuildOptions = {}): Uint8Array {
     }
   });
 
+  // Parts that carry every slider, as one mesh must, but are moved by none of them.
+  const stillTargets = Array.from({ length: opts.stillParts ?? 0 }, () =>
+    targets.map(() => ({ POSITION: accessors.push({ componentType: 5126, count: vcount, type: "VEC3" }) - 1 })),
+  );
+
   const images: Array<Record<string, unknown>> = [];
   for (const px of opts.texturePx ?? []) images.push({ mimeType: "image/png", bufferView: addView(png(px)) });
   if (opts.externalTexture) images.push({ uri: opts.externalTexture });
@@ -161,7 +168,10 @@ export function buildGlb(opts: BuildOptions = {}): Uint8Array {
     meshes: [
       {
         name: "Face",
-        primitives: [{ attributes: { POSITION: posAcc }, indices: idxAcc, ...(targetAccs.length ? { targets: targetAccs } : {}), ...(opts.materials === 0 ? {} : { material: 0 }) }],
+        primitives: [
+          { attributes: { POSITION: posAcc }, indices: idxAcc, ...(targetAccs.length ? { targets: targetAccs } : {}), ...(opts.materials === 0 ? {} : { material: 0 }) },
+          ...stillTargets.map((still) => ({ attributes: { POSITION: posAcc }, indices: idxAcc, ...(still.length ? { targets: still } : {}), ...(opts.materials === 0 ? {} : { material: 0 }) })),
+        ],
         ...(targets.length && !opts.dropTargetNames ? { extras: { targetNames: targets } } : {}),
       },
     ],

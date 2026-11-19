@@ -30,8 +30,10 @@ import {
   moodToArkit,
   mouthWeights,
   resolveSlider,
+  settleMouth,
   type Weights,
 } from "./blendshapes";
+import { headBox } from "./frame";
 import {
   approach,
   breath,
@@ -110,6 +112,7 @@ function findNode(root: THREE.Object3D, test: (n: string) => boolean): THREE.Obj
   if (!found) root.traverse((o) => { if (!found && test(norm(o.name))) found = o; });
   return found;
 }
+
 
 export default function Avatar3D({
   modelUrl,
@@ -208,7 +211,7 @@ export default function Avatar3D({
         // Frame the head: whatever size the artist built it at, it fills the
         // view from the shoulders up.
         scene.add(root);
-        const box = new THREE.Box3().setFromObject(head ?? root);
+        const box = headBox(root, head);
         const centre = box.getCenter(new THREE.Vector3());
         const extent = box.getSize(new THREE.Vector3());
         const radius = Math.max(extent.x, extent.y, extent.z) * 0.5 || 1;
@@ -293,6 +296,8 @@ export default function Avatar3D({
 
       const held = p.override?.() ?? null;
       const weights = held ?? compose(mouthMix, moodMix, blinkToArkit(lid), gazeToArkit(gaze.x, gaze.y));
+      // Held sliders (the Studio's walk) are shown exactly as asked; a live face is settled first.
+      if (!held) settleMouth(weights);
 
       // Apply to every face mesh that has the slider.
       for (const f of faces) {

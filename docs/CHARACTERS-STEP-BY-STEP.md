@@ -10,6 +10,13 @@ or rent one for this: pay an artist per character instead. The job post
 to paste is docs/ARTIST-BRIEF.md, and acceptance is Parts E and F of this
 guide, which run on any laptop.
 
+There is a third way, with no artist and no special computer. If you
+have a scan of a head (a .glb from an image-to-3D tool, made on a plan
+that allows commercial use), one command turns it into a tutor on any
+laptop in a few minutes. It is described under "From a scan to a tutor
+file" in docs/AVATARS.md. The result is less fine than a character made
+by hand in Parts A to D, and it is ready the same day.
+
 Your computer needs a proper graphics card, 32 GB of memory and 150 GB
 of free space. If it is a normal office laptop, do steps 1 to 10 on a
 gaming or design computer and the rest on any machine.

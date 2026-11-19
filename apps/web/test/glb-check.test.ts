@@ -35,6 +35,16 @@ describe("the character check", () => {
     }
   });
 
+  it("judges a slider by the whole character: teeth that no smile moves are not a fault", () => {
+    // One mesh in several parts carries every slider on every part, and most move only the skin.
+    const whole = checkGlb(buildGlb({ segments: 130, targets: [...ARKIT], texturePx: [1024], stillParts: 2 }));
+    expect(whole.pass, formatReport(whole)).toBe(true);
+    expect(whole.lines.map((l) => l.text)).toContain("every slider really moves vertices");
+    // A slider that moves nothing on any part is still named, once.
+    const fails = failing(buildGlb({ segments: 130, targets: [...ARKIT], dead: ["mouthPucker"], texturePx: [1024], stillParts: 2 }));
+    expect(fails.filter((t) => t.includes("moves nothing"))).toEqual(["sliders that move nothing: mouthPucker (moves nothing)"]);
+  });
+
   it("names the essential sliders that are missing", () => {
     const names = ARKIT.filter((n) => n !== "jawOpen" && n !== "mouthSmileLeft");
     const fails = failing(buildGlb({ segments: 180, targets: names, texturePx: [1024] }));
