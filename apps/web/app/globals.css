@@ -543,7 +543,9 @@ body[data-session="1"] .appbar { display: none; }
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
 
 /* The tutor is present: a slow breath while idle. */
-.avatar-live { display: inline-flex; animation: breathe 3.6s ease-in-out infinite; }
+.avatar-live { display: inline-flex; position: relative; animation: breathe 3.6s ease-in-out infinite; }
+/* A 3D character still on its way: loaded out of sight, behind the drawn face. */
+.avatar-wait { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 @keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
 /* A small pondering wobble while the tutor thinks. */
 .avatar-mouth-hmm { animation: hmm 1.6s ease-in-out infinite; transform-origin: 50px 66px; }

@@ -256,9 +256,11 @@ describe("platform basics", () => {
   });
 
   it("lists personas and packs, including the adult verticals", async () => {
-    const personas = (await app.inject({ url: "/personas" })).json() as Array<{ id: string }>;
-    expect(personas).toHaveLength(5);
-    expect(personas.map((p) => p.id)).toEqual(expect.arrayContaining(["nia", "obi"]));
+    const personas = (await app.inject({ url: "/personas" })).json() as Array<{ id: string; model?: string }>;
+    expect(personas).toHaveLength(6);
+    expect(personas.map((p) => p.id)).toEqual(expect.arrayContaining(["nia", "obi", "adaugo"]));
+    // Adaugo is the one tutor with a rigged character today; the page loads the 3D engine for her alone.
+    expect(personas.filter((p) => p.model).map((p) => [p.id, p.model])).toEqual([["adaugo", "/tutors/adaugo.glb"]]);
 
     const packs = (await app.inject({ url: "/packs" })).json() as Array<{ id: string }>;
     expect(packs).toHaveLength(6);

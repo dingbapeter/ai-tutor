@@ -69,6 +69,8 @@ export interface Avatar3DProps {
   color?: string;
   /** WebGL is missing or the model would not load: show the drawn face. */
   onFallback?: (reason: string) => void;
+  /** The character has arrived and is on screen. Until then the caller keeps the drawn face up. */
+  onReady?: () => void;
   /** For tests and probes: the live slider weights after each frame. */
   onFrame?: (weights: Weights, extras: { lid: number; headYaw: number; headPitch: number }) => void;
   /**
@@ -126,6 +128,7 @@ export default function Avatar3D({
   size = 96,
   color = "#6C5CE7",
   onFallback,
+  onReady,
   onFrame,
   override,
 }: Avatar3DProps) {
@@ -223,6 +226,7 @@ export default function Avatar3D({
         camera.far = dist * 20;
         camera.updateProjectionMatrix();
         if (faces.length === 0) onFallback?.("model has no facial sliders");
+        else onReady?.();
       })
       .catch((e: unknown) => {
         if (!disposed) onFallback?.(e instanceof Error ? e.message : "model failed to load");

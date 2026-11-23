@@ -20,6 +20,11 @@
  *   node tools/device/avatar-probe.mjs [--url http://127.0.0.1:3100]
  *                                      [--engines chromium,webkit,firefox]
  *                                      [--chromium /path/to/chromium]
+ *                                      [--persona adaugo]
+ *
+ * With --persona, nothing is stood in: the probe picks that tutor as a
+ * family would and proves the character she really carries, as the web
+ * app really serves it.
  */
 import { chromium, firefox, webkit } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -32,6 +37,8 @@ const ENGINES = { chromium, webkit, firefox };
 const WANTED = (args.engines ?? "chromium,webkit,firefox").split(",").map((s) => s.trim());
 const CHROME = args.chromium ?? process.env.CHROMIUM_PATH ?? undefined;
 const HEAD = readFileSync(new URL("../../apps/web/test/fixtures/test-head.glb", import.meta.url));
+/** The tutor the probe picks. By default Amara, lent the test head; with --persona, that tutor as she is. */
+const PICK = { id: args.persona ?? "amara", name: "Amara", model: null, real: Boolean(args.persona) };
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -71,7 +78,13 @@ async function wire(context, withWebGL) {
   await context.route("**/personas", async (route) => {
     const res = await route.fetch();
     const list = await res.json();
-    for (const p of list) if (p.id === "amara") p.model = "/test-head.glb";
+    if (PICK.real) {
+      const p = list.find((x) => x.id === PICK.id);
+      PICK.name = p?.name ?? PICK.id;
+      PICK.model = p?.model ?? null;
+    } else {
+      for (const p of list) if (p.id === "amara") p.model = "/test-head.glb";
+    }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list) });
   });
   await context.route("**/test-head.glb", (route) => route.fulfill({ status: 200, contentType: "model/gltf-binary", body: HEAD }));
@@ -91,7 +104,7 @@ async function wire(context, withWebGL) {
 async function startLesson(page) {
   await page.goto(`${URL_BASE}/learn`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: /Amara/ }).click();
+  await page.getByRole("button", { name: new RegExp(PICK.name) }).click();
   await page.getByRole("button", { name: /Middle School Math/ }).click();
   await page.getByRole("button", { name: /^Start session$/ }).click();
   await page.locator(".msg.tutor").first().waitFor({ timeout: 20_000 });
@@ -113,6 +126,7 @@ for (const engineName of WANTED) {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
     await startLesson(page);
+    if (PICK.real) check(`${PICK.name} carries a rigged character of her own`, Boolean(PICK.model), "no model named on this tutor");
 
     const host = page.locator(".avatar3d");
     const rendered = await host.locator("canvas").count().then((c) => c > 0).catch(() => false);
@@ -133,7 +147,8 @@ for (const engineName of WANTED) {
         samples.push(parse(await host.getAttribute("data-state")));
         await page.waitForTimeout(100);
       }
-      const s0 = samples.find((s) => s.faces !== undefined) ?? {};
+      // A real character takes a moment to arrive; read the engine once it has.
+      const s0 = samples.find((s) => s.faces >= 1) ?? samples.at(-1) ?? {};
       check("the engine found the face sliders, the head node and both eyes", s0.faces >= 1 && s0.head === 1 && s0.eyes === 1, JSON.stringify(s0));
       const jaws = samples.map((s) => s.jaw ?? 0);
       const spoke = Math.max(...jaws) > 0.15;
@@ -148,6 +163,25 @@ for (const engineName of WANTED) {
       check("the mouth settles when the voice stops", Math.max(...tail) < 0.12, `end jaw=${Math.max(...tail).toFixed(2)}`);
     }
     check("no page errors with the 3D tutor", errors.length === 0, errors.slice(0, 2).join(" | "));
+    await context.close();
+  }
+
+  // ---- a phone saving data: the character is never fetched, the drawn face teaches ----
+  {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+    await wire(context, true);
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "connection", { configurable: true, get: () => ({ saveData: true, effectiveType: "4g" }) });
+    });
+    const page = await context.newPage();
+    const fetched = [];
+    page.on("request", (r) => { if (r.url().endsWith(".glb")) fetched.push(r.url()); });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
+    await startLesson(page);
+    await page.waitForTimeout(1500);
+    check("with data saving on, the character file is never downloaded", fetched.length === 0, fetched.join(", "));
+    check("and the drawn face teaches instead, with no error", (await page.locator(".avatar-live svg").count()) > 0 && (await page.locator(".avatar3d").count()) === 0 && errors.length === 0, errors.slice(0, 2).join(" | "));
     await context.close();
   }
 

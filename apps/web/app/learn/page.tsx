@@ -5,6 +5,7 @@ import MathText from "../MathText";
 import Face from "./Face";
 import dynamic from "next/dynamic";
 import type { Speech } from "./avatar/Avatar3D";
+import { canAfford3d, type ConnectionHint } from "./avatar/afford";
 // The 3D engine is heavy and only needed when a tutor has a rigged model,
 // so it arrives on demand and never on the server.
 const Avatar3D = dynamic(() => import("./avatar/Avatar3D"), { ssr: false });
@@ -153,6 +154,13 @@ export default function Home() {
   // A browser without WebGL, or a model that would not load, gets the
   // drawn face instead. Remembered per model so it is not retried every render.
   const [avatarFallback, setAvatarFallback] = useState<string | null>(null);
+  // The character is a few megabytes: the drawn face stays up until it has
+  // arrived, and a phone saving data or on 2G never fetches it.
+  const [avatarReady, setAvatarReady] = useState<string | null>(null);
+  const [afford3d, setAfford3d] = useState(true);
+  useEffect(() => {
+    setAfford3d(canAfford3d((navigator as Navigator & { connection?: ConnectionHint }).connection));
+  }, []);
   // Face hints: allowed for this session by the account holder? And what the
   // face has steadily been doing, plus what the tutor was last told.
   const [faceAllowed, setFaceAllowed] = useState(false);
@@ -1222,21 +1230,25 @@ export default function Home() {
       <div className="session-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className={`avatar-live${convo === "hearing" ? " avatar-hearing" : ""}`}>
-            {persona?.model && avatarFallback !== persona.model ? (
-              <Avatar3D
-                modelUrl={persona.model}
-                color={persona.color}
-                speaking={speaking}
-                thinking={busy && !speaking}
-                listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
-                attentive={input.trim().length > 0}
-                mood={tutorMood}
-                getLevel={getMouthLevelOrNull}
-                getSpeech={getSpeech}
-                onFallback={() => setAvatarFallback(persona.model ?? null)}
-                size={96}
-              />
-            ) : (
+            {persona?.model && afford3d && avatarFallback !== persona.model && (
+              <span className={avatarReady === persona.model ? undefined : "avatar-wait"}>
+                <Avatar3D
+                  modelUrl={persona.model}
+                  color={persona.color}
+                  speaking={speaking}
+                  thinking={busy && !speaking}
+                  listening={!speaking && !busy && (convo === "hearing" || convo === "listening" || recording)}
+                  attentive={input.trim().length > 0}
+                  mood={tutorMood}
+                  getLevel={getMouthLevelOrNull}
+                  getSpeech={getSpeech}
+                  onFallback={() => setAvatarFallback(persona.model ?? null)}
+                  onReady={() => setAvatarReady(persona.model ?? null)}
+                  size={96}
+                />
+              </span>
+            )}
+            {!(persona?.model && afford3d && avatarFallback !== persona.model && avatarReady === persona.model) && (
             <Face
               personaId={persona?.id}
               color={persona?.color}

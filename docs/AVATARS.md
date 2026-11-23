@@ -189,6 +189,33 @@ the skin: the checker now calls a control dead only if it moves nothing
 anywhere. And a head that is a bone has no size of its own to frame the
 camera by: the engine now measures the skin that follows it.
 
+## The first real tutor: Adaugo
+
+Adaugo is the sixth tutor and the first with a character of her own
+(`apps/web/public/tutors/adaugo.glb`, named on her in
+`config/personas.json`). She was made from one scan by the command
+above and installed with `install-character.ts`. The other five tutors
+are unchanged and keep the drawn face. She shares Amara's voice in every
+language for now, and in the tutor picker she is shown by her drawn
+face, as the others are.
+
+A character is a few megabytes (hers is 4.6 MB), and most learners are
+on phones, so the lesson page does two things for any tutor with one.
+The drawn face is on screen and alive from the first moment, and the
+character takes its place only once it has arrived and found its face
+controls. And a phone whose browser reports data saving, or rates its
+own connection as 2G, never downloads the character at all: that
+learner keeps the drawn face (`app/learn/avatar/afford.ts`). Safari and
+Firefox report nothing about the connection, so there the character is
+always fetched behind the drawn face.
+
+```
+node tools/device/avatar-probe.mjs --persona adaugo
+```
+
+With `--persona` the probe stands nothing in: it picks that tutor as a
+family would and checks the character the web app really serves.
+
 ## Check a delivery from the command line
 
 ```

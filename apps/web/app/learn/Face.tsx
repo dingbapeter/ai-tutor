@@ -42,6 +42,7 @@ const RIGS: Record<string, Rig> = {
   juno: { skin: "#cf9560", skinShade: "#a06b3c", skinLight: "#e0ac78", hair: "#4a3e99", style: "buns", clothes: "#7b6bd6", clothesShade: "#5a4bb0" },
   nia: { skin: "#9c6033", skinShade: "#734120", skinLight: "#b47a45", hair: "#1d1a2e", style: "bob", clothes: "#3f6fb5", clothesShade: "#2c5490" },
   obi: { skin: "#754321", skinShade: "#532c12", skinLight: "#8f5a30", hair: "#131313", style: "fade", clothes: "#c98a3c", clothesShade: "#a86f27" },
+  adaugo: { skin: "#8f5a35", skinShade: "#6a3f22", skinLight: "#aa7448", hair: "#17110e", style: "straight", clothes: "#2f2a33", clothesShade: "#1c1920" },
 };
 
 function rigFor(personaId: string | undefined, accent?: string): Rig {

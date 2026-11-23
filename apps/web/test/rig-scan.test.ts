@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
+import { canAfford3d } from "../app/learn/avatar/afford";
 import { headBox } from "../app/learn/avatar/frame";
 import { settleMouth } from "../app/learn/avatar/blendshapes";
 import { ARKIT, checkGlb } from "../app/studio/check";
@@ -212,6 +213,15 @@ describe("what the engine needs from a boned head", () => {
     root.add(node);
     root.updateMatrixWorld(true);
     expect(headBox(root, node).min.y).toBeCloseTo(4.9, 5);
+  });
+
+  it("does not spend a family's data on a character when the phone says to save it", () => {
+    expect(canAfford3d(undefined)).toBe(true); // Safari and Firefox say nothing: fetch, the drawn face waits
+    expect(canAfford3d({ effectiveType: "4g" })).toBe(true);
+    expect(canAfford3d({ effectiveType: "3g", saveData: false })).toBe(true);
+    expect(canAfford3d({ effectiveType: "4g", saveData: true })).toBe(false);
+    expect(canAfford3d({ effectiveType: "2g" })).toBe(false);
+    expect(canAfford3d({ effectiveType: "slow-2g" })).toBe(false);
   });
 
   it("never closes the lips further than the jaw is open", () => {
