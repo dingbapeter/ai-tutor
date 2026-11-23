@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fbf7f2; color: #241a12; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 40px 32px 56px; }
+  h1 { font-size: 34px; margin: 0 0 4px; letter-spacing: -0.5px; }
+  .sub { color: #7a6a58; margin: 0 0 6px; font-size: 16px; }
+  .rule { color: #a2591f; background: #fbeede; border: 1px solid #f0d9bd; border-radius: 12px; padding: 12px 16px; margin: 18px 0 34px; font-size: 14px; }
+  .cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+  .card { background: #fff; border: 1px solid #efe6da; border-radius: 20px; padding: 20px; box-shadow: 0 6px 22px rgba(90,60,30,0.06); }
+  .name { font-size: 21px; font-weight: 700; margin: 6px 0 0; }
+  .role { color: #8a7863; font-size: 13.5px; margin: 0 0 10px; }
+  .desc { font-size: 13.5px; color: #4a3f33; margin: 6px 0 12px; }
+  .faces { display: flex; gap: 6px; align-items: flex-end; justify-content: center; margin-bottom: 8px; }
+  .faces figure { margin: 0; text-align: center; }
+  .faces figcaption { font-size: 11px; color: #9a8a76; margin-top: 2px; }
+  .chips { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .chip { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.08); }
+  .chiptxt { font-size: 12px; color: #8a7863; }
+  .foot { margin-top: 34px; color: #8a7863; font-size: 13px; }
+  .bond { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+  .bond div { font-size: 12.5px; color: #4a3f33; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Dingba — the tutor cast</h1>
+  <p class="sub">Your Personal A.I Tutor · character sheet v1 · vector art, animates and lip-syncs, scales to any screen</p>
+  <div class="rule"><b>The one rule:</b> every tutor feels warm and alive, and is always honest that it is an AI tutor — a beloved character with a face, a voice, moods, and a name the learner chooses. Never a pretend human.</div>
+  <div class="cast" id="cast"></div>
+  <div class="foot">Each character shown neutral · joyful · caring. In the app the mouth moves with the real voice, eyes blink and follow, brows and mouth carry mood, and the character ages and gains a bond halo as the friendship grows. Hand this sheet to an illustrator to paint over, or keep the vector cast as-is.</div>
+</div>
+<script>
+const RIGS = {
+  amara: { skin:"#b06f3e", shade:"#8a4b2d", light:"#c98a56", hair:"#241611", style:"puff", clothes:"#e8875a", clothesShade:"#c96b41", name:"Amara", role:"the warm encourager", desc:"Warm, patient, endlessly encouraging. Celebrates small wins. The tutor a nervous learner meets first." },
+  kofi: { skin:"#824e28", shade:"#5f3517", light:"#9c6538", hair:"#141010", style:"flattop", beard:true, clothes:"#4a7d5f", clothesShade:"#356048", name:"Coach Kofi", role:"the strict coach", desc:"Direct, high standards, never unkind. Pushes just past comfortable, then acknowledges real effort." },
+  juno: { skin:"#cf9560", shade:"#a06b3c", light:"#e0ac78", hair:"#4a3e99", style:"buns", clothes:"#7b6bd6", clothesShade:"#5a4bb0", name:"Juno", role:"the playful peer", desc:"Playful, curious, a little mischievous. A study-buddy who cracks hard problems with you." },
+  nia: { skin:"#9c6033", shade:"#734120", light:"#b47a45", hair:"#1d1a2e", style:"bob", clothes:"#3f6fb5", clothesShade:"#2c5490", name:"Nia", role:"the sharp mentor", desc:"Precise, composed, quietly demanding. Mentors adults through exams and interviews." },
+  obi: { skin:"#754321", shade:"#532c12", light:"#8f5a30", hair:"#131313", style:"fade", clothes:"#c98a3c", clothesShade:"#a86f27", name:"Obi", role:"the steady coach", desc:"Steady, grounded, reassuring. The calm hand on the shoulder that meets panic with patience." },
+};
+
+function hair(rig){
+  const h = rig.hair;
+  switch(rig.style){
+    case "flattop": return `<path d="M 22 34 L 22 22 Q 50 12 78 22 L 78 34 Q 50 24 22 34 Z" fill="${h}"/>`;
+    case "buns": return `<circle cx="22" cy="22" r="11" fill="${h}"/><circle cx="78" cy="22" r="11" fill="${h}"/><path d="M 20 38 Q 50 14 80 38 Q 50 28 20 38 Z" fill="${h}"/>`;
+    case "bob": return `<path d="M 18 62 Q 12 24 50 16 Q 88 24 82 62 L 74 60 Q 78 30 50 26 Q 22 30 26 60 Z" fill="${h}"/><path d="M 20 40 Q 50 16 80 40 Q 50 30 20 40 Z" fill="${h}"/>`;
+    case "fade": return `<path d="M 24 36 Q 26 20 50 18 Q 74 20 76 36 Q 50 26 24 36 Z" fill="${h}"/>`;
+    default: return `<circle cx="35" cy="22" r="13" fill="${h}"/><circle cx="65" cy="22" r="13" fill="${h}"/><circle cx="50" cy="17" r="14" fill="${h}"/><path d="M 20 40 Q 50 18 80 40 Q 50 30 20 40 Z" fill="${h}"/>`;
+  }
+}
+
+// mood: "neutral" | "joy" | "concern"
+function face(rig, mood, size){
+  const curve = mood==="joy"?1: mood==="concern"?-0.35:0.3;
+  const brow = mood==="joy"?0.9: mood==="concern"?-0.5:0;
+  const browY = 37.5 - brow*2.2;
+  const browTilt = brow<0 ? -brow*4 : 0;
+  const mw = 9 + curve*1.5;
+  const curvePx = curve*6;
+  const joy = mood==="joy";
+  return `<svg width="${size}" height="${size*1.06}" viewBox="0 0 100 106" style="overflow:visible">
+    <path d="M 6 106 Q 10 82 30 76 L 70 76 Q 90 82 94 106 Z" fill="${rig.clothes}"/>
+    <path d="M 6 106 Q 10 82 30 76 L 38 76 Q 24 84 20 106 Z" fill="${rig.clothesShade}" opacity="0.55"/>
+    <path d="M 42 70 L 42 80 Q 50 84 58 80 L 58 70 Z" fill="${rig.shade}"/>
+    <circle cx="14" cy="52" r="6" fill="${rig.skin}"/><circle cx="86" cy="52" r="6" fill="${rig.skin}"/>
+    <ellipse cx="50" cy="52" rx="38" ry="40" fill="${rig.skin}"/>
+    <ellipse cx="38" cy="44" rx="20" ry="22" fill="${rig.light}" opacity="0.45"/>
+    <path d="M 70 40 Q 88 52 80 74 Q 66 84 50 86 Q 72 74 70 40 Z" fill="${rig.shade}" opacity="0.3"/>
+    ${hair(rig)}
+    ${rig.beard ? `<path d="M 22 58 Q 26 84 50 86 Q 74 84 78 58 Q 74 76 50 78 Q 26 76 22 58 Z" fill="${rig.hair}" opacity="0.9"/>`:""}
+    <path d="M 29 ${browY+browTilt} Q 37 ${browY-2.5} 45 ${browY+(brow<0?0:-0.5)}" stroke="${rig.hair}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M 55 ${browY+(brow<0?0:-0.5)} Q 63 ${browY-2.5} 71 ${browY+browTilt}" stroke="${rig.hair}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <ellipse cx="37" cy="47" rx="7.5" ry="6" fill="#fdf6ee"/><ellipse cx="63" cy="47" rx="7.5" ry="6" fill="#fdf6ee"/>
+    <circle cx="37" cy="47" r="3.4" fill="${rig.clothes}"/><circle cx="63" cy="47" r="3.4" fill="${rig.clothes}"/>
+    <circle cx="37" cy="47" r="1.7" fill="#1a1a2e"/><circle cx="63" cy="47" r="1.7" fill="#1a1a2e"/>
+    <circle cx="38.2" cy="45.8" r="0.9" fill="#fff"/><circle cx="64.2" cy="45.8" r="0.9" fill="#fff"/>
+    <path d="M 50 52 Q 47.5 58 50 60.5 Q 52.5 58 50 52" fill="${rig.shade}" opacity="0.7"/>
+    ${joy ? `<ellipse cx="27" cy="60" rx="5" ry="3" fill="#e8674b" opacity="0.28"/><ellipse cx="73" cy="60" rx="5" ry="3" fill="#e8674b" opacity="0.28"/>`:""}
+    <path d="M ${50-mw} ${68-curvePx*0.15} Q 50 ${68+curvePx} ${50+mw} ${68-curvePx*0.15}" stroke="#33201a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+
+const cast = document.getElementById("cast");
+for (const key of ["amara","kofi","juno","nia","obi"]){
+  const r = RIGS[key];
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="faces">
+      <figure>${face(r,"neutral",96)}<figcaption>neutral</figcaption></figure>
+      <figure>${face(r,"joy",96)}<figcaption>joyful</figcaption></figure>
+      <figure>${face(r,"concern",96)}<figcaption>caring</figcaption></figure>
+    </div>
+    <p class="name">${r.name}</p>
+    <p class="role">${r.role}</p>
+    <p class="desc">${r.desc}</p>
+    <div class="chips">
+      <span class="chip" style="background:${r.clothes}"></span>
+      <span class="chip" style="background:${r.skin}"></span>
+      <span class="chip" style="background:${r.hair}"></span>
+      <span class="chiptxt">identity · skin · hair</span>
+    </div>`;
+  cast.appendChild(card);
+}
+</script>
+</body>
+</html>

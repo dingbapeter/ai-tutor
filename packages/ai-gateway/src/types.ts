@@ -75,4 +75,7 @@ export interface AiGateway {
   vision: VisionProvider;
   /** Safety gate for a kids' product. Never optional — worst case is `rules`. */
   moderation: ModerationProvider;
+  /** The bounded line in front of the self-hosted model box, when one is
+   *  configured. Exposed so operations surfaces can show queue pressure. */
+  queue?: { stats(): import("./queue.js").QueueStats };
 }

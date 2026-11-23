@@ -3,11 +3,14 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 import Boot from "./Boot";
 import Chrome from "./Chrome";
+import { LangProvider } from "./i18n";
 
 export const metadata = {
   title: "Dingba",
   description: "Your Personal A.I Tutor. Ask anything. Learn anything.",
   manifest: "/manifest.json",
+  // Named here so a browser shows the Dingba mark on the tab and does not go looking for /favicon.ico.
+  icons: { icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }], apple: [{ url: "/icon-192.png", sizes: "192x192" }] },
   appleWebApp: { capable: true, statusBarStyle: "default" as const, title: "Dingba" },
 };
 
@@ -25,9 +28,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Boot />
-        <Chrome />
-        {children}
+        <LangProvider>
+          <Boot />
+          <Chrome />
+          {children}
+        </LangProvider>
       </body>
     </html>
   );

@@ -10,6 +10,7 @@ export class WhisperSttProvider implements SttProvider {
   constructor(
     private baseUrl: string,
     private model = "Systran/faster-whisper-small",
+    private brainKey?: string,
   ) {}
 
   async transcribe(audio: Uint8Array, mimeType: string, language?: string): Promise<string> {
@@ -20,6 +21,7 @@ export class WhisperSttProvider implements SttProvider {
     if (language) form.append("language", language);
     const res = await fetch(`${this.baseUrl}/v1/audio/transcriptions`, {
       method: "POST",
+      headers: this.brainKey ? { "x-brain-key": this.brainKey } : {},
       body: form,
       signal: AbortSignal.timeout(60_000),
     });

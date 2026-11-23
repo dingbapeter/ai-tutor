@@ -1,0 +1,318 @@
+import { audioContext, hasWebAudio, unlockAudio } from "./audio";
+import { pitchOf, rms as rmsOf, summarise, type Frame, type TurnVoice } from "./voice/features";
+/**
+ * Conversation mode: the tutor listens continuously, hears the learner out,
+ * answers, and can be interrupted by simply speaking over it.
+ *
+ * All of it runs in the browser against the existing /voice round trip; no
+ * new infrastructure. An analyser watches microphone energy; sustained
+ * sound opens an utterance, sustained silence closes it and hands the
+ * finished clip to the page to send. The recorder runs from the previous
+ * segment's end, so the opening syllable of an utterance is never clipped,
+ * and it is restarted during long quiet stretches so silence never piles up
+ * in memory.
+ *
+ * Barge-in: while the tutor's voice is playing, the bar to count as speech
+ * is higher (the mic hears some of the tutor through the speakers even with
+ * echo cancellation). Clearing that higher bar stops playback and starts
+ * capturing the learner immediately.
+ *
+ * The decisions live in VadFsm, which is pure (numbers in, events out) and
+ * unit-tested; ConversationLoop is the thin browser shell around it.
+ */
+
+export type ConversationState = "listening" | "hearing" | "off";
+
+export interface ConversationTuning {
+  /** RMS above this counts as speech (0..1 scale). */
+  speechRms: number;
+  /** RMS needed to interrupt the tutor mid-sentence. */
+  bargeInRms: number;
+  /** Sustained sound needed to open an utterance. */
+  startMs: number;
+  /** Sustained quiet that ends an utterance. */
+  endSilenceMs: number;
+  /** Hard cap per utterance. */
+  maxUtteranceMs: number;
+  /** Clips below this much voiced time are discarded as noise. */
+  minVoicedMs: number;
+  /** Recycle the recorder after this much speechless listening. */
+  idleRecycleMs: number;
+}
+
+export const DEFAULT_TUNING: ConversationTuning = {
+  speechRms: 0.02,
+  bargeInRms: 0.06,
+  startMs: 150,
+  endSilenceMs: 900,
+  maxUtteranceMs: 20_000,
+  minVoicedMs: 350,
+  idleRecycleMs: 20_000,
+};
+
+export type VadEvent =
+  | { kind: "open"; bargeIn: boolean }
+  | { kind: "close"; voicedEnough: boolean }
+  | { kind: "recycle" };
+
+/** Pure voice-activity state machine: energy readings in, decisions out. */
+export class VadFsm {
+  private tuning: ConversationTuning;
+  private capturing = false;
+  private voicedMs = 0;
+  private silenceMs = 0;
+  private utteranceMs = 0;
+  private idleMs = 0;
+
+  constructor(tuning: ConversationTuning = DEFAULT_TUNING) {
+    this.tuning = tuning;
+  }
+
+  isCapturing(): boolean {
+    return this.capturing;
+  }
+
+  reset(): void {
+    this.capturing = false;
+    this.voicedMs = 0;
+    this.silenceMs = 0;
+    this.utteranceMs = 0;
+    this.idleMs = 0;
+  }
+
+  feed(level: number, tutorSpeaking: boolean, dtMs: number): VadEvent | null {
+    if (!this.capturing) {
+      // While the tutor talks, only a clearly louder voice counts: the mic
+      // hears some of the tutor through the speakers.
+      const threshold = tutorSpeaking ? this.tuning.bargeInRms : this.tuning.speechRms;
+      const voiced = level >= threshold;
+      this.idleMs += dtMs;
+      this.voicedMs = voiced ? this.voicedMs + dtMs : 0;
+      if (this.voicedMs >= this.tuning.startMs) {
+        this.capturing = true;
+        this.utteranceMs = this.voicedMs;
+        this.silenceMs = 0;
+        this.idleMs = 0;
+        return { kind: "open", bargeIn: tutorSpeaking };
+      }
+      if (this.idleMs >= this.tuning.idleRecycleMs) {
+        this.idleMs = 0;
+        return { kind: "recycle" };
+      }
+      return null;
+    }
+
+    const voiced = level >= this.tuning.speechRms;
+    this.utteranceMs += dtMs;
+    this.silenceMs = voiced ? 0 : this.silenceMs + dtMs;
+    const done = this.silenceMs >= this.tuning.endSilenceMs || this.utteranceMs >= this.tuning.maxUtteranceMs;
+    if (!done) return null;
+    const voicedEnough = this.utteranceMs - this.silenceMs >= this.tuning.minVoicedMs;
+    this.reset();
+    return { kind: "close", voicedEnough };
+  }
+}
+
+export interface ConversationHooks {
+  /** A finished utterance, ready for the /voice round trip, with how it
+   *  sounded when voice familiarity is on (null otherwise). */
+  onSegment(blob: Blob, voice: TurnVoice | null): void;
+  /** Whether to measure how the learner sounds (voice familiarity). */
+  measureVoice?(): boolean;
+  onState(state: ConversationState): void;
+  /** The tutor's voice is playing right now. */
+  isTutorSpeaking(): boolean;
+  /** The learner spoke over the tutor: stop playback before capturing. */
+  onBargeIn(): void;
+  onError(message: string): void;
+}
+
+const TICK_MS = 50;
+
+export function conversationSupported(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== "undefined" &&
+    // Either spelling: older Safari and some in-app browsers only have the
+    // webkit one, and checking the bare name hid this button on iPhones.
+    hasWebAudio(typeof window === "undefined" ? undefined : window)
+  );
+}
+
+export class ConversationLoop {
+  private hooks: ConversationHooks;
+  private fsm: VadFsm;
+  private stream: MediaStream | null = null;
+  private audioCtx: AudioContext | null = null;
+  /** This loop's tap on the mic. Dropped on stop; the engine is shared. */
+  private micSource: MediaStreamAudioSourceNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private recorder: MediaRecorder | null = null;
+  private chunks: Blob[] = [];
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private mime = "";
+  private stopping = false;
+  /** A longer tap for pitch, only while voice familiarity is on. */
+  private voiceTap: AnalyserNode | null = null;
+  private voiceWave: Float32Array<ArrayBuffer> | null = null;
+  private voiceFrames: Frame[] = [];
+  private hearing = false;
+  private ticks = 0;
+
+  constructor(hooks: ConversationHooks, tuning: Partial<ConversationTuning> = {}) {
+    this.hooks = hooks;
+    this.fsm = new VadFsm({ ...DEFAULT_TUNING, ...tuning });
+  }
+
+  async start(): Promise<void> {
+    if (this.timer) return;
+    this.stopping = false;
+    try {
+      // Echo cancellation matters here: it is what lets the mic stay open
+      // while the tutor speaks without hearing mostly the tutor.
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch {
+      this.hooks.onError("We can't reach your microphone. Check permissions and try again.");
+      throw new Error("mic unavailable");
+    }
+    // The one shared engine, woken first: a suspended context reads pure
+    // silence, which would leave the tutor deaf in conversation mode.
+    unlockAudio();
+    this.audioCtx = audioContext();
+    if (!this.audioCtx) {
+      // The microphone is already open: close it again before giving up, or
+      // the recording light stays on for the rest of the visit.
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      this.hooks.onError("This browser cannot listen for conversation. You can still type, and your tutor still speaks back.");
+      return;
+    }
+    await this.audioCtx.resume().catch(() => {});
+    const source = this.audioCtx.createMediaStreamSource(this.stream);
+    this.micSource = source;
+    this.analyser = this.audioCtx.createAnalyser();
+    this.analyser.fftSize = 1024;
+    source.connect(this.analyser);
+    if (this.hooks.measureVoice?.()) {
+      // Two periods of a deep voice need a longer window than the one
+      // that decides when speech starts and stops.
+      this.voiceTap = this.audioCtx.createAnalyser();
+      this.voiceTap.fftSize = 2048;
+      source.connect(this.voiceTap);
+      this.voiceWave = new Float32Array(new ArrayBuffer(this.voiceTap.fftSize * 4));
+    }
+    this.mime =
+      ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"].find((t) =>
+        MediaRecorder.isTypeSupported?.(t),
+      ) ?? "";
+    try {
+      this.startRecorder();
+    } catch {
+      // A browser that opens a microphone but cannot record it: hand the
+      // microphone back rather than sit on it.
+      this.stop();
+      this.hooks.onError("This browser cannot record voice. You can still type, and your tutor still speaks back.");
+      return;
+    }
+    this.fsm.reset();
+    this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.hooks.onState("listening");
+  }
+
+  stop(): void {
+    this.stopping = true;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    try {
+      this.recorder?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.recorder = null;
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    // Drop this loop's mic tap but NEVER close the engine: it is shared with
+    // the tutor's own voice, and closing it would mute the rest of the session.
+    this.micSource?.disconnect();
+    this.micSource = null;
+    this.audioCtx = null;
+    this.analyser = null;
+    this.voiceTap = null;
+    this.voiceWave = null;
+    this.voiceFrames = [];
+    this.hearing = false;
+    this.hooks.onState("off");
+  }
+
+  /** Current mic energy, 0..1. */
+  rms(): number {
+    if (!this.analyser) return 0;
+    const data = new Float32Array(this.analyser.fftSize);
+    this.analyser.getFloatTimeDomainData(data);
+    let sum = 0;
+    for (const v of data) sum += v * v;
+    return Math.sqrt(sum / data.length);
+  }
+
+  private startRecorder(): void {
+    if (!this.stream) return;
+    this.chunks = [];
+    const rec = this.mime ? new MediaRecorder(this.stream, { mimeType: this.mime }) : new MediaRecorder(this.stream);
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) this.chunks.push(e.data);
+    };
+    this.recorder = rec;
+    rec.start(250);
+  }
+
+  /** Stop the current recorder and resolve with everything it heard. */
+  private harvest(): Promise<Blob> {
+    return new Promise((resolve) => {
+      const rec = this.recorder;
+      if (!rec || rec.state === "inactive") return resolve(new Blob([], { type: this.mime || "audio/webm" }));
+      rec.onstop = () => resolve(new Blob(this.chunks, { type: rec.mimeType || this.mime || "audio/webm" }));
+      rec.stop();
+    });
+  }
+
+  private tick(): void {
+    if (!this.analyser || this.stopping) return;
+    // How they sound, ten times a second, only while they are speaking.
+    if (this.hearing && this.voiceTap && this.voiceWave && this.audioCtx && this.ticks++ % 2 === 0) {
+      this.voiceTap.getFloatTimeDomainData(this.voiceWave);
+      this.voiceFrames.push({ level: rmsOf(this.voiceWave), pitch: pitchOf(this.voiceWave, this.audioCtx.sampleRate) });
+      if (this.voiceFrames.length > 1200) this.voiceFrames.shift();
+    }
+    const evt = this.fsm.feed(this.rms(), this.hooks.isTutorSpeaking(), TICK_MS);
+    if (!evt) return;
+    if (evt.kind === "open") {
+      if (evt.bargeIn) this.hooks.onBargeIn();
+      this.hearing = true;
+      this.voiceFrames = [];
+      this.hooks.onState("hearing");
+      return;
+    }
+    if (evt.kind === "recycle") {
+      this.hearing = false;
+      this.voiceFrames = [];
+      // Nothing said for a while: throw the silent recording away so it
+      // never grows without bound, and start fresh.
+      void this.harvest().then(() => {
+        if (!this.stopping) this.startRecorder();
+      });
+      return;
+    }
+    this.hearing = false;
+    const voice = this.voiceTap ? summarise(this.voiceFrames) : null;
+    this.voiceFrames = [];
+    void this.harvest().then((blob) => {
+      if (this.stopping) return;
+      this.startRecorder();
+      this.hooks.onState("listening");
+      if (evt.voicedEnough && blob.size > 1000) this.hooks.onSegment(blob, voice);
+    });
+  }
+}

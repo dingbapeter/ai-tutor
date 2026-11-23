@@ -8,12 +8,29 @@ jobs:
   node:
     name: Typecheck + gateway/API tests
     runs-on: ubuntu-latest
+    # A real Postgres, so what production runs on is what the tests run on:
+    # every migration applies from empty, and the tests that name
+    # TEST_DATABASE_URL make their own database here and drop it after.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4 # reads pnpm version from package.json "packageManager"
+      - uses: pnpm/action-setup@v5 # reads pnpm version from package.json "packageManager"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -36,9 +53,9 @@ jobs:
     name: SymPy mathcheck tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip

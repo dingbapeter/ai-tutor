@@ -14,6 +14,8 @@ export interface Persona {
   systemStyle: string;
   color?: string;
   accent?: string;
+  /** A rigged glTF character (ARKit sliders), served from the web app, when the artist has made one. */
+  model?: string;
 }
 
 export interface CurriculumProblem {
@@ -119,7 +121,13 @@ export function skillTitle(skillId: string): string {
       for (const s of loadPack(packId).skills) skillTitleCache.set(s.id, s.title);
     }
   }
-  return skillTitleCache.get(skillId) ?? skillId;
+  const known = skillTitleCache.get(skillId);
+  if (known) return known;
+  // An id the packs don't know still has to read as words, never as
+  // "math-ms.integers.add-sub" in front of a learner: drop the pack prefix,
+  // break the segments apart, and capitalize.
+  const words = skillId.split(".").slice(1).join(" ").replace(/-/g, " ").trim() || skillId;
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /**
@@ -205,10 +213,16 @@ export function buildSystemPrompt(opts: {
   warmupSkills?: string[];
   routine?: RoutineForPrompt | null;
   language?: string;
+  /** The student's own name for this tutor. The persona keeps its soul; the name is theirs. */
+  tutorName?: string | null;
 }): string {
   const { persona, pack, studentName, memoryLines } = opts;
+  const renamed =
+    opts.tutorName && opts.tutorName !== persona.name
+      ? `\n${studentName} gave you your name themselves: you are called ${opts.tutorName}. Always introduce yourself and refer to yourself as ${opts.tutorName}; never use the name ${persona.name}. If asked, you're still honest that you are an AI tutor.`
+      : ``;
   return [
-    persona.systemStyle,
+    persona.systemStyle + renamed,
     ``,
     `You are ${studentName}'s personal tutor for "${pack.title}". This is a live one-on-one session.`,
     ``,

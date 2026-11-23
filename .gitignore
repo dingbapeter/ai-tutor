@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 .DS_Store
 *.tsbuildinfo
+
+# The face engine is copied from node_modules at build time (scripts/face-assets.mjs).
+apps/web/public/face/wasm/

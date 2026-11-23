@@ -35,11 +35,13 @@ function gateway() {
 
 const MOCK_SECRET = "test-billing-secret";
 let app: FastifyInstance;
+let store: MemoryStore;
 
 beforeAll(async () => {
+  store = new MemoryStore();
   app = await buildApp({
     gateway: gateway(),
-    store: new MemoryStore(),
+    store,
     env: {
       NODE_ENV: "test",
       RATE_LIMIT_MAX: "10000",
@@ -234,6 +236,123 @@ describe("stripe provider (signature math, no network)", () => {
   });
 });
 
+describe("stripe failure and refund events (signature math, no network)", () => {
+  const stripe = new StripeProvider({
+    secretKey: "sk_test_x",
+    webhookSecret: "whsec_test",
+    pricePlus: "price_plus",
+    pricePremium: "price_prem",
+  });
+  const sign = (body: string, ts = Math.floor(Date.now() / 1000)) =>
+    `t=${ts},v1=${createHmac("sha256", "whsec_test").update(`${ts}.${body}`).digest("hex")}`;
+
+  it("normalizes invoice.payment_failed with the processor's event id", async () => {
+    const body = JSON.stringify({
+      id: "evt_fail_1",
+      type: "invoice.payment_failed",
+      data: {
+        object: {
+          customer: "cus_A",
+          subscription: "sub_A",
+          customer_email: "a@example.com",
+          amount_due: 1900,
+          currency: "usd",
+        },
+      },
+    });
+    const event = await stripe.parseWebhook(Buffer.from(body), { "stripe-signature": sign(body) });
+    expect(event).toEqual({
+      type: "payment_failed",
+      email: "a@example.com",
+      customerRef: "cus_A",
+      subscriptionRef: "sub_A",
+      amountMinor: 1900,
+      currency: "USD",
+      eventRef: "evt_fail_1",
+    });
+  });
+
+  it("normalizes charge.refunded and finds the email in billing details", async () => {
+    const body = JSON.stringify({
+      id: "evt_ref_1",
+      type: "charge.refunded",
+      data: {
+        object: { customer: "cus_A", amount_refunded: 950, currency: "usd", billing_details: { email: "a@example.com" } },
+      },
+    });
+    const event = await stripe.parseWebhook(Buffer.from(body), { "stripe-signature": sign(body) });
+    expect(event).toEqual({
+      type: "refunded",
+      email: "a@example.com",
+      customerRef: "cus_A",
+      amountMinor: 950,
+      currency: "USD",
+      eventRef: "evt_ref_1",
+    });
+  });
+
+  it("still rejects a tampered failure event", async () => {
+    const body = JSON.stringify({ id: "evt_x", type: "invoice.payment_failed", data: { object: {} } });
+    await expect(
+      stripe.parseWebhook(Buffer.from(body.replace("payment_failed", "payment_failed ")), {
+        "stripe-signature": sign(body),
+      }),
+    ).rejects.toBeInstanceOf(WebhookSignatureError);
+  });
+});
+
+describe("paystack failure and refund events (signature math, no network)", () => {
+  const paystack = new PaystackProvider({
+    secretKey: "psk_test",
+    planCodePlus: "PLN_plus",
+    planCodePremium: "PLN_prem",
+  });
+  const sign = (body: string) => createHmac("sha512", "psk_test").update(body).digest("hex");
+
+  it("normalizes invoice.payment_failed with amounts in kobo", async () => {
+    const body = JSON.stringify({
+      event: "invoice.payment_failed",
+      data: {
+        customer: { email: "k@example.com", customer_code: "CUS_k" },
+        subscription: { subscription_code: "SUB_k" },
+        amount: 250000,
+      },
+    });
+    const event = await paystack.parseWebhook(Buffer.from(body), { "x-paystack-signature": sign(body) });
+    expect(event).toMatchObject({
+      type: "payment_failed",
+      email: "k@example.com",
+      customerRef: "CUS_k",
+      subscriptionRef: "SUB_k",
+      amountMinor: 250000,
+      currency: "NGN",
+    });
+    expect((event as { eventRef?: string }).eventRef).toHaveLength(32); // body hash stands in for a missing id
+  });
+
+  it("normalizes refund.processed", async () => {
+    const body = JSON.stringify({
+      event: "refund.processed",
+      data: { customer: { email: "k@example.com", customer_code: "CUS_k" }, amount: 250000, transaction_reference: "trx_9" },
+    });
+    const event = await paystack.parseWebhook(Buffer.from(body), { "x-paystack-signature": sign(body) });
+    expect(event).toMatchObject({
+      type: "refunded",
+      email: "k@example.com",
+      subscriptionRef: "trx_9",
+      amountMinor: 250000,
+      currency: "NGN",
+    });
+  });
+
+  it("gives a retried body the same reference, so the ledger can dedupe it", async () => {
+    const body = JSON.stringify({ event: "refund.processed", data: { customer: { email: "k@example.com" }, amount: 1 } });
+    const a = await paystack.parseWebhook(Buffer.from(body), { "x-paystack-signature": sign(body) });
+    const b = await paystack.parseWebhook(Buffer.from(body), { "x-paystack-signature": sign(body) });
+    expect((a as { eventRef?: string }).eventRef).toBe((b as { eventRef?: string }).eventRef);
+  });
+});
+
 describe("paystack provider (signature math, no network)", () => {
   const paystack = new PaystackProvider({
     secretKey: "sk_ps_test",
@@ -283,7 +402,78 @@ describe("paystack provider (signature math, no network)", () => {
       data: { customer: { email: "b@example.com", customer_code: "CUS_B" }, subscription_code: "SUB_B" },
     });
     const event = await paystack.parseWebhook(Buffer.from(body), { "x-paystack-signature": sign(body) });
-    expect(event).toEqual({ type: "canceled", email: "b@example.com", customerRef: "CUS_B", subscriptionRef: "SUB_B" });
+    expect(event).toMatchObject({ type: "canceled", email: "b@example.com", customerRef: "CUS_B", subscriptionRef: "SUB_B" });
+    expect((event as { eventRef?: string }).eventRef).toHaveLength(32);
+  });
+});
+
+describe("the money ledger", () => {
+  it("records a failed renewal without downgrading anyone mid-retry", async () => {
+    const token = await register("wobbly@example.com");
+    await mockWebhook({
+      type: "activated",
+      email: "wobbly@example.com",
+      plan: "premium",
+      customerRef: "cus_w",
+      subscriptionRef: "sub_w",
+    });
+    const account = await store.getAccountByEmail("wobbly@example.com");
+    expect(await store.getUserPlan(account!.userId)).toBe("premium");
+
+    const res = await mockWebhook({
+      type: "payment_failed",
+      email: "wobbly@example.com",
+      amountMinor: 1900,
+      currency: "USD",
+    });
+    expect(res.json()).toMatchObject({ received: true, handled: true, recorded: true });
+
+    // The processor retries on its own; the plan stands until it gives up.
+    expect(await store.getUserPlan(account!.userId)).toBe("premium");
+    const events = await store.listBillingEvents(10, { type: "payment_failed" });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ email: "wobbly@example.com", amountMinor: 1900, currency: "USD", matched: true });
+
+    // And the trouble counters see it.
+    const trouble = await store.countBillingTroubleSince(new Date(Date.now() - 60_000));
+    expect(trouble.failed).toBe(1);
+  });
+
+  it("records a refund without touching entitlements", async () => {
+    const res = await mockWebhook({
+      type: "refunded",
+      email: "wobbly@example.com",
+      amountMinor: 1900,
+      currency: "USD",
+    });
+    expect(res.json()).toMatchObject({ handled: true, recorded: true });
+    const account = await store.getAccountByEmail("wobbly@example.com");
+    expect(await store.getUserPlan(account!.userId)).toBe("premium"); // cancellation flows separately
+    expect((await store.countBillingTroubleSince(new Date(Date.now() - 60_000))).refunded).toBe(1);
+  });
+
+  it("lands a retried webhook exactly once in the ledger", async () => {
+    const event = { type: "payment_failed", email: "wobbly@example.com", amountMinor: 555, currency: "USD" };
+    const first = await mockWebhook(event);
+    expect(first.json().recorded).toBe(true);
+    // Identical bytes, as a processor retry would send them.
+    const second = await mockWebhook(event);
+    expect(second.json()).toMatchObject({ received: true, handled: true, recorded: false });
+    const rows = (await store.listBillingEvents(50, { type: "payment_failed" })).filter((e) => e.amountMinor === 555);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("marks an event for an unknown account as unmatched instead of losing it", async () => {
+    const res = await mockWebhook({ type: "refunded", email: "stranger@example.com", amountMinor: 900, currency: "USD" });
+    expect(res.json()).toMatchObject({ handled: false, recorded: true });
+    const rows = await store.listBillingEvents(50, { type: "refunded" });
+    const stranger = rows.find((e) => e.email === "stranger@example.com");
+    expect(stranger?.matched).toBe(false);
+  });
+
+  it("keeps activations and cancellations in the ledger too", async () => {
+    const activations = await store.listBillingEvents(50, { type: "activated" });
+    expect(activations.some((e) => e.email === "wobbly@example.com" && e.plan === "premium" && e.matched)).toBe(true);
   });
 });
 

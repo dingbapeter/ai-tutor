@@ -63,26 +63,409 @@
       "id": "math-ms.exponents.basic",
       "title": "Squares and cubes",
       "prerequisites": []
+    },
+    {
+      "id": "math-ms.fractions.mul-div",
+      "title": "Multiplying & dividing fractions",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
+    },
+    {
+      "id": "math-ms.fractions.of-amount",
+      "title": "Fractions of amounts",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
+    },
+    {
+      "id": "math-ms.decimals.operations",
+      "title": "Calculating with decimals",
+      "prerequisites": [
+        "math-ms.decimals.compare"
+      ]
+    },
+    {
+      "id": "math-ms.percent.change",
+      "title": "Percentage increase & decrease",
+      "prerequisites": [
+        "math-ms.percent.of"
+      ]
+    },
+    {
+      "id": "math-ms.linear-eq.brackets",
+      "title": "Equations with brackets",
+      "prerequisites": [
+        "math-ms.linear-eq.two-step"
+      ]
+    },
+    {
+      "id": "math-ms.linear-eq.both-sides",
+      "title": "Unknowns on both sides",
+      "prerequisites": [
+        "math-ms.linear-eq.two-step"
+      ]
+    },
+    {
+      "id": "math-ms.algebra.simplify",
+      "title": "Simplifying & expanding",
+      "prerequisites": [
+        "math-ms.linear-eq.one-step"
+      ]
+    },
+    {
+      "id": "math-ms.geometry.rectangles",
+      "title": "Area & perimeter of rectangles",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.geometry.triangles",
+      "title": "Area of triangles",
+      "prerequisites": [
+        "math-ms.geometry.rectangles"
+      ]
+    },
+    {
+      "id": "math-ms.geometry.angles",
+      "title": "Angle facts",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.stats.mean",
+      "title": "The mean average",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.sequences.arithmetic",
+      "title": "Number sequences",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.exponents.roots",
+      "title": "Square roots",
+      "prerequisites": [
+        "math-ms.exponents.basic"
+      ]
+    },
+    {
+      "id": "math-ms.rates.speed",
+      "title": "Speed, distance & time",
+      "prerequisites": []
+    },
+    {
+      "id": "math-ms.probability.simple",
+      "title": "Simple probability",
+      "prerequisites": [
+        "math-ms.fractions.equivalent"
+      ]
     }
   ],
   "problems": [
     {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 9x = 72",
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 5/6 = ?/24",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x/24 = 5/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "23",
+          "diagnosis": "Added 18 to the top because the bottom grew by 18. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 4."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 1/2 = ?/4",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x/4 = 1/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3",
+          "diagnosis": "Added 2 to the top because the bottom grew by 2. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 2/7 = ?/28",
       "answer": "8",
       "check": {
         "type": "solve",
-        "equation": "9*x = 72",
+        "equation": "x/28 = 2/7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "23",
+          "diagnosis": "Added 21 to the top because the bottom grew by 21. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 4."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 3/4 = ?/8",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x/8 = 3/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "7",
+          "diagnosis": "Added 4 to the top because the bottom grew by 4. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 5/6 = ?/36",
+      "answer": "30",
+      "check": {
+        "type": "solve",
+        "equation": "x/36 = 5/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "35",
+          "diagnosis": "Added 30 to the top because the bottom grew by 30. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 3/4 = ?/20",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x/20 = 3/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "19",
+          "diagnosis": "Added 16 to the top because the bottom grew by 16. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 5."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 1/2 = ?/8",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "x/8 = 1/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "7",
+          "diagnosis": "Added 6 to the top because the bottom grew by 6. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 4."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.equivalent",
+      "prompt": "Fill in the missing number: 3/8 = ?/48",
+      "answer": "18",
+      "check": {
+        "type": "solve",
+        "equation": "x/48 = 3/8",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "43",
+          "diagnosis": "Added 40 to the top because the bottom grew by 40. Equivalent fractions MULTIPLY top and bottom by the same number: the bottom was multiplied by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 6x = 48",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "6*x = 48",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "42",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/8",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 12x = 132",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "12*x = 132",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "120",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/11",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 6x = 24",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "6*x = 24",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/4",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 6x = 48",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "6*x = 48",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "42",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/8",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 11x = 33",
+      "answer": "3",
+      "check": {
+        "type": "solve",
+        "equation": "11*x = 33",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "22",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/3",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 9x = 45",
+      "answer": "5",
+      "check": {
+        "type": "solve",
+        "equation": "9*x = 45",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/5",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 7x = 70",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "7*x = 70",
         "variable": "x"
       },
       "misconceptions": [
         {
           "answer": "63",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
         },
         {
-          "answer": "1/8",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
+          "answer": "1/10",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 7x = 63",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "7*x = 63",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "56",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/9",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.one-step",
+      "prompt": "Solve for x: 5x = 75",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "5*x = 75",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "70",
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
+        },
+        {
+          "answer": "1/15",
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
         }
       ]
     },
@@ -98,311 +481,11 @@
       "misconceptions": [
         {
           "answer": "100",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
+          "diagnosis": "Subtracted instead of dividing. ax means a TIMES x, so undo it by dividing both sides by a."
         },
         {
           "answer": "1/11",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 4x = 28",
-      "answer": "7",
-      "check": {
-        "type": "solve",
-        "equation": "4*x = 28",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "24",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/7",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 12x = 96",
-      "answer": "8",
-      "check": {
-        "type": "solve",
-        "equation": "12*x = 96",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "84",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/8",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 4x = 32",
-      "answer": "8",
-      "check": {
-        "type": "solve",
-        "equation": "4*x = 32",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "28",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/8",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 3x = 6",
-      "answer": "2",
-      "check": {
-        "type": "solve",
-        "equation": "3*x = 6",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "3",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/2",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 3x = 39",
-      "answer": "13",
-      "check": {
-        "type": "solve",
-        "equation": "3*x = 39",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "36",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/13",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 4x = 40",
-      "answer": "10",
-      "check": {
-        "type": "solve",
-        "equation": "4*x = 40",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "36",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/10",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 6x = 36",
-      "answer": "6",
-      "check": {
-        "type": "solve",
-        "equation": "6*x = 36",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "30",
-          "diagnosis": "Subtracted instead of dividing — ax means a TIMES x, so undo it by dividing both sides by a."
-        },
-        {
-          "answer": "1/6",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.one-step",
-      "prompt": "Solve for x: 2x = 4",
-      "answer": "2",
-      "check": {
-        "type": "solve",
-        "equation": "2*x = 4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "1/2",
-          "diagnosis": "Divided the wrong way round — x = b ÷ a, not a ÷ b."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 5x + 9 = 64",
-      "answer": "11",
-      "check": {
-        "type": "solve",
-        "equation": "5*x + 9 = 64",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "55",
-          "diagnosis": "You found 5x = 55 and stopped — one more step: divide both sides by 5."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 3x + 17 = 41",
-      "answer": "8",
-      "check": {
-        "type": "solve",
-        "equation": "3*x + 17 = 41",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "24",
-          "diagnosis": "You found 3x = 24 and stopped — one more step: divide both sides by 3."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 5x + 1 = 36",
-      "answer": "7",
-      "check": {
-        "type": "solve",
-        "equation": "5*x + 1 = 36",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "35",
-          "diagnosis": "You found 5x = 35 and stopped — one more step: divide both sides by 5."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 3x + 10 = 28",
-      "answer": "6",
-      "check": {
-        "type": "solve",
-        "equation": "3*x + 10 = 28",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "18",
-          "diagnosis": "You found 3x = 18 and stopped — one more step: divide both sides by 3."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 6x + 20 = 68",
-      "answer": "8",
-      "check": {
-        "type": "solve",
-        "equation": "6*x + 20 = 68",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "48",
-          "diagnosis": "You found 6x = 48 and stopped — one more step: divide both sides by 6."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 6x + 9 = 33",
-      "answer": "4",
-      "check": {
-        "type": "solve",
-        "equation": "6*x + 9 = 33",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "24",
-          "diagnosis": "You found 6x = 24 and stopped — one more step: divide both sides by 6."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 8x + 3 = 91",
-      "answer": "11",
-      "check": {
-        "type": "solve",
-        "equation": "8*x + 3 = 91",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "88",
-          "diagnosis": "You found 8x = 88 and stopped — one more step: divide both sides by 8."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 9x + 12 = 57",
-      "answer": "5",
-      "check": {
-        "type": "solve",
-        "equation": "9*x + 12 = 57",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "45",
-          "diagnosis": "You found 9x = 45 and stopped — one more step: divide both sides by 9."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.linear-eq.two-step",
-      "prompt": "Solve for x: 7x + 8 = 71",
-      "answer": "9",
-      "check": {
-        "type": "solve",
-        "equation": "7*x + 8 = 71",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "63",
-          "diagnosis": "You found 7x = 63 and stopped — one more step: divide both sides by 7."
+          "diagnosis": "Divided the wrong way round: x = b ÷ a, not a ÷ b."
         }
       ]
     },
@@ -418,11 +501,11 @@
       "misconceptions": [
         {
           "answer": "6",
-          "diagnosis": "You found 2x = 6 and stopped — one more step: divide both sides by 2."
+          "diagnosis": "You found 2x = 6 and stopped. One more step: divide both sides by 2."
         },
         {
           "answer": "9",
-          "diagnosis": "Looks like 12 was only removed from one side — whatever you do to one side, do to the other."
+          "diagnosis": "Looks like 12 was only removed from one side. Whatever you do to one side, do to the other."
         }
       ]
     },
@@ -438,7 +521,7 @@
       "misconceptions": [
         {
           "answer": "50",
-          "diagnosis": "You found 5x = 50 and stopped — one more step: divide both sides by 5."
+          "diagnosis": "You found 5x = 50 and stopped. One more step: divide both sides by 5."
         }
       ]
     },
@@ -454,218 +537,328 @@
       "misconceptions": [
         {
           "answer": "70",
-          "diagnosis": "You found 7x = 70 and stopped — one more step: divide both sides by 7."
+          "diagnosis": "You found 7x = 70 and stopped. One more step: divide both sides by 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 9x + 11 = 119",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "9*x + 11 = 119",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "108",
+          "diagnosis": "You found 9x = 108 and stopped. One more step: divide both sides by 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 6x + 19 = 67",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 19 = 67",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "48",
+          "diagnosis": "You found 6x = 48 and stopped. One more step: divide both sides by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 4x + 19 = 51",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "4*x + 19 = 51",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "You found 4x = 32 and stopped. One more step: divide both sides by 4."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 9x + 4 = 67",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "9*x + 4 = 67",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "63",
+          "diagnosis": "You found 9x = 63 and stopped. One more step: divide both sides by 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 7x + 3 = 87",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "7*x + 3 = 87",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "84",
+          "diagnosis": "You found 7x = 84 and stopped. One more step: divide both sides by 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 2x + 5 = 23",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "2*x + 5 = 23",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "You found 2x = 18 and stopped. One more step: divide both sides by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 6x + 7 = 79",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 7 = 79",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "72",
+          "diagnosis": "You found 6x = 72 and stopped. One more step: divide both sides by 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 9x + 2 = 65",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "9*x + 2 = 65",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "63",
+          "diagnosis": "You found 9x = 63 and stopped. One more step: divide both sides by 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.two-step",
+      "prompt": "Solve for x: 3x + 4 = 40",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "3*x + 4 = 40",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "You found 3x = 36 and stopped. One more step: divide both sides by 3."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 3/4 + 6/12 (answer as a fraction like 3/4)",
+      "prompt": "Add the fractions: 1/4 + 11/12 (answer as a fraction like 3/4)",
+      "answer": "7/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/4 + 11/12",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12/16",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/3 + 2/4 (answer as a fraction like 3/4)",
+      "answer": "5/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/3 + 2/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3/7",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 1/4 (answer as a fraction like 3/4)",
+      "answer": "3/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/2 + 1/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2/6",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.add-sub",
+      "prompt": "Add the fractions: 1/2 + 6/8 (answer as a fraction like 3/4)",
       "answer": "5/4",
       "check": {
         "type": "solve",
-        "equation": "x = 3/4 + 6/12",
+        "equation": "x = 1/2 + 6/8",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "9/16",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "7/10",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 2/3 + 3/9 (answer as a fraction like 3/4)",
-      "answer": "1/1",
+      "prompt": "Add the fractions: 1/3 + 1/6 (answer as a fraction like 3/4)",
+      "answer": "1/2",
       "check": {
         "type": "solve",
-        "equation": "x = 2/3 + 3/9",
+        "equation": "x = 1/3 + 1/6",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "5/12",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "2/9",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 4/5 + 6/10 (answer as a fraction like 3/4)",
-      "answer": "7/5",
-      "check": {
-        "type": "solve",
-        "equation": "x = 4/5 + 6/10",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "10/15",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 2/3 + 1/6 (answer as a fraction like 3/4)",
+      "prompt": "Add the fractions: 1/3 + 2/4 (answer as a fraction like 3/4)",
       "answer": "5/6",
       "check": {
         "type": "solve",
-        "equation": "x = 2/3 + 1/6",
+        "equation": "x = 1/3 + 2/4",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "3/9",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "3/7",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 1/2 + 1/4 (answer as a fraction like 3/4)",
-      "answer": "3/4",
+      "prompt": "Add the fractions: 1/3 + 2/9 (answer as a fraction like 3/4)",
+      "answer": "5/9",
       "check": {
         "type": "solve",
-        "equation": "x = 1/2 + 1/4",
+        "equation": "x = 1/3 + 2/9",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "2/6",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "3/12",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 1/2 + 1/3 (answer as a fraction like 3/4)",
-      "answer": "5/6",
+      "prompt": "Add the fractions: 2/4 + 6/8 (answer as a fraction like 3/4)",
+      "answer": "5/4",
       "check": {
         "type": "solve",
-        "equation": "x = 1/2 + 1/3",
+        "equation": "x = 2/4 + 6/8",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "2/5",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "8/12",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 2/4 + 1/12 (answer as a fraction like 3/4)",
-      "answer": "7/12",
+      "prompt": "Add the fractions: 1/2 + 6/8 (answer as a fraction like 3/4)",
+      "answer": "5/4",
       "check": {
         "type": "solve",
-        "equation": "x = 2/4 + 1/12",
+        "equation": "x = 1/2 + 6/8",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "3/16",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "7/10",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 1/3 + 4/6 (answer as a fraction like 3/4)",
-      "answer": "1/1",
+      "prompt": "Add the fractions: 1/2 + 5/8 (answer as a fraction like 3/4)",
+      "answer": "9/8",
       "check": {
         "type": "solve",
-        "equation": "x = 1/3 + 4/6",
+        "equation": "x = 1/2 + 5/8",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "5/9",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 1/2 + 2/4 (answer as a fraction like 3/4)",
-      "answer": "1/1",
-      "check": {
-        "type": "solve",
-        "equation": "x = 1/2 + 2/4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "3/6",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.fractions.add-sub",
-      "prompt": "Add the fractions: 1/2 + 1/4 (answer as a fraction like 3/4)",
-      "answer": "3/4",
-      "check": {
-        "type": "solve",
-        "equation": "x = 1/2 + 1/4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "2/6",
-          "diagnosis": "Added tops AND bottoms — denominators don't add. Find a common denominator first."
+          "answer": "6/10",
+          "diagnosis": "Added tops AND bottoms, but denominators don't add. Find a common denominator first."
         }
       ]
     },
     {
       "skillId": "math-ms.decimals.compare",
-      "prompt": "Which is larger: 1.7 or 1.1?",
-      "answer": "1.7",
+      "prompt": "Which is larger: 1.74 or 1.45?",
+      "answer": "1.74",
       "check": {
         "type": "compare",
-        "left": "1.1",
-        "right": "1.7",
+        "left": "1.45",
+        "right": "1.74",
         "expected": "<"
       },
       "misconceptions": [
         {
-          "answer": "1.1",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.decimals.compare",
-      "prompt": "Which is larger: 1.7 or 1.72?",
-      "answer": "1.72",
-      "check": {
-        "type": "compare",
-        "left": "1.7",
-        "right": "1.72",
-        "expected": "<"
-      },
-      "misconceptions": [
-        {
-          "answer": "1.7",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.decimals.compare",
-      "prompt": "Which is larger: 0.55 or 0.45?",
-      "answer": "0.55",
-      "check": {
-        "type": "compare",
-        "left": "0.45",
-        "right": "0.55",
-        "expected": "<"
-      },
-      "misconceptions": [
-        {
-          "answer": "0.45",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "answer": "1.45",
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
@@ -682,7 +875,7 @@
       "misconceptions": [
         {
           "answer": "0.54",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
@@ -699,7 +892,7 @@
       "misconceptions": [
         {
           "answer": "0.4",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
@@ -716,7 +909,7 @@
       "misconceptions": [
         {
           "answer": "1.24",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
@@ -733,7 +926,7 @@
       "misconceptions": [
         {
           "answer": "0.7",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
@@ -750,213 +943,183 @@
       "misconceptions": [
         {
           "answer": "0.1",
-          "diagnosis": "Comparing decimals like whole numbers (more digits ≠ bigger). Line up the place values."
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 1.7 or 1.3?",
+      "answer": "1.7",
+      "check": {
+        "type": "compare",
+        "left": "1.3",
+        "right": "1.7",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "1.3",
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.compare",
+      "prompt": "Which is larger: 1.62 or 1.94?",
+      "answer": "1.94",
+      "check": {
+        "type": "compare",
+        "left": "1.62",
+        "right": "1.94",
+        "expected": "<"
+      },
+      "misconceptions": [
+        {
+          "answer": "1.62",
+          "diagnosis": "Comparing decimals like whole numbers (more digits does not mean bigger). Line up the place values."
         }
       ]
     },
     {
       "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-6) * 12",
-      "answer": "-72",
+      "prompt": "Calculate: (-8) * 10",
+      "answer": "-80",
       "check": {
         "type": "solve",
-        "equation": "x = -6 * 12",
+        "equation": "x = -8 * 10",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "72",
-          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
+          "answer": "80",
+          "diagnosis": "Negative times positive stays negative. The sign doesn't disappear."
         }
       ]
     },
     {
       "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-9) + 6",
-      "answer": "-3",
+      "prompt": "Calculate: (-3) * 2",
+      "answer": "-6",
       "check": {
         "type": "solve",
-        "equation": "x = -9 + 6",
+        "equation": "x = -3 * 2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "Negative times positive stays negative. The sign doesn't disappear."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-10) + 3",
+      "answer": "-7",
+      "check": {
+        "type": "solve",
+        "equation": "x = -10 + 3",
         "variable": "x"
       },
       "misconceptions": []
     },
     {
       "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-7) + 12",
-      "answer": "5",
+      "prompt": "Calculate: (-7) - 2",
+      "answer": "-9",
       "check": {
         "type": "solve",
-        "equation": "x = -7 + 12",
-        "variable": "x"
-      },
-      "misconceptions": []
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-7) * 12",
-      "answer": "-84",
-      "check": {
-        "type": "solve",
-        "equation": "x = -7 * 12",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "84",
-          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-6) * 6",
-      "answer": "-36",
-      "check": {
-        "type": "solve",
-        "equation": "x = -6 * 6",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "36",
-          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-4) * 10",
-      "answer": "-40",
-      "check": {
-        "type": "solve",
-        "equation": "x = -4 * 10",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "40",
-          "diagnosis": "Negative × positive stays negative — the sign doesn't disappear."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-12) + 11",
-      "answer": "-1",
-      "check": {
-        "type": "solve",
-        "equation": "x = -12 + 11",
-        "variable": "x"
-      },
-      "misconceptions": []
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-11) - 4",
-      "answer": "-15",
-      "check": {
-        "type": "solve",
-        "equation": "x = -11 - 4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "-7",
-          "diagnosis": "Subtracting from a negative moves you FURTHER below zero — picture the number line."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-12) - 7",
-      "answer": "-19",
-      "check": {
-        "type": "solve",
-        "equation": "x = -12 - 7",
+        "equation": "x = -7 - 2",
         "variable": "x"
       },
       "misconceptions": [
         {
           "answer": "-5",
-          "diagnosis": "Subtracting from a negative moves you FURTHER below zero — picture the number line."
+          "diagnosis": "Subtracting from a negative moves you FURTHER below zero. Picture the number line."
         }
       ]
     },
     {
       "skillId": "math-ms.negatives.operations",
-      "prompt": "Calculate: (-2) + 3",
-      "answer": "1",
+      "prompt": "Calculate: (-8) + 12",
+      "answer": "4",
       "check": {
         "type": "solve",
-        "equation": "x = -2 + 3",
+        "equation": "x = -8 + 12",
         "variable": "x"
       },
       "misconceptions": []
     },
     {
-      "skillId": "math-ms.percent.of",
-      "prompt": "What is 10% of 20?",
-      "answer": "2",
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-11) * 2",
+      "answer": "-22",
       "check": {
         "type": "solve",
-        "equation": "x = 10*20/100",
+        "equation": "x = -11 * 2",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "10",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "answer": "22",
+          "diagnosis": "Negative times positive stays negative. The sign doesn't disappear."
         }
       ]
     },
     {
-      "skillId": "math-ms.percent.of",
-      "prompt": "What is 10% of 200?",
-      "answer": "20",
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-12) - 2",
+      "answer": "-14",
       "check": {
         "type": "solve",
-        "equation": "x = 10*200/100",
+        "equation": "x = -12 - 2",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "190",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "answer": "-10",
+          "diagnosis": "Subtracting from a negative moves you FURTHER below zero. Picture the number line."
         }
       ]
     },
     {
-      "skillId": "math-ms.percent.of",
-      "prompt": "What is 25% of 300?",
-      "answer": "75",
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-3) * 7",
+      "answer": "-21",
       "check": {
         "type": "solve",
-        "equation": "x = 25*300/100",
+        "equation": "x = -3 * 7",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "275",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "answer": "21",
+          "diagnosis": "Negative times positive stays negative. The sign doesn't disappear."
         }
       ]
     },
     {
-      "skillId": "math-ms.percent.of",
-      "prompt": "What is 60% of 80?",
-      "answer": "48",
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-4) + 8",
+      "answer": "4",
       "check": {
         "type": "solve",
-        "equation": "x = 60*80/100",
+        "equation": "x = -4 + 8",
         "variable": "x"
       },
-      "misconceptions": [
-        {
-          "answer": "20",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
-        }
-      ]
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.negatives.operations",
+      "prompt": "Calculate: (-5) + 9",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "x = -5 + 9",
+        "variable": "x"
+      },
+      "misconceptions": []
     },
     {
       "skillId": "math-ms.percent.of",
@@ -970,7 +1133,7 @@
       "misconceptions": [
         {
           "answer": "70",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
@@ -986,7 +1149,7 @@
       "misconceptions": [
         {
           "answer": "55",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
@@ -1002,7 +1165,7 @@
       "misconceptions": [
         {
           "answer": "115",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
@@ -1018,7 +1181,7 @@
       "misconceptions": [
         {
           "answer": "20",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
@@ -1034,7 +1197,7 @@
       "misconceptions": [
         {
           "answer": "140",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
@@ -1050,247 +1213,247 @@
       "misconceptions": [
         {
           "answer": "70",
-          "diagnosis": "Percent means 'per hundred' — multiply by the percent, then divide by 100; don't subtract."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
     {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 9 + 5 × 4",
-      "answer": "29",
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 60% of 80?",
+      "answer": "48",
       "check": {
         "type": "solve",
-        "equation": "x = 9 + 5*4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "56",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 2 + 9 × 4",
-      "answer": "38",
-      "check": {
-        "type": "solve",
-        "equation": "x = 2 + 9*4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "44",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 2 + 8 × 5",
-      "answer": "42",
-      "check": {
-        "type": "solve",
-        "equation": "x = 2 + 8*5",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "50",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 4 + 5 × 3",
-      "answer": "19",
-      "check": {
-        "type": "solve",
-        "equation": "x = 4 + 5*3",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "27",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 6 + 3 × 2",
-      "answer": "12",
-      "check": {
-        "type": "solve",
-        "equation": "x = 6 + 3*2",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "18",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 5 + 5 × 2",
-      "answer": "15",
-      "check": {
-        "type": "solve",
-        "equation": "x = 5 + 5*2",
+        "equation": "x = 60*80/100",
         "variable": "x"
       },
       "misconceptions": [
         {
           "answer": "20",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
     {
-      "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 2 + 4 × 4",
-      "answer": "18",
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 75% of 20?",
+      "answer": "15",
       "check": {
         "type": "solve",
-        "equation": "x = 2 + 4*4",
+        "equation": "x = 75*20/100",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "24",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+          "answer": "-55",
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 60% of 200?",
+      "answer": "120",
+      "check": {
+        "type": "solve",
+        "equation": "x = 60*200/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "140",
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.of",
+      "prompt": "What is 10% of 150?",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x = 10*150/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "140",
+          "diagnosis": "Percent means 'per hundred': multiply by the percent, then divide by 100. Don't subtract."
         }
       ]
     },
     {
       "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 2 + 8 × 4",
-      "answer": "34",
+      "prompt": "Calculate: 9 + 4 × 3",
+      "answer": "21",
       "check": {
         "type": "solve",
-        "equation": "x = 2 + 8*4",
+        "equation": "x = 9 + 4*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "39",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 4 + 6 × 2",
+      "answer": "16",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4 + 6*2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "20",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 5 × 3",
+      "answer": "17",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 5*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "21",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 2 + 2 × 3",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 2*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 6 + 2 × 5",
+      "answer": "16",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6 + 2*5",
         "variable": "x"
       },
       "misconceptions": [
         {
           "answer": "40",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
         }
       ]
     },
     {
       "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 3 + 8 × 6",
-      "answer": "51",
+      "prompt": "Calculate: 6 + 3 × 6",
+      "answer": "24",
       "check": {
         "type": "solve",
-        "equation": "x = 3 + 8*6",
+        "equation": "x = 6 + 3*6",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "66",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+          "answer": "54",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
         }
       ]
     },
     {
       "skillId": "math-ms.order-of-ops",
-      "prompt": "Calculate: 4 + 7 × 2",
-      "answer": "18",
+      "prompt": "Calculate: 8 + 4 × 4",
+      "answer": "24",
       "check": {
         "type": "solve",
-        "equation": "x = 4 + 7*2",
+        "equation": "x = 8 + 4*4",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "22",
-          "diagnosis": "Worked left-to-right — multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+          "answer": "48",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 3 + 3 × 3",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3 + 3*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 7 + 2 × 2",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7 + 2*2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.order-of-ops",
+      "prompt": "Calculate: 7 + 5 × 6",
+      "answer": "37",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7 + 5*6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "72",
+          "diagnosis": "Worked left-to-right, but multiplication comes BEFORE addition (BODMAS/PEMDAS)."
         }
       ]
     },
     {
       "skillId": "math-ms.ratio.share",
-      "prompt": "Share 24 sweets between two friends in the ratio 3:5. How many does the first friend get?",
-      "answer": "9",
+      "prompt": "Share 40 sweets between two friends in the ratio 3:5. How many does the first friend get?",
+      "answer": "15",
       "check": {
         "type": "solve",
-        "equation": "x = 24*3/8",
+        "equation": "x = 40*3/8",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "12",
-          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.ratio.share",
-      "prompt": "Share 28 sweets between two friends in the ratio 1:3. How many does the first friend get?",
-      "answer": "7",
-      "check": {
-        "type": "solve",
-        "equation": "x = 28*1/4",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "14",
-          "diagnosis": "That's an equal split — a 1:3 ratio means 4 equal parts first, then 1 of them."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.ratio.share",
-      "prompt": "Share 6 sweets between two friends in the ratio 1:2. How many does the first friend get?",
-      "answer": "2",
-      "check": {
-        "type": "solve",
-        "equation": "x = 6*1/3",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "3",
-          "diagnosis": "That's an equal split — a 1:2 ratio means 3 equal parts first, then 1 of them."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.ratio.share",
-      "prompt": "Share 25 sweets between two friends in the ratio 2:3. How many does the first friend get?",
-      "answer": "10",
-      "check": {
-        "type": "solve",
-        "equation": "x = 25*2/5",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "12",
-          "diagnosis": "That's an equal split — a 2:3 ratio means 5 equal parts first, then 2 of them."
-        }
-      ]
-    },
-    {
-      "skillId": "math-ms.ratio.share",
-      "prompt": "Share 35 sweets between two friends in the ratio 2:5. How many does the first friend get?",
-      "answer": "10",
-      "check": {
-        "type": "solve",
-        "equation": "x = 35*2/7",
-        "variable": "x"
-      },
-      "misconceptions": [
-        {
-          "answer": "17",
-          "diagnosis": "That's an equal split — a 2:5 ratio means 7 equal parts first, then 2 of them."
+          "answer": "20",
+          "diagnosis": "That's an equal split. A 3:5 ratio means 8 equal parts first, then 3 of them."
         }
       ]
     },
@@ -1306,7 +1469,7 @@
       "misconceptions": [
         {
           "answer": "28",
-          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
+          "diagnosis": "That's an equal split. A 3:5 ratio means 8 equal parts first, then 3 of them."
         }
       ]
     },
@@ -1322,7 +1485,7 @@
       "misconceptions": [
         {
           "answer": "14",
-          "diagnosis": "That's an equal split — a 3:4 ratio means 7 equal parts first, then 3 of them."
+          "diagnosis": "That's an equal split. A 3:4 ratio means 7 equal parts first, then 3 of them."
         }
       ]
     },
@@ -1338,7 +1501,7 @@
       "misconceptions": [
         {
           "answer": "7",
-          "diagnosis": "That's an equal split — a 3:4 ratio means 7 equal parts first, then 3 of them."
+          "diagnosis": "That's an equal split. A 3:4 ratio means 7 equal parts first, then 3 of them."
         }
       ]
     },
@@ -1354,7 +1517,7 @@
       "misconceptions": [
         {
           "answer": "4",
-          "diagnosis": "That's an equal split — a 1:2 ratio means 3 equal parts first, then 1 of them."
+          "diagnosis": "That's an equal split. A 1:2 ratio means 3 equal parts first, then 1 of them."
         }
       ]
     },
@@ -1370,71 +1533,71 @@
       "misconceptions": [
         {
           "answer": "8",
-          "diagnosis": "That's an equal split — a 3:5 ratio means 8 equal parts first, then 3 of them."
+          "diagnosis": "That's an equal split. A 3:5 ratio means 8 equal parts first, then 3 of them."
         }
       ]
     },
     {
-      "skillId": "math-ms.exponents.basic",
-      "prompt": "What is 6³ (6 to the power of 3)?",
-      "answer": "216",
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 63 sweets between two friends in the ratio 2:5. How many does the first friend get?",
+      "answer": "18",
       "check": {
         "type": "solve",
-        "equation": "x = 6^3",
+        "equation": "x = 63*2/7",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "18",
-          "diagnosis": "That's 6 × 3 — a power means multiplying 6 by ITSELF 3 times."
+          "answer": "31",
+          "diagnosis": "That's an equal split. A 2:5 ratio means 7 equal parts first, then 2 of them."
         }
       ]
     },
     {
-      "skillId": "math-ms.exponents.basic",
-      "prompt": "What is 6² (6 to the power of 2)?",
-      "answer": "36",
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 14 sweets between two friends in the ratio 2:5. How many does the first friend get?",
+      "answer": "4",
       "check": {
         "type": "solve",
-        "equation": "x = 6^2",
+        "equation": "x = 14*2/7",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "12",
-          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+          "answer": "7",
+          "diagnosis": "That's an equal split. A 2:5 ratio means 7 equal parts first, then 2 of them."
         }
       ]
     },
     {
-      "skillId": "math-ms.exponents.basic",
-      "prompt": "What is 6² (6 to the power of 2)?",
-      "answer": "36",
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 28 sweets between two friends in the ratio 2:5. How many does the first friend get?",
+      "answer": "8",
       "check": {
         "type": "solve",
-        "equation": "x = 6^2",
+        "equation": "x = 28*2/7",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "12",
-          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+          "answer": "14",
+          "diagnosis": "That's an equal split. A 2:5 ratio means 7 equal parts first, then 2 of them."
         }
       ]
     },
     {
-      "skillId": "math-ms.exponents.basic",
-      "prompt": "What is 5² (5 to the power of 2)?",
-      "answer": "25",
+      "skillId": "math-ms.ratio.share",
+      "prompt": "Share 28 sweets between two friends in the ratio 3:4. How many does the first friend get?",
+      "answer": "12",
       "check": {
         "type": "solve",
-        "equation": "x = 5^2",
+        "equation": "x = 28*3/7",
         "variable": "x"
       },
       "misconceptions": [
         {
-          "answer": "10",
-          "diagnosis": "That's 5 × 2 — a power means multiplying 5 by ITSELF 2 times."
+          "answer": "14",
+          "diagnosis": "That's an equal split. A 3:4 ratio means 7 equal parts first, then 3 of them."
         }
       ]
     },
@@ -1450,7 +1613,7 @@
       "misconceptions": [
         {
           "answer": "6",
-          "diagnosis": "That's 3 × 2 — a power means multiplying 3 by ITSELF 2 times."
+          "diagnosis": "That's 3 × 2. A power means multiplying 3 by ITSELF 2 times."
         }
       ]
     },
@@ -1466,7 +1629,7 @@
       "misconceptions": [
         {
           "answer": "12",
-          "diagnosis": "That's 6 × 2 — a power means multiplying 6 by ITSELF 2 times."
+          "diagnosis": "That's 6 × 2. A power means multiplying 6 by ITSELF 2 times."
         }
       ]
     },
@@ -1482,7 +1645,7 @@
       "misconceptions": [
         {
           "answer": "12",
-          "diagnosis": "That's 4 × 3 — a power means multiplying 4 by ITSELF 3 times."
+          "diagnosis": "That's 4 × 3. A power means multiplying 4 by ITSELF 3 times."
         }
       ]
     },
@@ -1498,14 +1661,1764 @@
       "misconceptions": [
         {
           "answer": "6",
-          "diagnosis": "That's 2 × 3 — a power means multiplying 2 by ITSELF 3 times."
+          "diagnosis": "That's 2 × 3. A power means multiplying 2 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 3² (3 to the power of 2)?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3^2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "That's 3 × 2. A power means multiplying 3 by ITSELF 2 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6³ (6 to the power of 3)?",
+      "answer": "216",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "That's 6 × 3. A power means multiplying 6 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 6³ (6 to the power of 3)?",
+      "answer": "216",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "That's 6 × 3. A power means multiplying 6 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.basic",
+      "prompt": "What is 4³ (4 to the power of 3)?",
+      "answer": "64",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4^3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's 4 × 3. A power means multiplying 4 by ITSELF 3 times."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Multiply the fractions: 3/6 × 1/6 (answer as a fraction in simplest form)",
+      "answer": "1/12",
+      "check": {
+        "type": "solve",
+        "equation": "x = (3/6) * (1/6)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1/3",
+          "diagnosis": "Added instead of multiplying. Multiply the tops together and the bottoms together."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Divide the fractions: 3/5 ÷ 3/2 (answer as a fraction in simplest form)",
+      "answer": "2/5",
+      "check": {
+        "type": "solve",
+        "equation": "x = (3/5) / (3/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9/10",
+          "diagnosis": "Multiplied without flipping. Dividing by a fraction means multiplying by its reciprocal (turn it upside down first)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Multiply the fractions: 5/6 × 2/3 (answer as a fraction in simplest form)",
+      "answer": "5/9",
+      "check": {
+        "type": "solve",
+        "equation": "x = (5/6) * (2/3)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "7/9",
+          "diagnosis": "Added instead of multiplying. Multiply the tops together and the bottoms together."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Divide the fractions: 2/5 ÷ 4/5 (answer as a fraction in simplest form)",
+      "answer": "1/2",
+      "check": {
+        "type": "solve",
+        "equation": "x = (2/5) / (4/5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "8/25",
+          "diagnosis": "Multiplied without flipping. Dividing by a fraction means multiplying by its reciprocal (turn it upside down first)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Multiply the fractions: 5/5 × 3/2 (answer as a fraction in simplest form)",
+      "answer": "3/2",
+      "check": {
+        "type": "solve",
+        "equation": "x = (5/5) * (3/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "8/7",
+          "diagnosis": "Added instead of multiplying. Multiply the tops together and the bottoms together."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Divide the fractions: 5/3 ÷ 2/5 (answer as a fraction in simplest form)",
+      "answer": "25/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = (5/3) / (2/5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2/3",
+          "diagnosis": "Multiplied without flipping. Dividing by a fraction means multiplying by its reciprocal (turn it upside down first)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Multiply the fractions: 5/5 × 4/2 (answer as a fraction in simplest form)",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x = (5/5) * (4/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9/7",
+          "diagnosis": "Added instead of multiplying. Multiply the tops together and the bottoms together."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Divide the fractions: 4/2 ÷ 3/5 (answer as a fraction in simplest form)",
+      "answer": "10/3",
+      "check": {
+        "type": "solve",
+        "equation": "x = (4/2) / (3/5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6/5",
+          "diagnosis": "Multiplied without flipping. Dividing by a fraction means multiplying by its reciprocal (turn it upside down first)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Multiply the fractions: 3/4 × 5/4 (answer as a fraction in simplest form)",
+      "answer": "15/16",
+      "check": {
+        "type": "solve",
+        "equation": "x = (3/4) * (5/4)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1",
+          "diagnosis": "Added instead of multiplying. Multiply the tops together and the bottoms together."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.mul-div",
+      "prompt": "Divide the fractions: 2/6 ÷ 4/5 (answer as a fraction in simplest form)",
+      "answer": "5/12",
+      "check": {
+        "type": "solve",
+        "equation": "x = (2/6) / (4/5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "4/15",
+          "diagnosis": "Multiplied without flipping. Dividing by a fraction means multiplying by its reciprocal (turn it upside down first)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 66 apples in a crate. How many is 3/6 of them?",
+      "answer": "33",
+      "check": {
+        "type": "solve",
+        "equation": "x = 66*3/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "22",
+          "diagnosis": "Divided by the top number. To find 3/6 of something: divide by 6 (the parts), then multiply by 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 24 students in a class. How many is 1/6 of them?",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 24*1/6",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 36 apples in a crate. How many is 1/6 of them?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 36*1/6",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 16 students in a class. How many is 2/4 of them?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "x = 16*2/4",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 36 minutes of a lesson. How many is 3/6 of them?",
+      "answer": "18",
+      "check": {
+        "type": "solve",
+        "equation": "x = 36*3/6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "Divided by the top number. To find 3/6 of something: divide by 6 (the parts), then multiply by 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 12 pages of a book. How many is 3/4 of them?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "x = 12*3/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "Divided by the top number. To find 3/4 of something: divide by 4 (the parts), then multiply by 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 14 marbles in a bag. How many is 1/2 of them?",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "x = 14*1/2",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.fractions.of-amount",
+      "prompt": "There are 18 pages of a book. How many is 4/6 of them?",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "x = 18*4/6",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 1.8 + 8.74",
+      "answer": "10.54",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180/100 + 874/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9.82",
+          "diagnosis": "The decimal points must line up before you add. Tenths add to tenths, hundredths to hundredths."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 3.83 × 10",
+      "answer": "38.3",
+      "check": {
+        "type": "solve",
+        "equation": "x = (383/100)*10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.383",
+          "diagnosis": "That's dividing by 10. Multiplying by 10 moves the decimal point one place to the RIGHT."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 3.66 × 10",
+      "answer": "36.6",
+      "check": {
+        "type": "solve",
+        "equation": "x = (366/100)*10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.366",
+          "diagnosis": "That's dividing by 10. Multiplying by 10 moves the decimal point one place to the RIGHT."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 7.45 × 100",
+      "answer": "745",
+      "check": {
+        "type": "solve",
+        "equation": "x = (745/100)*100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.0745",
+          "diagnosis": "That's dividing by 100. Multiplying by 100 moves the decimal point two places to the RIGHT."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 7.5 + 2.27",
+      "answer": "9.77",
+      "check": {
+        "type": "solve",
+        "equation": "x = 750/100 + 227/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9.32",
+          "diagnosis": "The decimal points must line up before you add. Tenths add to tenths, hundredths to hundredths."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 8.22 × 100",
+      "answer": "822",
+      "check": {
+        "type": "solve",
+        "equation": "x = (822/100)*100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.0822",
+          "diagnosis": "That's dividing by 100. Multiplying by 100 moves the decimal point two places to the RIGHT."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.decimals.operations",
+      "prompt": "Calculate: 4.16 × 10",
+      "answer": "41.6",
+      "check": {
+        "type": "solve",
+        "equation": "x = (416/100)*10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "0.416",
+          "diagnosis": "That's dividing by 10. Multiplying by 10 moves the decimal point one place to the RIGHT."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A school bag costs 120. The price is reduced by 25%. What is the new price?",
+      "answer": "90",
+      "check": {
+        "type": "solve",
+        "equation": "x = 120 - 120*25/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "95",
+          "diagnosis": "Treated 25% as 25 units. Find 25% of 120 first, then take it off."
+        },
+        {
+          "answer": "30",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 120."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A bus ticket costs 300. The price is reduced by 15%. What is the new price?",
+      "answer": "255",
+      "check": {
+        "type": "solve",
+        "equation": "x = 300 - 300*15/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "285",
+          "diagnosis": "Treated 15% as 15 units. Find 15% of 300 first, then take it off."
+        },
+        {
+          "answer": "45",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 300."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A school bag costs 200. The price is reduced by 10%. What is the new price?",
+      "answer": "180",
+      "check": {
+        "type": "solve",
+        "equation": "x = 200 - 200*10/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "190",
+          "diagnosis": "Treated 10% as 10 units. Find 10% of 200 first, then take it off."
+        },
+        {
+          "answer": "20",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 200."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A school bag costs 80. The price goes up by 20%. What is the new price?",
+      "answer": "96",
+      "check": {
+        "type": "solve",
+        "equation": "x = 80 + 80*20/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "100",
+          "diagnosis": "Treated 20% as 20 units. Find 20% of 80 first, then add it on."
+        },
+        {
+          "answer": "16",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so add it to 80."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A concert ticket costs 120. The price is reduced by 5%. What is the new price?",
+      "answer": "114",
+      "check": {
+        "type": "solve",
+        "equation": "x = 120 - 120*5/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "115",
+          "diagnosis": "Treated 5% as 5 units. Find 5% of 120 first, then take it off."
+        },
+        {
+          "answer": "6",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 120."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A phone costs 200. The price is reduced by 5%. What is the new price?",
+      "answer": "190",
+      "check": {
+        "type": "solve",
+        "equation": "x = 200 - 200*5/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "195",
+          "diagnosis": "Treated 5% as 5 units. Find 5% of 200 first, then take it off."
+        },
+        {
+          "answer": "10",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 200."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A bus ticket costs 300. The price is reduced by 25%. What is the new price?",
+      "answer": "225",
+      "check": {
+        "type": "solve",
+        "equation": "x = 300 - 300*25/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "275",
+          "diagnosis": "Treated 25% as 25 units. Find 25% of 300 first, then take it off."
+        },
+        {
+          "answer": "75",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 300."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.percent.change",
+      "prompt": "A bus ticket costs 300. The price is reduced by 5%. What is the new price?",
+      "answer": "285",
+      "check": {
+        "type": "solve",
+        "equation": "x = 300 - 300*5/100",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "295",
+          "diagnosis": "Treated 5% as 5 units. Find 5% of 300 first, then take it off."
+        },
+        {
+          "answer": "15",
+          "diagnosis": "That's the size of the change. The question asks for the new price, so subtract it from 300."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 7(x + 6) = 84",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "7*(x + 6) = 84",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 7(x + 5) = 119",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "7*(x + 5) = 119",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 5(x + 8) = 100",
+      "answer": "12",
+      "check": {
+        "type": "solve",
+        "equation": "5*(x + 8) = 100",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 8(x + 6) = 120",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "8*(x + 6) = 120",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 3(x + 6) = 42",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x + 6) = 42",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "The bracket means 3 multiplies EVERYTHING inside, the 6 too. Either expand first or divide both sides by 3 first."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 4(x + 7) = 72",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x + 7) = 72",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 4(x + 7) = 36",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "4*(x + 7) = 36",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.brackets",
+      "prompt": "Solve for x: 3(x + 1) = 21",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "3*(x + 1) = 21",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 6x + 2 = 2x + 38",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 2 = 2*x + 38",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 6x + 4 = 3x + 22",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "6*x + 4 = 3*x + 22",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "When 3x crosses to the other side its sign flips: 6x MINUS 3x on the left, giving 3x."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 4x + 12 = 2x + 16",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "4*x + 12 = 2*x + 16",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 5x + 8 = 3x + 24",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "5*x + 8 = 3*x + 24",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "When 3x crosses to the other side its sign flips: 5x MINUS 3x on the left, giving 2x."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 4x + 9 = 1x + 33",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "4*x + 9 = 1*x + 33",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 5x + 9 = 1x + 37",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "5*x + 9 = 1*x + 37",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 4x + 9 = 2x + 13",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "4*x + 9 = 2*x + 13",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.linear-eq.both-sides",
+      "prompt": "Solve for x: 10x + 10 = 7x + 22",
+      "answer": "4",
+      "check": {
+        "type": "solve",
+        "equation": "10*x + 10 = 7*x + 22",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Simplify by collecting like terms: 3x + 7x + 6 (write the answer without brackets)",
+      "answer": "10x + 6",
+      "check": {
+        "type": "equivalent",
+        "expression": "3*x + 7*x + 6",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Expand the bracket: 3(x + 6) (write the answer without brackets)",
+      "answer": "3x + 18",
+      "check": {
+        "type": "equivalent",
+        "expression": "3*(x + 6)",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Simplify by collecting like terms: 4x + 4x + 8 (write the answer without brackets)",
+      "answer": "8x + 8",
+      "check": {
+        "type": "equivalent",
+        "expression": "4*x + 4*x + 8",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Expand the bracket: 6(x + 4) (write the answer without brackets)",
+      "answer": "6x + 24",
+      "check": {
+        "type": "equivalent",
+        "expression": "6*(x + 4)",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Simplify by collecting like terms: 2x + 2x + 4 (write the answer without brackets)",
+      "answer": "4x + 4",
+      "check": {
+        "type": "equivalent",
+        "expression": "2*x + 2*x + 4",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Expand the bracket: 5(x + 7) (write the answer without brackets)",
+      "answer": "5x + 35",
+      "check": {
+        "type": "equivalent",
+        "expression": "5*(x + 7)",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Simplify by collecting like terms: 4x + 7x + 9 (write the answer without brackets)",
+      "answer": "11x + 9",
+      "check": {
+        "type": "equivalent",
+        "expression": "4*x + 7*x + 9",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Expand the bracket: 5(x + 6) (write the answer without brackets)",
+      "answer": "5x + 30",
+      "check": {
+        "type": "equivalent",
+        "expression": "5*(x + 6)",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Simplify by collecting like terms: 8x + 9x + 8 (write the answer without brackets)",
+      "answer": "17x + 8",
+      "check": {
+        "type": "equivalent",
+        "expression": "8*x + 9*x + 8",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.algebra.simplify",
+      "prompt": "Expand the bracket: 8(x + 6) (write the answer without brackets)",
+      "answer": "8x + 48",
+      "check": {
+        "type": "equivalent",
+        "expression": "8*(x + 6)",
+        "noParentheses": true
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 11 cm long and 3 cm wide. What is its area in cm²?",
+      "answer": "33",
+      "check": {
+        "type": "solve",
+        "equation": "x = 11*3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "28",
+          "diagnosis": "That's the perimeter (the distance around). Area is the space inside: length × width."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 5 cm long and 7 cm wide. What is its perimeter in cm?",
+      "answer": "24",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2*(5 + 7)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "35",
+          "diagnosis": "That's the area (the space inside). Perimeter is the distance AROUND: add up all four sides."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 7 cm long and 9 cm wide. What is its area in cm²?",
+      "answer": "63",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7*9",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "That's the perimeter (the distance around). Area is the space inside: length × width."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 7 cm long and 4 cm wide. What is its perimeter in cm?",
+      "answer": "22",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2*(7 + 4)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "28",
+          "diagnosis": "That's the area (the space inside). Perimeter is the distance AROUND: add up all four sides."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 6 cm long and 5 cm wide. What is its area in cm²?",
+      "answer": "30",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6*5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "22",
+          "diagnosis": "That's the perimeter (the distance around). Area is the space inside: length × width."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 6 cm long and 6 cm wide. What is its perimeter in cm?",
+      "answer": "24",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2*(6 + 6)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "36",
+          "diagnosis": "That's the area (the space inside). Perimeter is the distance AROUND: add up all four sides."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 7 cm long and 10 cm wide. What is its area in cm²?",
+      "answer": "70",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7*10",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "34",
+          "diagnosis": "That's the perimeter (the distance around). Area is the space inside: length × width."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.rectangles",
+      "prompt": "A rectangle is 12 cm long and 10 cm wide. What is its perimeter in cm?",
+      "answer": "44",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2*(12 + 10)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "120",
+          "diagnosis": "That's the area (the space inside). Perimeter is the distance AROUND: add up all four sides."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 5 cm and a height of 6 cm. What is its area in cm²?",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5*6/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "30",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 6 cm and a height of 3 cm. What is its area in cm²?",
+      "answer": "9",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6*3/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 8 cm and a height of 7 cm. What is its area in cm²?",
+      "answer": "28",
+      "check": {
+        "type": "solve",
+        "equation": "x = 8*7/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "56",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 4 cm and a height of 3 cm. What is its area in cm²?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4*3/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "12",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 7 cm and a height of 12 cm. What is its area in cm²?",
+      "answer": "42",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7*12/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "84",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.triangles",
+      "prompt": "A triangle has a base of 6 cm and a height of 11 cm. What is its area in cm²?",
+      "answer": "33",
+      "check": {
+        "type": "solve",
+        "equation": "x = 6*11/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "66",
+          "diagnosis": "That's base × height, which gives a rectangle. A triangle is HALF of that rectangle, so divide by 2."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "Two angles sit together on a straight line. One is 64°. What is the other?",
+      "answer": "116",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 64",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "296",
+          "diagnosis": "Angles on a straight LINE add to 180°. It's angles around a full point that add to 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "A triangle has angles of 48° and 37°. What is the third angle?",
+      "answer": "95",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 48 - 37",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "275",
+          "diagnosis": "The three angles inside a triangle add to 180°, not 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "Two angles sit together on a straight line. One is 95°. What is the other?",
+      "answer": "85",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 95",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "265",
+          "diagnosis": "Angles on a straight LINE add to 180°. It's angles around a full point that add to 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "A triangle has angles of 48° and 43°. What is the third angle?",
+      "answer": "89",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 48 - 43",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "269",
+          "diagnosis": "The three angles inside a triangle add to 180°, not 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "Two angles sit together on a straight line. One is 80°. What is the other?",
+      "answer": "100",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 80",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "280",
+          "diagnosis": "Angles on a straight LINE add to 180°. It's angles around a full point that add to 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "A triangle has angles of 30° and 56°. What is the third angle?",
+      "answer": "94",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 30 - 56",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "274",
+          "diagnosis": "The three angles inside a triangle add to 180°, not 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "Two angles sit together on a straight line. One is 56°. What is the other?",
+      "answer": "124",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 56",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "304",
+          "diagnosis": "Angles on a straight LINE add to 180°. It's angles around a full point that add to 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.geometry.angles",
+      "prompt": "A triangle has angles of 80° and 71°. What is the third angle?",
+      "answer": "29",
+      "check": {
+        "type": "solve",
+        "equation": "x = 180 - 80 - 71",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "209",
+          "diagnosis": "The three angles inside a triangle add to 180°, not 360°."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 8, 4, 9, 7",
+      "answer": "7",
+      "check": {
+        "type": "solve",
+        "equation": "x = (8 + 4 + 9 + 7)/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "28",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (4)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 13, 19, 6, 14",
+      "answer": "13",
+      "check": {
+        "type": "solve",
+        "equation": "x = (13 + 19 + 6 + 14)/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "52",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (4)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 6, 10, 18, 6",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "x = (6 + 10 + 18 + 6)/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "40",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (4)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 8, 17, 7, 20, 3",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "x = (8 + 17 + 7 + 20 + 3)/5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "55",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (5)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 2, 2, 20, 8",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "x = (2 + 2 + 20 + 8)/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (4)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.stats.mean",
+      "prompt": "Find the mean of these numbers: 10, 13, 8, 13",
+      "answer": "11",
+      "check": {
+        "type": "solve",
+        "equation": "x = (10 + 13 + 8 + 13)/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "44",
+          "diagnosis": "That's the total. The mean shares the total out equally: divide by how many numbers there are (4)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "What is the next term in the sequence: 2, 11, 20, 29, ...?",
+      "answer": "38",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2 + 4*9",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9",
+          "diagnosis": "That's the gap between terms. The next TERM is the last one plus the gap: 29 + 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "The sequence 11, 18, 25, 32, ... continues with the same gap. What is the 10th term?",
+      "answer": "74",
+      "check": {
+        "type": "solve",
+        "equation": "x = 11 + (10 - 1)*7",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "81",
+          "diagnosis": "Off by one jump: term 10 is the FIRST term plus 9 jumps of 7, not 10 jumps."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "What is the next term in the sequence: 12, 18, 24, 30, ...?",
+      "answer": "36",
+      "check": {
+        "type": "solve",
+        "equation": "x = 12 + 4*6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "6",
+          "diagnosis": "That's the gap between terms. The next TERM is the last one plus the gap: 30 + 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "The sequence 5, 10, 15, 20, ... continues with the same gap. What is the 20th term?",
+      "answer": "100",
+      "check": {
+        "type": "solve",
+        "equation": "x = 5 + (20 - 1)*5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "105",
+          "diagnosis": "Off by one jump: term 20 is the FIRST term plus 19 jumps of 5, not 20 jumps."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "What is the next term in the sequence: 7, 16, 25, 34, ...?",
+      "answer": "43",
+      "check": {
+        "type": "solve",
+        "equation": "x = 7 + 4*9",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "9",
+          "diagnosis": "That's the gap between terms. The next TERM is the last one plus the gap: 34 + 9."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "The sequence 9, 17, 25, 33, ... continues with the same gap. What is the 20th term?",
+      "answer": "161",
+      "check": {
+        "type": "solve",
+        "equation": "x = 9 + (20 - 1)*8",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "169",
+          "diagnosis": "Off by one jump: term 20 is the FIRST term plus 19 jumps of 8, not 20 jumps."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "What is the next term in the sequence: 4, 8, 12, 16, ...?",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4 + 4*4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "4",
+          "diagnosis": "That's the gap between terms. The next TERM is the last one plus the gap: 16 + 4."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.sequences.arithmetic",
+      "prompt": "The sequence 1, 7, 13, 19, ... continues with the same gap. What is the 20th term?",
+      "answer": "115",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1 + (20 - 1)*6",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "121",
+          "diagnosis": "Off by one jump: term 20 is the FIRST term plus 19 jumps of 6, not 20 jumps."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 64?",
+      "answer": "8",
+      "check": {
+        "type": "solve",
+        "equation": "x = 64^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "32",
+          "diagnosis": "That's half of 64. A square root asks: which number times ITSELF makes 64?"
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 100?",
+      "answer": "10",
+      "check": {
+        "type": "solve",
+        "equation": "x = 100^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "50",
+          "diagnosis": "That's half of 100. A square root asks: which number times ITSELF makes 100?"
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 36?",
+      "answer": "6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 36^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "18",
+          "diagnosis": "That's half of 36. A square root asks: which number times ITSELF makes 36?"
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 4?",
+      "answer": "2",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 225?",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x = 225^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.exponents.roots",
+      "prompt": "What is the square root of 25?",
+      "answer": "5",
+      "check": {
+        "type": "solve",
+        "equation": "x = 25^(1/2)",
+        "variable": "x"
+      },
+      "misconceptions": []
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 75 km in 3 hours at a steady speed. What is its speed in km/h?",
+      "answer": "25",
+      "check": {
+        "type": "solve",
+        "equation": "x = 75/3",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "225",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 250 km in 5 hours at a steady speed. What is its speed in km/h?",
+      "answer": "50",
+      "check": {
+        "type": "solve",
+        "equation": "x = 250/5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1250",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 200 km in 5 hours at a steady speed. What is its speed in km/h?",
+      "answer": "40",
+      "check": {
+        "type": "solve",
+        "equation": "x = 200/5",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1000",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 80 km in 4 hours at a steady speed. What is its speed in km/h?",
+      "answer": "20",
+      "check": {
+        "type": "solve",
+        "equation": "x = 80/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "320",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 240 km in 4 hours at a steady speed. What is its speed in km/h?",
+      "answer": "60",
+      "check": {
+        "type": "solve",
+        "equation": "x = 240/4",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "960",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.rates.speed",
+      "prompt": "A bus travels 30 km in 2 hours at a steady speed. What is its speed in km/h?",
+      "answer": "15",
+      "check": {
+        "type": "solve",
+        "equation": "x = 30/2",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "60",
+          "diagnosis": "Multiplied distance by time. Speed is distance DIVIDED by time (km per hour means km ÷ hours)."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 4 black counters and 3 white counters. You take one without looking. What is the probability it is black? (answer as a fraction)",
+      "answer": "4/7",
+      "check": {
+        "type": "solve",
+        "equation": "x = 4/(4 + 3)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "4/3",
+          "diagnosis": "That compares black to white (a ratio). Probability compares black to ALL the counters: 4 out of 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 1 green counters and 5 yellow counters. You take one without looking. What is the probability it is green? (answer as a fraction)",
+      "answer": "1/6",
+      "check": {
+        "type": "solve",
+        "equation": "x = 1/(1 + 5)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1/5",
+          "diagnosis": "That compares green to yellow (a ratio). Probability compares green to ALL the counters: 1 out of 6."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 3 green counters and 4 yellow counters. You take one without looking. What is the probability it is green? (answer as a fraction)",
+      "answer": "3/7",
+      "check": {
+        "type": "solve",
+        "equation": "x = 3/(3 + 4)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "3/4",
+          "diagnosis": "That compares green to yellow (a ratio). Probability compares green to ALL the counters: 3 out of 7."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 2 black counters and 6 white counters. You take one without looking. What is the probability it is black? (answer as a fraction)",
+      "answer": "1/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/(2 + 6)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1/3",
+          "diagnosis": "That compares black to white (a ratio). Probability compares black to ALL the counters: 2 out of 8."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 2 black counters and 1 white counters. You take one without looking. What is the probability it is black? (answer as a fraction)",
+      "answer": "2/3",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/(2 + 1)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "2",
+          "diagnosis": "That compares black to white (a ratio). Probability compares black to ALL the counters: 2 out of 3."
+        }
+      ]
+    },
+    {
+      "skillId": "math-ms.probability.simple",
+      "prompt": "A bag holds 2 black counters and 6 white counters. You take one without looking. What is the probability it is black? (answer as a fraction)",
+      "answer": "1/4",
+      "check": {
+        "type": "solve",
+        "equation": "x = 2/(2 + 6)",
+        "variable": "x"
+      },
+      "misconceptions": [
+        {
+          "answer": "1/3",
+          "diagnosis": "That compares black to white (a ratio). Probability compares black to ALL the counters: 2 out of 8."
         }
       ]
     }
   ],
   "generated": {
     "tool": "tools/curriculum/generate.py",
-    "count": 88,
-    "verified": "sympy-at-build"
+    "count": 209,
+    "verified": "sympy-at-build",
+    "handAuthoredRubric": 0
   }
 }
