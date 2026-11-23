@@ -9,6 +9,8 @@ export const metadata = {
   title: "Dingba",
   description: "Your Personal A.I Tutor. Ask anything. Learn anything.",
   manifest: "/manifest.json",
+  // Named here so a browser shows the Dingba mark on the tab and does not go looking for /favicon.ico.
+  icons: { icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }], apple: [{ url: "/icon-192.png", sizes: "192x192" }] },
   appleWebApp: { capable: true, statusBarStyle: "default" as const, title: "Dingba" },
 };
 

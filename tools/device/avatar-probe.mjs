@@ -129,6 +129,9 @@ for (const engineName of WANTED) {
     if (PICK.real) check(`${PICK.name} carries a rigged character of her own`, Boolean(PICK.model), "no model named on this tutor");
 
     const host = page.locator(".avatar3d");
+    // The engine and a real character are fetched over the network: give them time to
+    // arrive before deciding the drawn face is what this browser got.
+    await page.waitForFunction(() => document.querySelector(".avatar3d canvas") && !document.querySelector(".avatar-wait"), null, { timeout: 30_000 }).catch(() => {});
     const rendered = await host.locator("canvas").count().then((c) => c > 0).catch(() => false);
     // Ask the engine itself, so a model that failed to load on an engine
     // that can draw is a failure, not an excuse.
